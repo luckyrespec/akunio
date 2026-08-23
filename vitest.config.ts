@@ -7,5 +7,8 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     testTimeout: 20000,
+    // Integration files share one Postgres and TRUNCATE it in before/afterAll;
+    // parallel workers would truncate out from under each other.
+    fileParallelism: false,
   },
 });
