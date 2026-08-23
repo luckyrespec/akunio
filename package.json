@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "db:up": "docker compose up -d db"
+    "db:up": "docker compose up -d db",
+    "db:migrate": "drizzle-kit migrate",
+    "db:sql": "node src/server/db/scripts/apply-sql.mjs"
   },
   "dependencies": {
     "better-auth": "^1.7.1",
