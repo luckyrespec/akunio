@@ -54,7 +54,7 @@ export const journalLines = pgTable(
     credit: numeric("credit", { precision: 18, scale: 2 }).notNull().default("0"),
     memo: text("memo"),
   },
-  (t) => [
+  () => [
     check("jl_one_side_chk", sql`((debit >= 0) AND (credit >= 0) AND (((debit = 0)::int + (credit = 0)::int) = 1))`),
   ],
 );

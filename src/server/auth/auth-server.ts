@@ -8,26 +8,14 @@ import {
   account,
   verification,
 } from "@/server/db/schema/auth";
-import { organizations, memberships } from "@/server/db/schema/org";
-import { seedOrgData } from "@/server/bootstrap/seed-org";
+import { ensureUserWorkspace } from "@/server/bootstrap/ensure-workspace";
 
 export async function bootstrapNewUser(
   userId: string,
   displayName: string,
 ): Promise<void> {
   try {
-    await db.transaction(async (tx) => {
-      const [org] = await tx
-        .insert(organizations)
-        .values({ name: displayName || "Organisasi Baru" })
-        .returning();
-      await tx.insert(memberships).values({
-        orgId: org.id,
-        userId,
-        role: "OWNER",
-      });
-      await seedOrgData(org.id, 1, tx);
-    });
+    await ensureUserWorkspace(userId, displayName);
   } catch (err) {
     // better-auth commits the user row before this hook runs and never
     // rolls it back on hook failure; delete it so the email is not burned.

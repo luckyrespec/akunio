@@ -11,6 +11,7 @@
     "e2e": "playwright test",
     "db:up": "docker compose up -d db",
     "db:migrate": "drizzle-kit migrate",
+    "test:db:setup": "node scripts/test-db-setup.mjs",
     "db:sql": "node src/server/db/scripts/apply-sql.mjs"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.33.0",
     "next": "16.3.2",
+    "next-themes": "^0.4.6",
     "pg": "^8.23.0",
     "radix-ui": "^1.6.7",
     "react": "19.2.8",

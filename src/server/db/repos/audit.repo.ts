@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { auditLog } from "../schema/audit";
 import type { Queryable } from "./queryable";
 
