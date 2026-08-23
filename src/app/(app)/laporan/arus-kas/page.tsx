@@ -5,7 +5,7 @@ import { accounts } from "@/server/db/schema/org";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { listPeriods } from "@/server/db/repos/periods.repo";
 import { postedLinesBetween, loadPeriodOrDefault } from "@/server/reports/build";
-import { aggregateFromLines } from "@/core/reports/aggregates";
+import { aggregateFromLines, signed } from "@/core/reports/aggregates";
 import {
   cashFlowIndirect, incomeStatement, movementByCode,
 } from "@/core/reports/statements";
@@ -42,6 +42,17 @@ export default async function ArusKasPage({
       movementByCode(periodAggs, "3300"),
   });
 
+  // Reconciliation: the indirect method above only buckets a fixed set of
+  // codes. Tie Net Change to the actual kas/bank movement so postings outside
+  // those codes stay visible instead of silently diverging.
+  const deltaKasMinor = periodAggs
+    .filter((a) => a.meta.isCash || a.meta.isBank)
+    .reduce((sum, a) => sum + signed(a.meta, a), 0n);
+  const lainLainMinor =
+    deltaKasMinor - cf.operatingMinor - cf.investingMinor - cf.financingMinor;
+  const netChangeTiedMinor =
+    cf.operatingMinor + cf.investingMinor + cf.financingMinor + lainLainMinor;
+
   return (
     <StatementShell title="Laporan Arus Kas" periodName={data.period.name}
                     options={data.options.map((p) => ({ name: p.name }))}>
@@ -65,8 +76,12 @@ export default async function ArusKasPage({
       <ReportRowView indent label="Setoran Modal dan Pinjaman Bersih" minor={cf.financingMinor} />
       <ReportRowView bold label="Arus Kas Bersih dari Pendanaan" minor={cf.financingMinor} />
 
+      <div className="mt-6">
+        <ReportRowView indent label="Aktivitas Lainnya" minor={lainLainMinor} />
+      </div>
+
       <div className="mt-4 rule-double pt-2">
-        <ReportRowView bold label="Kenaikan (Penurunan) Netto Kas" minor={cf.netChangeMinor} />
+        <ReportRowView bold label="Kenaikan (Penurunan) Netto Kas" minor={netChangeTiedMinor} />
       </div>
     </StatementShell>
   );
