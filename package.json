@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "e2e": "playwright test",
     "db:up": "docker compose up -d db",
     "db:migrate": "drizzle-kit migrate",
     "db:sql": "node src/server/db/scripts/apply-sql.mjs"
