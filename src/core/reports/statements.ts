@@ -77,6 +77,11 @@ export function balanceSheet(aggs: Iterable<AccountAggregate>, netIncomeMinor: b
   };
 }
 
+export function movementByCode(aggs: AccountAggregate[], code: string): bigint {
+  const found = aggs.find((x) => x.meta.code === code);
+  return found ? signed(found.meta, found) : 0n;
+}
+
 export interface CashFlowInput {
   netIncomeMinor: bigint;
   deltaPiutangMinor: bigint;
@@ -99,7 +104,7 @@ export function cashFlowIndirect(i: CashFlowInput): CashFlowResult {
   const rows: ReportRow[] = [
     { code: "NI", name: "Laba Bersih", movementMinor: i.netIncomeMinor },
     { code: "ADJ.PIUTANG", name: "Perubahan Piutang Usaha", movementMinor: -i.deltaPiutangMinor },
-    { code: "ADJ.PESEDEIAAN", name: "Perubahan Persediaan", movementMinor: -i.deltaPersediaanMinor },
+    { code: "ADJ.PERSEDIAAN", name: "Perubahan Persediaan", movementMinor: -i.deltaPersediaanMinor },
     { code: "ADJ.UTANG", name: "Perubahan Utang Usaha", movementMinor: i.deltaUtangUsahaMinor },
     { code: "ADJ.PENYUSUTAN", name: "Beban Penyusutan", movementMinor: i.depreciationMinor },
   ];

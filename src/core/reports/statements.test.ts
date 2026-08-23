@@ -3,7 +3,7 @@ import fc from "fast-check";
 import { aggregateFromLines, signed, type LedgerLine, type ReportAccountMeta } from "./aggregates";
 import {
   trialBalance, incomeStatement, balanceSheet,
-  cashFlowIndirect, changesInEquity, UnbalancedSheetError,
+  cashFlowIndirect, changesInEquity, UnbalancedSheetError, movementByCode,
 } from "./statements";
 
 const M = (id: string, code: string, name: string, type: ReportAccountMeta["type"], normal: "D" | "K"): ReportAccountMeta =>
@@ -71,6 +71,11 @@ describe("golden fixture", () => {
     });
     expect(cf.operatingMinor).toBe(3n * JT);      // 5 - 2
     expect(cf.netChangeMinor).toBe(8n * JT);      // 3 - 5 + 10 ties to real ΔKas +8jt
+  });
+  it("movementByCode: kas signed movement, unknown code returns 0n", () => {
+    const ags = agg();
+    expect(movementByCode(ags, "1120")).toBe(8n * JT); // kas D16jt − K8jt
+    expect(movementByCode(ags, "9999")).toBe(0n);
   });
   it("perubahan ekuitas", () => {
     const ce = changesInEquity({
