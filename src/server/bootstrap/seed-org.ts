@@ -1,22 +1,32 @@
 import { eq } from "drizzle-orm";
+import type { ExtractTablesWithRelations } from "drizzle-orm";
+import type { PgDatabase } from "drizzle-orm/pg-core";
+import type { NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
 import { db } from "@/server/db";
 import { accounts, fiscalPeriods } from "@/server/db/schema/org";
 import { COA_TEMPLATE } from "@/core/accounts/coa-template";
+
+type Executor = PgDatabase<
+  NodePgQueryResultHKT,
+  Record<string, never>,
+  ExtractTablesWithRelations<Record<string, never>>
+>;
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
 export async function seedOrgData(
   orgId: string,
   fiscalYearStartMonth = 1,
+  exec: Executor = db,
 ): Promise<void> {
-  const existing = await db
+  const existing = await exec
     .select({ id: accounts.id })
     .from(accounts)
     .where(eq(accounts.orgId, orgId))
     .limit(1);
   if (existing.length > 0) return;
 
-  await db.insert(accounts).values(
+  await exec.insert(accounts).values(
     COA_TEMPLATE.map((d) => ({
       orgId,
       code: d.code,
@@ -46,5 +56,5 @@ export async function seedOrgData(
       status: "OPEN" as const,
     };
   });
-  await db.insert(fiscalPeriods).values(rows);
+  await exec.insert(fiscalPeriods).values(rows);
 }
