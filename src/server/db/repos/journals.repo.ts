@@ -23,7 +23,7 @@ export function dec(minor: bigint): string {
   return `${neg ? "-" : ""}${v / 100n}.${String(v % 100n).padStart(2, "0")}`;
 }
 
-function toMinor(numericStr: string): bigint {
+export function toMinor(numericStr: string): bigint {
   const neg = numericStr.startsWith("-");
   const s = neg ? numericStr.slice(1) : numericStr;
   const [w, f = ""] = s.split(".");
