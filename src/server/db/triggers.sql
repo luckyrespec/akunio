@@ -24,5 +24,10 @@ BEGIN
   RETURN NULL;
 END $$ LANGUAGE plpgsql;
 
+-- NOTE: jl_immutable does NOT guard re-parenting a line OUT of a posted
+-- entry: UPDATE journal_lines SET entry_id = <draft> passes because
+-- guard_journal_lines coalesces to NEW.entry_id (the draft). Unreachable via
+-- domain code today — no code path touches journal_lines.entry_id after
+-- creation.
 CREATE TRIGGER jl_immutable AFTER INSERT OR UPDATE OR DELETE ON journal_lines
   FOR EACH ROW EXECUTE FUNCTION guard_journal_lines();

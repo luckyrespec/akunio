@@ -90,8 +90,16 @@ Berikutnya: **M2 Copilot** · **M3 Advisor RAG** · **M4 Doctor**.
 
 ## Checklist Sebelum Produksi
 
-- [ ] Jalankan runtime dengan peran non-superuser (`app_user`) agar RLS aktif
-      end-to-end: arahkan `DATABASE_URL` runtime ke koneksi `APP_DATABASE_URL`.
+- [ ] PENTING: beralih ke peran non-superuser (`app_user`) BUKAN sekadar ganti
+      konfigurasi. Dengan `FORCE ROW LEVEL SECURITY` dan GUC `app.current_org`
+      yang tidak disetel, semua query mengembalikan nol baris dan INSERT gagal.
+      Prasyarat kodenya: SEMUA pemanggilan server tenant-scoped harus dirutekan
+      lewat `withOrg()` (atau pembungkus penyetel GUC setara) agar
+      `app.current_org` terisi per transaksi — lihat
+      `src/server/db/repos/with-org.ts`. Sampai refactor tersebut selesai,
+      RLS hanya berfungsi sebagai defense-in-depth saat pengembangan (runtime
+      superuser melewati RLS); isolasi antar-organisasi dijamin oleh scoping
+      `orgId` di lapisan aplikasi.
 - [ ] Verifikasi grant `app_user` mencakup SEMUA tabel bisnis, termasuk hasil
       migrasi mendatang. Celah dikenal: `ALTER DEFAULT PRIVILEGES` hanya berlaku
       untuk objek yang dibuat oleh peran yang menjalankannya — jika migrasi
