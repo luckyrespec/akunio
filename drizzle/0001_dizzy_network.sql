@@ -1,0 +1,1 @@
+ALTER TABLE "journal_lines" ADD CONSTRAINT "jl_one_side_chk" CHECK (((debit >= 0) AND (credit >= 0) AND (((debit = 0)::int + (credit = 0)::int) = 1)));
