@@ -6,6 +6,7 @@ import { authClient } from "@/server/auth/auth-client";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const ITEMS = [
   { href: "/dasbor", label: "Dasbor" },
@@ -56,9 +57,12 @@ export function SidebarNav() {
         </nav>
       </div>
 
-      <Button variant="ghost" size="sm" onClick={keluar} className="justify-start text-ink-soft">
-        Keluar
-      </Button>
+      <div className="flex flex-col gap-1">
+        <ThemeToggle />
+        <Button variant="ghost" size="sm" onClick={keluar} className="justify-start text-ink-soft">
+          Keluar
+        </Button>
+      </div>
     </aside>
   );
 }

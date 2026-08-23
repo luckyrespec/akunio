@@ -100,37 +100,77 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.205 0.01 60);
+  --foreground: oklch(0.92 0.02 80);
+  --card: oklch(0.245 0.012 65);
+  --card-foreground: oklch(0.92 0.02 80);
+  --popover: oklch(0.245 0.012 65);
+  --popover-foreground: oklch(0.92 0.02 80);
+  --primary: oklch(0.68 0.13 45);
+  --primary-foreground: oklch(0.16 0.02 60);
+  --secondary: oklch(0.29 0.015 65);
+  --secondary-foreground: oklch(0.92 0.02 80);
+  --muted: oklch(0.29 0.015 65);
+  --muted-foreground: oklch(0.72 0.02 75);
+  --accent: oklch(0.29 0.015 65);
+  --accent-foreground: oklch(0.92 0.02 80);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.55 0.05 60);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.245 0.012 65);
+  --sidebar-foreground: oklch(0.92 0.02 80);
+  --sidebar-primary: oklch(0.68 0.13 45);
+  --sidebar-primary-foreground: oklch(0.16 0.02 60);
+  --sidebar-accent: oklch(0.29 0.015 65);
+  --sidebar-accent-foreground: oklch(0.92 0.02 80);
+  --sidebar-border: oklch(0.34 0.018 65);
+  --sidebar-ring: oklch(0.55 0.05 60);
+
+  /* Paper & Ink — Lilin: warm charcoal paper, cream ink */
+  --color-canvas: #1b1713;
+  --color-paper: #241f19;
+  --color-ink: #ede4d7;
+  --color-ink-soft: #a89a88;
+  --color-terra: #d06b40;
+  --color-rule: #3d3529;
+  --color-debit: #4cc38a;
+  --color-credit: #d06b40;
+
+  --border: var(--color-rule);
+  --card: var(--color-paper);
+}
+
+/* Laporan keuangan dicetak selalu gaya kertas terang, sekalipun mode gelap aktif. */
+@media print {
+  .dark {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: var(--color-paper);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --border: var(--color-rule);
+    --input: oklch(0.922 0 0);
+
+    --color-canvas: #faf7f2;
+    --color-paper: #fffdf9;
+    --color-ink: #1c2430;
+    --color-ink-soft: #5b6470;
+    --color-terra: #b4552d;
+    --color-rule: #e4ddd0;
+    --color-debit: #1f7a4d;
+    --color-credit: #b4552d;
+  }
 }
 
 html { background-color: var(--color-canvas); }
