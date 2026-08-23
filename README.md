@@ -106,8 +106,8 @@ Berikutnya: **M2 Copilot** · **M3 Advisor RAG** · **M4 Doctor**.
       dijalankan oleh peran admin lain, grant bisa tertinggal.
 - [ ] Ganti `BETTER_AUTH_SECRET` dengan nilai acak kuat (pertimbangkan juga
       menyetel `BETTER_AUTH_URL` ke domain produksi).
-- [ ] Rotasi kredensial dev yang tersimpan di `.env.example` sebelum membagikan
-      repositori.
+- [ ] `.env.example` hanya memuat placeholder — jangan pernah menyimpan
+      kredensial asli di repositori.
 - [ ] Backup terjadwal + verifikasi rantai audit (`verifyChain`).
 
 ## Peta Milestone
