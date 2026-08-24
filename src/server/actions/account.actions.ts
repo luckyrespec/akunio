@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/server/auth/guard";
+import { isRedirectError } from "./redirect-guard";
 import { db } from "@/server/db";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import { getAccountById, setAccountArchived } from "@/server/db/repos/accounts.repo";
@@ -22,6 +23,7 @@ export async function archiveAccountAction(accountId: string, archive: boolean) 
     revalidatePath("/pengaturan");
     return { ok: true as const };
   } catch (e) {
+    if (isRedirectError(e)) throw e;
     return { ok: false as const, error: e instanceof Error ? e.message : "GAGAL" };
   }
 }

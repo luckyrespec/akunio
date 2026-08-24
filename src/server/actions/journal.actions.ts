@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/server/auth/guard";
+import { isRedirectError } from "./redirect-guard";
 import { db } from "@/server/db";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import {
@@ -17,6 +18,7 @@ export interface ActionResult {
 }
 
 function fail(e: unknown): ActionResult {
+  if (isRedirectError(e)) throw e;
   if (e instanceof PostingError) {
     return { ok: false, error: e.issues.map((i) => issueToMessage(i)).join("; ") };
   }

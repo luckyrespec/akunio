@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
+import { todayISO } from "@/lib/date";
 import { db } from "@/server/db";
 import { accounts } from "@/server/db/schema/org";
 import { findPeriodByDate } from "@/server/db/repos/periods.repo";
@@ -15,13 +16,13 @@ export default async function DasborPage() {
   const ctx = await requireContext();
 
   const now = new Date();
-  const todayISO = now.toISOString().slice(0, 10);
+  const today = todayISO();
   const year = now.getFullYear();
   const yearStartISO = `${year}-01-01`;
   const yearEndISO = `${year}-12-31`;
 
   const data = await db.transaction(async (tx) => {
-    const period = await findPeriodByDate(tx, ctx.orgId, todayISO);
+    const period = await findPeriodByDate(tx, ctx.orgId, today);
     const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
     const cashLines = await postedLinesThrough(tx, ctx.orgId, yearEndISO);
     const ytdLines = await postedLinesBetween(tx, ctx.orgId, yearStartISO, yearEndISO);

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { reverseEntryAction } from "@/server/actions/journal.actions";
+import { todayISO } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +15,7 @@ export function ReverseButton({ entryId }: { entryId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dateISO, setDateISO] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateISO, setDateISO] = useState(() => todayISO());
   const [pending, startTransition] = useTransition();
 
   return (

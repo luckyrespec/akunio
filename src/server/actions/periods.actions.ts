@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/server/db";
 import { requireContext } from "@/server/auth/guard";
+import { isRedirectError } from "./redirect-guard";
 import { setPeriodStatus } from "@/server/db/repos/periods.repo";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 
@@ -20,6 +21,7 @@ export async function closePeriodAction(periodId: string): Promise<ActionResult>
     revalidatePath("/pengaturan");
     return { ok: true };
   } catch (e) {
+    if (isRedirectError(e)) throw e;
     return { ok: false, error: e instanceof Error ? e.message : "GAGAL" };
   }
 }
@@ -37,6 +39,7 @@ export async function reopenPeriodAction(periodId: string): Promise<ActionResult
     revalidatePath("/pengaturan");
     return { ok: true };
   } catch (e) {
+    if (isRedirectError(e)) throw e;
     return { ok: false, error: e instanceof Error ? e.message : "GAGAL" };
   }
 }

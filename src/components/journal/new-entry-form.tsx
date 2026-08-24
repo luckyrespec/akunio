@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createAndPostAction } from "@/server/actions/journal.actions";
 import { Money } from "@/core/money/money";
+import { todayISO } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +29,7 @@ export function NewEntryForm({ accounts }: { accounts: Array<{ id: string; label
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [dateISO, setDateISO] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateISO, setDateISO] = useState(() => todayISO());
   const [memo, setMemo] = useState("");
   const [rows, setRows] = useState<Row[]>([
     { key: 1, accountId: "", debitText: "", creditText: "" },
