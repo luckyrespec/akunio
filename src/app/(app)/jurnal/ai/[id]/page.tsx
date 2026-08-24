@@ -39,13 +39,41 @@ export default async function ReviewPage({
     ? await getDocumentRow(db, ctx.orgId, data.draft.documentId)
     : null;
 
+  // Merge account mapping (stored separately) into each line for the review UI.
+  const raw = data.draft.draft as {
+    dateISO: string;
+    memo: string;
+    lines: Array<Record<string, unknown> & {
+      accountCode: string; debitText: string; creditText: string;
+      confidence: number; reason: string;
+    }>;
+    overallConfidence: number;
+    explanation: string;
+    mapping?: {
+      lines: Array<{ accountId: string | null; matchedName: string | null; unresolved: boolean }>;
+      warnings: string[];
+    };
+  };
+  const mappedLines = raw.mapping?.lines ?? [];
+  const mergedLines = raw.lines.map((l, i) => ({
+    ...l,
+    accountId: mappedLines[i]?.accountId ?? null,
+    matchedName: mappedLines[i]?.matchedName ?? null,
+    unresolved: mappedLines[i]?.unresolved ?? true,
+  }));
+  const reviewDraft = {
+    dateISO: raw.dateISO, memo: raw.memo,
+    lines: mergedLines, overallConfidence: raw.overallConfidence,
+    explanation: raw.explanation, mapping: raw.mapping,
+  };
+
   return (
     <section>
       <Link href="/jurnal?tab=draft" className="text-xs text-ink-soft underline">← Draft AI</Link>
       <h1 className="mt-2 font-display text-2xl">Review Draft Asisten</h1>
       <ReviewClient
         draftId={data.draft.id}
-        draft={data.draft.draft as never}
+        draft={reviewDraft}
         accounts={leaves.map((a) => ({ id: a.id, label: `${a.code} · ${a.name}` }))}
         documentMeta={doc ? { mime: doc.mime, storageKey: doc.storageKey } : null}
       />

@@ -114,3 +114,11 @@ Berikutnya: **M2 Copilot** · **M3 Advisor RAG** · **M4 Doctor**.
 
 - M1 Ledger-first (ini) · M2 Copilot · M3 Advisor RAG · M4 Doctor.
 Spesifikasi: docs/superpowers/specs/. Rencana: docs/superpowers/plans/.
+
+## M2 � Asisten Jurnal (Copilot)
+
+- `/jurnal/ai`: tulis transaksi Bahasa Indonesia atau unggah faktur (gambar/PDF = 5 MB).
+- Draft direview di halaman khusus (editable + diff) sebelum diposting lewat pipeline yang sama.
+- Penyimpanan dokumen: SeaweedFS S3 � jalankan `npm run weed:dev` (butuh `weed.exe` di `D:\Lucky\weed_strorage`).
+- Env AI: `GEMINI_API_KEY` (kosongkan + `AI_MOCK=1` untuk mode tanpa jaringan), `GEMINI_MODEL=gemini-3.5-flash`, `AI_MONTHLY_DRAFT_LIMIT=100`.
+- Model legacy Gemini (2.5/2.0/1.5) tidak didukung.
