@@ -31,7 +31,7 @@ Jurnal/COA/Ringkasan Periode/Dokumen ─(real-time)─▶ tenant_chunks (per org
                                                           ▼         ▼
                                                    Hybrid search → Rerank (0.7 cosine + 0.3 ts_rank)
                                                           ▼
-User ──▶ Chat API (/api/advisor/chat) ── embed pertanyaan ──────────▶ Gemini gemini-3.5-flash (store:false)
+User ──▶ Chat API (/api/advisor/chat) ── embed pertanyaan ──────────▶ Gemini gemini-3.5-flash-lite (store:false)
   ▲                      │                                              │
   │                      └──── citations + angka live (saldo Kas, laba YTD)
   │                            │
@@ -64,10 +64,10 @@ Batasan: `chat_threads.org_id` dan `chat_messages` diakses lewat join `thread.or
 2. Embed pertanyaan via `@google/genai`.
 3. Query kedua indeks bersamaan (top-5 tenant dengan `WHERE org_id`, top-5 global) — skor hybrid per chunk: `score = 0.7*(1 - cosine_distance) + 0.3*normalized_ts_rank`. Gabung 10, rerank, ambil top-6. Jika tenant < 2 hasil (tenant baru) → fallback: hanya `ifrs_chunks` + 3 angka live.
 4. Prompt Gemini: sistem Bahasa Indonesia ("jawab singkat, sitasi wajib [IFRS §…] untuk aturan dan [Jurnal JE-…] untuk angka; jangan halusinasi angka"), konteks 6 chunk (excerpt 400 token each) + 3 angka live (saldo Kas, laba YTD dari `postedLinesThrough` seperti Dasbor) + 6 pesan terakhir thread.
-5. Panggil `gemini-3.5-flash` dengan `store:false`. Jika output mengandung intent koreksi dan `overallConfidence > 0.75` (atau model menyertakan `suggestedDraft`), sertakan `suggestedDraft: DraftEntry` (reuse schema M2 zod) + tombol "Buat draft koreksi" di balon.
+5. Panggil `gemini-3.5-flash-lite` dengan `store:false`. Jika output mengandung intent koreksi dan `overallConfidence > 0.75` (atau model menyertakan `suggestedDraft`), sertakan `suggestedDraft: DraftEntry` (reuse schema M2 zod) + tombol "Buat draft koreksi" di balon.
 6. Simpan `chat_messages` user + assistant (dengan `citations` lengkap). Kembalikan ke UI.
 
-**Usulan koreksi:** klik tombol → `POST /api/advisor/drafts` → buat `ai_drafts` baru `source: "ADVISOR"`, `input_text = "usulan dari chat <threadId>"`, `model = gemini-3.5-flash` → redirect ke `/jurnal/ai/[id]` (flow M2). Validasi akun tetap lewat `resolveDraftAccounts` + `postJournalEntry`.
+**Usulan koreksi:** klik tombol → `POST /api/advisor/drafts` → buat `ai_drafts` baru `source: "ADVISOR"`, `input_text = "usulan dari chat <threadId>"`, `model = gemini-3.5-flash-lite` → redirect ke `/jurnal/ai/[id]` (flow M2). Validasi akun tetap lewat `resolveDraftAccounts` + `postJournalEntry`.
 
 ## 5. UI
 
@@ -103,6 +103,6 @@ Batasan: `chat_threads.org_id` dan `chat_messages` diakses lewat join `thread.or
 ## 9. Constraints
 
 - Bahasa UI Bahasa Indonesia; Paper & Ink Matte; motion `prefers-reduced-motion` aware; tulis via `write` tool, bukan `bash` heredoc.
-- `@google/genai` >= 2.3.0, model generasi `gemini-3.5-flash`, embedding `gemini-embedding`/`text-embedding-004`, `store:false` untuk data keuangan.
+- `@google/genai` >= 2.3.0, model generasi `gemini-3.5-flash-lite`, embedding `gemini-embedding`/`text-embedding-004`, `store:false` untuk data keuangan.
 - Tests berjalan di `ledger_test` (guard di `tests/setup.ts`), bukan database dev.
 - Windows PowerShell, `bash` adalah WSL — shell scripts harus via Git Bash eksplisit.

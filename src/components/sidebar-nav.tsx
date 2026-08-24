@@ -8,6 +8,7 @@ import {
   FileBarChart,
   LayoutDashboard,
   Library,
+  MessageCircle,
   Search,
   Settings2,
   Sparkles,
@@ -21,7 +22,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const ITEMS = [
   { href: "/dasbor", label: "Dasbor", icon: LayoutDashboard },
   { href: "/jurnal", label: "Jurnal Umum", icon: BookOpen, match: (p: string) => p === "/jurnal" || p === "/jurnal/baru" },
-  { href: "/jurnal/ai", label: "Asisten AI", icon: Sparkles },
+  { href: "/jurnal/ai", label: "Copilot Jurnal", icon: Sparkles },
+  { href: "/asisten", label: "Advisor", icon: MessageCircle },
   { href: "/buku-besar", label: "Buku Besar", icon: Library },
   { href: "/laporan", label: "Laporan", icon: FileBarChart },
   { href: "/pengaturan", label: "Pengaturan", icon: Settings2 },

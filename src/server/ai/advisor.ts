@@ -111,7 +111,7 @@ ${lastMessages}
 Pertanyaan: ${question}`;
 
     const interaction = await ai.interactions.create({
-      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
       input: [{ type: "user_input", content: [{ type: "text", text: prompt }] } as never],
       store: false,
     });

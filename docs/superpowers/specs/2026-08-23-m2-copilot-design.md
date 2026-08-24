@@ -12,7 +12,7 @@ Pengguna menulis deskripsi transaksi dalam Bahasa Indonesia (atau mengunggah fot
 
 | Keputusan | Pilihan |
 |---|---|
-| Provider default | Gemini via `@google/genai` (Interactions API), model `gemini-3.5-flash` (configurable `GEMINI_MODEL`); adapter tetap provider-agnostic di level interface |
+| Provider default | Gemini via `@google/genai` (Interactions API), model `gemini-3.5-flash-lite` (configurable `GEMINI_MODEL`); adapter tetap provider-agnostic di level interface |
 | Sitasi IFRS-SME | Tidak di M2 — menyusul di M3 bersama RAG |
 | Penyimpanan dokumen | SeaweedFS S3-compatible (dev `D:\Lucky\weed_strorage`, produksi SeaweedFS S3 juga) |
 | Review UX | Halaman review khusus + diff, draft tersimpan di DB, daftar draft |
@@ -62,7 +62,7 @@ Prinsip: draft AI hanya masuk buku lewat tombol *Posting* yang memanggil `postJo
 | document_id | uuid → documents, nullable | |
 | input_text | text | teks user / ringkasan sumber |
 | draft | jsonb | DraftEntry (baris + confidence + penjelasan) |
-| model | text | mis. `google/gemini-3.5-flash` |
+| model | text | mis. `google/gemini-3.5-flash-lite` |
 | status | enum `PENDING/ACCEPTED/REJECTED` | PENDING > 7 hari → dibaca sebagai REJECTED (lazy) |
 | posted_entry_id | uuid → journal_entries, nullable | terisi saat ACCEPTED diposting |
 | created_at | timestamptz | dipakai juga untuk kuota bulanan |
@@ -83,7 +83,7 @@ Tanpa tabel baru: `COUNT(ai_drafts WHERE org_id AND created_at >= awal bulan)` d
 ### Adapter (`src/server/ai/adapter.ts`)
 
 - Dibangun di atas **`@google/genai` (>= 2.3.0, Interactions API)** sesuai skill gemini-api-dev / gemini-interactions-api. `AI_PROVIDER` disiapkan untuk masa depan (google dulu); interface adapter `generateJournalDraft(input): Promise<DraftEntry>` tetap satu pintu sehingga provider lain cukup implementasi baru.
-- Model: `gemini-3.5-flash` (multimodal, 1M token) via env `GEMINI_MODEL`; **dilarang memakai model legacy `gemini-2.5-*`/`2.0-*`/`1.5-*`**.
+- Model: `gemini-3.5-flash-lite` (multimodal, 1M token) via env `GEMINI_MODEL`; **dilarang memakai model legacy `gemini-2.5-*`/`2.0-*`/`1.5-*`**.
 - Structured output memakai responseSchema Interactions API; hasil divalidasi ulang dengan zod — gagal validasi → retry maks 2 kali.
 - `store=false` pada setiap interaction (data keuangan tidak disimpan di server Google; kita tidak butuh `previous_interaction_id` untuk one-shot drafting).
 - Sebelum menulis kode adapter, WAJIB fetch halaman docs: Structured Output, Document Processing, dan Image Understanding (`.md.txt` dari indeks `ai.google.dev/gemini-api/docs/llms.txt`).

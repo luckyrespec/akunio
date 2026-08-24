@@ -3,7 +3,7 @@ import { DraftEntrySchema, draftJsonSchema, type DraftEntry } from "./schema";
 import { buildDraftPrompt, type PromptAccount } from "./prompt";
 import { MOCK_TEXT_DRAFT, MOCK_DOCUMENT_DRAFT } from "./fixtures";
 
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash"; // never legacy 2.5/2.0/1.5
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"; // never legacy 2.5/2.0/1.5
 const MAX_RETRIES = 2;
 
 export interface GenerateDraftInput {
