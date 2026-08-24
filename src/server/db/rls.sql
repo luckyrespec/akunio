@@ -1,25 +1,37 @@
 -- Row Level Security: app connects as app_user; superuser bypasses by design.
--- NOTE: 'organizations' is handled separately below — it is keyed by id, not org_id,
--- so it must be excluded from the org_id-policy loop.
+-- Idempotent: every policy is created inside a DO block that checks pg_policies,
+-- so re-running this file is always safe (apply-sql.mjs tolerates only per-file
+-- skips, so files must be error-free on rerun).
+-- NOTE: 'organizations' is keyed by id, not org_id — handled separately below.
 DO $$
 DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY['memberships','accounts','fiscal_periods',
-                           'journal_entries','journal_lines','journal_seq_counters','audit_log']
+                           'journal_entries','journal_lines','journal_seq_counters','audit_log',
+                           'documents','ai_drafts']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
-    EXECUTE format($p$
-      CREATE POLICY tenant_isolation_%s ON %I
-      USING (org_id = current_setting('app.current_org', true)::uuid)
-      WITH CHECK (org_id = current_setting('app.current_org')::uuid)
-    $p$, t, t);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = t AND policyname = format('tenant_isolation_%s', t)) THEN
+      EXECUTE format($p$
+        CREATE POLICY tenant_isolation_%s ON %I
+        USING (org_id = current_setting('app.current_org', true)::uuid)
+        WITH CHECK (org_id = current_setting('app.current_org')::uuid)
+      $p$, t, t);
+    END IF;
   END LOOP;
 END $$;
 
 -- organizations itself is keyed by id, not org_id:
 ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE organizations FORCE ROW LEVEL SECURITY;
-CREATE POLICY tenant_isolation_organizations ON organizations
-  USING (id = current_setting('app.current_org', true)::uuid)
-  WITH CHECK (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'organizations' AND policyname = 'tenant_isolation_organizations') THEN
+    EXECUTE $p$
+      CREATE POLICY tenant_isolation_organizations ON organizations
+      USING (id = current_setting('app.current_org', true)::uuid)
+      WITH CHECK (true)
+    $p$;
+  END IF;
+END $$;
