@@ -25,7 +25,7 @@ Pengguna menulis deskripsi transaksi dalam Bahasa Indonesia (atau mengunggah fot
 COMPOSER /jurnal/ai  (textarea + dropzone)
    | cek kuota org bulan ini --x--> pesan kuota habis (manual entry tetap jalan)
    v
-src/server/ai/adapter.ts   (Vercel AI SDK, generateObject + zod)
+src/server/ai/adapter.ts   (@google/genai Interactions API + zod)
    |  teks -> ekstraksi langsung; dokumen -> vision
    v
 pemetaan akun terhadap COA tenant (fuzzy match string; vektor menyusul di M3)
@@ -62,7 +62,7 @@ Prinsip: draft AI hanya masuk buku lewat tombol *Posting* yang memanggil `postJo
 | document_id | uuid → documents, nullable | |
 | input_text | text | teks user / ringkasan sumber |
 | draft | jsonb | DraftEntry (baris + confidence + penjelasan) |
-| model | text | mis. `google/gemini-2.5-flash` |
+| model | text | mis. `google/gemini-3.5-flash` |
 | status | enum `PENDING/ACCEPTED/REJECTED` | PENDING > 7 hari → dibaca sebagai REJECTED (lazy) |
 | posted_entry_id | uuid → journal_entries, nullable | terisi saat ACCEPTED diposting |
 | created_at | timestamptz | dipakai juga untuk kuota bulanan |
