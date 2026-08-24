@@ -8,6 +8,7 @@ import { Money } from "@/core/money/money";
 import { ReverseButton } from "@/components/journal/reverse-button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Reveal } from "@/components/motion";
 
 export default async function JurnalPage({
   searchParams,
@@ -18,28 +19,33 @@ export default async function JurnalPage({
 
   return (
     <section>
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-2xl">Jurnal Umum</h1>
-        <div className="flex items-center gap-3">
-          <div className="flex gap-2">
-            <Link href="/jurnal"
-                  className={tab === "manual"
-                    ? "rounded-md bg-canvas px-3 py-1.5 text-sm font-medium text-terra"
-                    : "rounded-md px-3 py-1.5 text-sm text-ink-soft hover:bg-canvas"}>
-              Manual
-            </Link>
-            <Link href="/jurnal?tab=draft"
-                  className={tab === "draft"
-                    ? "rounded-md bg-canvas px-3 py-1.5 text-sm font-medium text-terra"
-                    : "rounded-md px-3 py-1.5 text-sm text-ink-soft hover:bg-canvas"}>
-              Draft AI
+      <Reveal>
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="font-display text-[1.75rem] font-semibold tracking-tight">Jurnal Umum</h1>
+            <p className="mt-1 text-xs uppercase tracking-widest text-ink-soft">Catatan transaksi harian</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1 rounded-full border border-rule bg-paper p-1">
+              <Link href="/jurnal"
+                    className={tab === "manual"
+                      ? "rounded-full bg-canvas px-3 py-1 text-xs font-medium text-terra shadow-sm"
+                      : "rounded-full px-3 py-1 text-xs text-ink-soft hover:bg-canvas"}>
+                Manual
+              </Link>
+              <Link href="/jurnal?tab=draft"
+                    className={tab === "draft"
+                      ? "rounded-full bg-canvas px-3 py-1 text-xs font-medium text-terra shadow-sm"
+                      : "rounded-full px-3 py-1 text-xs text-ink-soft hover:bg-canvas"}>
+                Draft AI
+              </Link>
+            </div>
+            <Link href="/jurnal/baru">
+              <Button className="bg-terra shadow-sm hover:bg-terra/90">+ Tulis Jurnal</Button>
             </Link>
           </div>
-          <Link href="/jurnal/baru">
-            <Button className="bg-terra hover:bg-terra/90">+ Tulis Jurnal</Button>
-          </Link>
-        </div>
-      </header>
+        </header>
+      </Reveal>
 
       {tab === "draft" ? <DraftTab orgId={ctx.orgId} /> : <ManualTab orgId={ctx.orgId} />}
     </section>
@@ -51,10 +57,10 @@ async function ManualTab({ orgId }: { orgId: string }) {
 
   return (
     <>
-      <div className="mt-6 overflow-x-auto rounded-lg border border-rule bg-paper">
+      <div className="matte-card mt-6 overflow-x-auto rounded-xl border border-rule bg-paper">
         <table className="w-full tnum text-sm">
           <thead>
-            <tr className="border-b border-rule text-left text-xs uppercase tracking-wide text-ink-soft">
+            <tr className="border-b border-rule bg-canvas/60 text-left text-[11px] uppercase tracking-widest text-ink-soft">
               <th className="px-4 py-3 font-medium">Nomor</th>
               <th className="px-4 py-3 font-medium">Tanggal</th>
               <th className="px-4 py-3 font-medium">Akun &amp; Keterangan</th>
@@ -66,30 +72,31 @@ async function ManualTab({ orgId }: { orgId: string }) {
           <tbody>
             {entries.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-ink-soft">
-                  Belum ada jurnal. Mulai dengan menekan “+ Tulis Jurnal”.
+                <td colSpan={6} className="px-4 py-12 text-center">
+                  <p className="font-display text-sm">Belum ada jurnal</p>
+                  <p className="mt-1 text-xs text-ink-soft">Mulai dengan menekan “+ Tulis Jurnal” atau minta Asisten AI.</p>
                 </td>
               </tr>
             )}
             {entries.map((e) => (
               <Fragment key={e.id}>
                 {e.lines.map((l, i) => (
-                  <tr key={l.id} className="border-b border-rule/60 last:border-0">
-                    <td className="px-4 py-2 align-top">
+                  <tr key={l.id} className="border-b border-rule/60 last:border-0 transition-colors hover:bg-canvas/60">
+                    <td className="px-4 py-2.5 align-top">
                       {i === 0 ? <span className="font-medium">{e.number}</span> : ""}
                     </td>
-                    <td className="px-4 py-2 align-top">{i === 0 ? e.entryDate : ""}</td>
-                    <td className="px-4 py-2 pl-8">
-                      {l.accountCode} · {l.accountName}
+                    <td className="px-4 py-2.5 align-top text-ink-soft">{i === 0 ? e.entryDate : ""}</td>
+                    <td className="px-4 py-2.5 pl-8">
+                      <span className="font-mono text-xs">{l.accountCode}</span> <span className="text-ink-soft">·</span> {l.accountName}
                       <span className="ml-2 text-xs text-ink-soft">{l.memo ?? e.memo}</span>
                     </td>
-                    <td className="px-4 py-2 text-right">
-                      {l.debitMinor > 0n ? Money.fromMinor(l.debitMinor).formatIdr() : ""}
+                    <td className="px-4 py-2.5 text-right">
+                      {l.debitMinor > 0n ? Money.fromMinor(l.debitMinor).formatIdr() : <span className="text-ink-soft/30">—</span>}
                     </td>
-                    <td className="px-4 py-2 text-right">
-                      {l.creditMinor > 0n ? Money.fromMinor(l.creditMinor).formatIdr() : ""}
+                    <td className="px-4 py-2.5 text-right">
+                      {l.creditMinor > 0n ? Money.fromMinor(l.creditMinor).formatIdr() : <span className="text-ink-soft/30">—</span>}
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-2.5">
                       {i === 0 && e.status === "POSTED" && !e.reversalOfId && (
                         <ReverseButton entryId={e.id} />
                       )}
