@@ -6,6 +6,7 @@ import {
 } from "@/server/storage/storage";
 import { createDocumentRow } from "@/server/db/repos/documents.repo";
 import { isRedirectError } from "./redirect-guard";
+import { sql } from "drizzle-orm";
 
 export interface UploadResult {
   ok: boolean;
@@ -26,9 +27,15 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadRe
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     const { storageKey } = await putDocument(ctx.orgId, { buffer, mime: file.type });
-    const row = await db.transaction((tx) => createDocumentRow(tx, {
-      orgId: ctx.orgId, storageKey, mime: file.type, sizeBytes: file.size,
-    }));
+    const row = await db.transaction(async (tx) => {
+      const r = await createDocumentRow(tx, {
+        orgId: ctx.orgId, storageKey, mime: file.type, sizeBytes: file.size,
+      });
+      try {
+        await tx.execute(sql`INSERT INTO rag_queue (org_id, kind, ref_id) VALUES (${ctx.orgId}, 'DOCUMENT', ${r.id})`);
+      } catch {}
+      return r;
+    });
     return { ok: true, documentId: row.id };
   } catch (e) {
     if (isRedirectError(e)) throw e;

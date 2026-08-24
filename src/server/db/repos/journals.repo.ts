@@ -179,5 +179,10 @@ export async function postJournalEntry(
     .set({ status: "POSTED", postedAt: new Date(), postedBy: actorEmail })
     .where(and(eq(journalEntries.id, entry.id), eq(journalEntries.status, "DRAFT")));
 
+  // Enqueue for RAG indexing (real-time, best-effort)
+  try {
+    await q.execute(sql`INSERT INTO rag_queue (org_id, kind, ref_id) VALUES (${orgId}, 'JOURNAL', ${entry.id})`);
+  } catch {}
+
   return { id: entry.id, number };
 }
