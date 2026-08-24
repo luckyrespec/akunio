@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Pool } from "pg";
-import { getPool, makeOrg, truncateAll } from "./helpers";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { makeOrg, truncateAll } from "./helpers";
 
 type AiDraftLike = { status: string; createdAt: Date };
 
 describe.skipIf(process.env.SKIP_DB_TESTS === "1")("drafts repo", () => {
   const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+  const adminDb = drizzle(admin);
   let orgId: string;
   const draftBody = {
     dateISO: "2026-01-15", memo: "m",
@@ -32,16 +34,16 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("drafts repo", () => {
     }));
     expect(d.status).toBe("PENDING");
 
-    expect((await listDrafts(admin, orgId)).length).toBe(1);
-    expect((await getDraft(admin, orgId, d.id))?.id).toBe(d.id);
+    expect((await listDrafts(adminDb, orgId)).length).toBe(1);
+    expect((await getDraft(adminDb, orgId, d.id))?.id).toBe(d.id);
 
     await db.transaction((tx) => setDraftStatus(tx, orgId, d.id, "REJECTED"));
-    expect((await getDraft(admin, orgId, d.id))?.status).toBe("REJECTED");
+    expect((await getDraft(adminDb, orgId, d.id))?.status).toBe("REJECTED");
 
-    await expect(setDraftStatus(admin, orgId, crypto.randomUUID(), "PENDING"))
+    await expect(setDraftStatus(adminDb, orgId, crypto.randomUUID(), "PENDING"))
       .rejects.toThrow("DRAFT_TIDAK_DITEMUKAN");
 
-    expect(await countDraftsThisMonth(admin, orgId, new Date())).toBe(1);
+    expect(await countDraftsThisMonth(adminDb, orgId, new Date())).toBe(1);
   });
 
   it("effectiveStatus expires PENDING after 7 days", async () => {
