@@ -16,13 +16,13 @@ const vector = customType<{ data: number[]; driverData: string }>({
     // (native Windows Postgres). Production Docker image has real vector(768).
     return "text";
   },
-  toDriver(value) {
-    return JSON.stringify(value.data ?? value);
+  toDriver(value: number[]) {
+    return JSON.stringify(value);
   },
-  fromDriver(value) {
+  fromDriver(value: string) {
     if (typeof value === "string") {
       try {
-        return JSON.parse(value);
+        return JSON.parse(value) as number[];
       } catch {
         return value as unknown as number[];
       }

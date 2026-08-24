@@ -3,6 +3,17 @@ import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { createThread, getThread } from "@/server/db/repos/chat.repo";
 import { askAdvisor } from "@/server/ai/advisor";
+import { listMessages } from "@/server/db/repos/chat.repo";
+
+export async function GET(req: NextRequest) {
+  const ctx = await requireContext();
+  const threadId = new URL(req.url).searchParams.get("threadId");
+  if (!threadId) return NextResponse.json({ error: "threadId required" }, { status: 400 });
+  const t = await getThread(db, ctx.orgId, threadId);
+  if (!t) return NextResponse.json({ error: "Thread tidak ditemukan." }, { status: 404 });
+  const msgs = await listMessages(db, threadId);
+  return NextResponse.json(msgs);
+}
 
 export async function POST(req: NextRequest) {
   try {
