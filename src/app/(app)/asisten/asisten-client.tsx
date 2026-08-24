@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { createCorrectionDraftAction } from "@/server/actions/advisor.actions";
 
 interface Thread {
   id: string;
@@ -144,7 +145,19 @@ export default function AsistenClient({ initialThreads }: { initialThreads: Thre
                     </div>
                   )}
                   {Boolean(m.suggestedDraft) && (
-                    <Button size="sm" className="mt-2 bg-terra hover:bg-terra/90">
+                    <Button
+                      size="sm"
+                      className="mt-2 bg-terra hover:bg-terra/90"
+                      onClick={async () => {
+                        const res = await createCorrectionDraftAction({
+                          threadId: selectedId ?? "",
+                          draft: m.suggestedDraft,
+                        });
+                        if (res.ok && res.draftId) {
+                          window.location.href = `/jurnal/ai/${res.draftId}`;
+                        }
+                      }}
+                    >
                       Buat draft koreksi
                     </Button>
                   )}

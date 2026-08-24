@@ -80,6 +80,19 @@ export async function askAdvisor(
     answer = `Jawaban mock untuk: ${question}. ${liveNumbers}`;
     // Mock provides 2 citations deterministically
     citations = citations.slice(0, 2);
+    // If question asks for correction, provide a mock suggested draft
+    if (question.toLowerCase().includes("koreksi") || question.toLowerCase().includes("perbaiki")) {
+      suggestedDraft = {
+        dateISO: new Date().toISOString().slice(0, 10),
+        memo: "Koreksi usulan advisor",
+        lines: [
+          { accountCode: "1110", debitText: "100.000", creditText: "", confidence: 0.8, reason: "Koreksi" },
+          { accountCode: "4100", debitText: "", creditText: "100.000", confidence: 0.8, reason: "Koreksi" },
+        ],
+        overallConfidence: 0.85,
+        explanation: "Draft koreksi mock",
+      };
+    }
   } else {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("AI_TIDAK_TERSEDIA");

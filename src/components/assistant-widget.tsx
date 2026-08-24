@@ -5,12 +5,14 @@ import { MessageCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { createCorrectionDraftAction } from "@/server/actions/advisor.actions";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   citations?: Array<{ kind: string; excerpt: string }> | null;
+  suggestedDraft?: unknown;
 }
 
 export function AssistantWidget() {
@@ -37,7 +39,7 @@ export function AssistantWidget() {
       if (!threadId && data.threadId) setThreadId(data.threadId);
       setMessages((m) => [
         ...m,
-        { id: crypto.randomUUID(), role: "assistant", content: data.answer, citations: data.citations },
+        { id: crypto.randomUUID(), role: "assistant", content: data.answer, citations: data.citations, suggestedDraft: data.suggestedDraft },
       ]);
     } catch (e) {
       setMessages((m) => [
@@ -85,6 +87,21 @@ export function AssistantWidget() {
                           </Badge>
                         ))}
                       </div>
+                    )}
+                    {Boolean(m.suggestedDraft) && (
+                      <Button
+                        size="sm"
+                        className="mt-2 h-6 bg-terra text-[10px] hover:bg-terra/90"
+                        onClick={async () => {
+                          const res = await createCorrectionDraftAction({
+                            threadId: threadId ?? "",
+                            draft: m.suggestedDraft,
+                          });
+                          if (res.ok && res.draftId) window.location.href = `/jurnal/ai/${res.draftId}`;
+                        }}
+                      >
+                        Buat draft koreksi
+                      </Button>
                     )}
                   </div>
                 </div>
