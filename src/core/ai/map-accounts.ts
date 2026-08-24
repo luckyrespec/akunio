@@ -38,7 +38,7 @@ export function resolveDraftAccounts(
     }
     let best: { a: (typeof accounts)[number]; score: number } | null = null;
     for (const a of accounts) {
-      const s = Math.max(similarity(l.accountCode, a.name), similarity(l.accountCode, a.code));
+      const s = similarity(l.accountCode, a.name);
       if (!best || s > best.score) best = { a, score: s };
     }
     if (best && best.score >= minScore) {
