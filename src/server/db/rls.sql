@@ -8,7 +8,8 @@ DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY['memberships','accounts','fiscal_periods',
                            'journal_entries','journal_lines','journal_seq_counters','audit_log',
-                           'documents','ai_drafts']
+                           'documents','ai_drafts',
+                           'tenant_chunks','chat_threads']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -32,6 +33,28 @@ BEGIN
       CREATE POLICY tenant_isolation_organizations ON organizations
       USING (id = current_setting('app.current_org', true)::uuid)
       WITH CHECK (true)
+    $p$;
+  END IF;
+END $$;
+
+-- chat_messages is isolated via its thread's org_id:
+ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages FORCE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'chat_messages' AND policyname = 'tenant_isolation_chat_messages') THEN
+    EXECUTE $p$
+      CREATE POLICY tenant_isolation_chat_messages ON chat_messages
+      USING (EXISTS (
+        SELECT 1 FROM chat_threads ct
+        WHERE ct.id = chat_messages.thread_id
+          AND ct.org_id = current_setting('app.current_org', true)::uuid
+      ))
+      WITH CHECK (EXISTS (
+        SELECT 1 FROM chat_threads ct
+        WHERE ct.id = chat_messages.thread_id
+          AND ct.org_id = current_setting('app.current_org', true)::uuid
+      ))
     $p$;
   END IF;
 END $$;
