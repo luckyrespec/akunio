@@ -11,6 +11,7 @@ import { incomeStatement } from "@/core/reports/statements";
 import { Money } from "@/core/money/money";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Reveal } from "@/components/motion";
 
 export default async function DasborPage() {
   const ctx = await requireContext();
@@ -39,38 +40,61 @@ export default async function DasborPage() {
 
   return (
     <section>
-      <h1 className="font-display text-2xl">Dasbor</h1>
+      <Reveal>
+        <div className="flex items-baseline justify-between">
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight">Dasbor</h1>
+          <p className="hidden text-xs uppercase tracking-widest text-ink-soft sm:block">Ringkasan keuangan</p>
+        </div>
+      </Reveal>
+
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-ink-soft">Periode Berjalan</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="font-display text-xl">{data.period?.name ?? "—"}</p>
-            <Badge variant="outline" className="mt-2">{data.period?.status ?? "-"}</Badge>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-ink-soft">Saldo Kas &amp; Bank</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="font-display text-xl tnum">{Money.fromMinor(cashMinor).formatIdr()}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-ink-soft">Laba Tahun Ini</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="font-display text-xl tnum">{Money.fromMinor(ytd.netIncomeMinor).formatIdr()}</p>
-          </CardContent>
-        </Card>
+        <Reveal delay={0.06}>
+          <div className="matte-card rounded-xl border border-rule bg-paper">
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-[11px] font-medium uppercase tracking-widest text-ink-soft">Periode Berjalan</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="font-display text-xl tracking-tight">{data.period?.name ?? "—"}</p>
+                <Badge variant="outline" className="mt-2 border-rule bg-canvas text-ink-soft">{data.period?.status ?? "-"}</Badge>
+              </CardContent>
+            </Card>
+          </div>
+        </Reveal>
+        <Reveal delay={0.1}>
+          <div className="matte-card rounded-xl border border-rule bg-paper">
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-[11px] font-medium uppercase tracking-widest text-ink-soft">Saldo Kas &amp; Bank</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="font-display text-xl tracking-tight tnum">{Money.fromMinor(cashMinor).formatIdr()}</p>
+                <p className="mt-1 text-xs text-ink-soft">Kumulatif sampai hari ini</p>
+              </CardContent>
+            </Card>
+          </div>
+        </Reveal>
+        <Reveal delay={0.14}>
+          <div className="matte-card rounded-xl border border-rule bg-paper">
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-[11px] font-medium uppercase tracking-widest text-ink-soft">Laba Tahun Ini</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="font-display text-xl tracking-tight tnum">{Money.fromMinor(ytd.netIncomeMinor).formatIdr()}</p>
+                <p className="mt-1 text-xs text-ink-soft">Januari sampai {year}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </Reveal>
       </div>
 
-      <div className="mt-8 rounded-lg border border-rule bg-paper p-6 text-sm text-ink-soft">
-        Asisten AI dan deteksi temuan hadir pada milestone berikutnya (M2–M4).
-      </div>
+      <Reveal delay={0.18}>
+        <div className="mt-6 flex items-center gap-3 rounded-xl border border-rule bg-canvas px-4 py-3.5 text-sm text-ink-soft">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-paper text-ink">✦</span>
+          <span>Asisten AI dan deteksi temuan hadir pada milestone berikutnya (M2–M4).</span>
+        </div>
+      </Reveal>
     </section>
   );
 }
