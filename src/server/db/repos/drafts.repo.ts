@@ -1,5 +1,6 @@
 import { and, desc, eq, gte } from "drizzle-orm";
 import { aiDrafts } from "../schema/ai";
+import { journalEntries } from "../schema/journal";
 import type { Queryable } from "./queryable";
 
 export type AiDraft = typeof aiDrafts.$inferSelect;
@@ -36,6 +37,19 @@ export async function listDrafts(q: Queryable, orgId: string): Promise<AiDraft[]
   return q.select().from(aiDrafts)
     .where(eq(aiDrafts.orgId, orgId))
     .orderBy(desc(aiDrafts.createdAt)).limit(100);
+}
+
+export async function getDraftsWithNumbers(q: Queryable, orgId: string) {
+  const rows = await q.select({
+    draft: aiDrafts,
+    entryNumber: journalEntries.number,
+  })
+    .from(aiDrafts)
+    .leftJoin(journalEntries, eq(journalEntries.id, aiDrafts.postedEntryId))
+    .where(eq(aiDrafts.orgId, orgId))
+    .orderBy(desc(aiDrafts.createdAt))
+    .limit(100);
+  return rows.map((r) => ({ ...r.draft, entryNumber: r.entryNumber }));
 }
 
 export async function setDraftStatus(

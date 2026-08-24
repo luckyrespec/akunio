@@ -46,10 +46,18 @@ export function SidebarNav() {
             </Link>
           ))}
 
-          {/* Milestone M3 */}
-          <span className="flex cursor-not-allowed items-center justify-between rounded-md px-3 py-2 text-sm text-ink-soft/50">
-            Asisten AI <Badge variant="outline">Segera</Badge>
-          </span>
+          {/* Milestone M2: Copilot */}
+          <Link
+            href="/jurnal/ai"
+            className={cn(
+              "rounded-md px-3 py-2 text-sm transition-colors",
+              pathname === "/jurnal/ai" || pathname.startsWith("/jurnal/ai/")
+                ? "bg-canvas font-medium text-terra"
+                : "text-ink hover:bg-canvas",
+            )}
+          >
+            Asisten AI
+          </Link>
           {/* Milestone M4 */}
           <span className="flex cursor-not-allowed items-center justify-between rounded-md px-3 py-2 text-sm text-ink-soft/50">
             Temuan <Badge variant="outline">Segera</Badge>
