@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { Topbar } from "@/components/topbar";
 import { PageTransition } from "@/components/motion";
+import { AssistantWidget } from "@/components/assistant-widget";
 
 const STORAGE_KEY = "neraca:sidebar-collapsed";
 
@@ -40,6 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Topbar onToggleSidebar={toggle} />
           <main className="flex-1 bg-paper px-6 py-6 lg:px-8">{children}</main>
         </div>
+        <AssistantWidget />
       </div>
     );
   }
@@ -53,6 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <PageTransition key={pathname}>{children}</PageTransition>
         </main>
       </div>
+      <AssistantWidget />
     </div>
   );
 }
