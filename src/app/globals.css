@@ -45,6 +45,9 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --shadow-xs: var(--elevation-xs);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
 }
 
 @theme {
@@ -66,6 +69,7 @@
   --duration-fast: 150ms;
   --duration-base: 240ms;
   --duration-slow: 400ms;
+  --duration-spring: 320ms;
 }
 
 :root {
@@ -92,7 +96,7 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  --radius: 1rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -104,6 +108,12 @@
 
   --border: var(--color-rule);
   --card: var(--color-paper);
+  --elevation-xs: 0 1px 2px rgb(35 42 51 / 0.04);
+  --elevation-sm: 0 1px 2px rgb(35 42 51 / 0.04), 0 6px 16px rgb(35 42 51 / 0.05);
+  --elevation-md: 0 1px 2px rgb(35 42 51 / 0.05), 0 12px 32px rgb(35 42 51 / 0.07), 0 24px 64px rgb(35 42 51 / 0.05);
+  --gutter: 1.5rem;
+  --gutter-lg: 2rem;
+  --color-glow: color-mix(in oklab, var(--color-terra) 14%, transparent);
 }
 
 .dark {
@@ -150,6 +160,9 @@
 
   --border: var(--color-rule);
   --card: var(--color-paper);
+  --elevation-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --elevation-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.35);
+  --elevation-md: 0 1px 2px rgb(0 0 0 / 0.45), 0 12px 32px rgb(0 0 0 / 0.4), 0 24px 64px rgb(0 0 0 / 0.3);
 }
 
 /* Laporan keuangan dicetak selalu gaya kertas terang, sekalipun mode gelap aktif. */
@@ -206,7 +219,8 @@ html { background-color: var(--color-canvas); }
 
 /* Matte card surface — soft, not glassy */
 .matte-card {
-  box-shadow: 0 1px 2px rgb(35 42 51 / 0.04), 0 8px 24px rgb(35 42 51 / 0.05);
+  box-shadow: var(--elevation-sm);
+  transition: box-shadow var(--duration-base, 240ms) var(--ease-out-soft, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 /* Tabular numerals everywhere money appears */
@@ -214,6 +228,22 @@ html { background-color: var(--color-canvas); }
 
 /* Classic accounting double rule under totals */
 .rule-double { border-bottom: 4px double var(--color-ink); }
+
+/* Swiss 2.0 soft — resep tabel data: header kecil uppercase, angka tabular */
+.data-table {
+  @apply w-full min-w-[640px];
+}
+.data-table th {
+  @apply text-[11px] font-medium uppercase tracking-widest text-ink-soft;
+}
+.data-table td {
+  @apply border-border/60 border-b;
+}
+.data-table .num {
+  font-feature-settings: "tnum" 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
 @layer base {
   * {
