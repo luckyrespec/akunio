@@ -6,6 +6,7 @@ import { accounts as accountsTable } from "@/server/db/schema/org";
 import { eq } from "drizzle-orm";
 import { getDraft, effectiveStatus } from "@/server/db/repos/drafts.repo";
 import { getDocumentRow } from "@/server/db/repos/documents.repo";
+import { PageHeader } from "@/components/page-header";
 import { ReviewClient } from "./review-client";
 
 export default async function ReviewPage({
@@ -26,7 +27,9 @@ export default async function ReviewPage({
     return (
       <section className="max-w-2xl">
         <Link href="/jurnal?tab=draft" className="text-xs text-ink-soft underline">← Draft AI</Link>
-        <h1 className="mt-2 font-display text-2xl">Draft sudah diproses</h1>
+        <div className="mt-2">
+          <PageHeader title="Draft sudah diproses" eyebrow="Jurnal AI" />
+        </div>
         <p className="mt-2 text-sm text-ink-soft">
           Status draft ini: {status === "ACCEPTED" ? "diterima & diposting" : "ditolak"}.
         </p>
@@ -70,7 +73,9 @@ export default async function ReviewPage({
   return (
     <section>
       <Link href="/jurnal?tab=draft" className="text-xs text-ink-soft underline">← Draft AI</Link>
-      <h1 className="mt-2 font-display text-2xl">Review Draft Asisten</h1>
+      <div className="mt-2">
+        <PageHeader title="Review Draft Asisten" eyebrow="Jurnal AI" />
+      </div>
       <ReviewClient
         draftId={data.draft.id}
         draft={reviewDraft}
