@@ -11,9 +11,9 @@
     "e2e": "playwright test",
     "db:up": "docker compose up -d db",
     "db:migrate": "drizzle-kit migrate",
-    "test:db:setup": "node scripts/test-db-setup.mjs",
+    "test:db:setup": "bun scripts/test-db-setup.mjs",
     "weed:dev": "cmd /c scripts\\weed-dev.cmd",
-    "db:sql": "node src/server/db/scripts/apply-sql.mjs"
+    "db:sql": "bun src/server/db/scripts/apply-sql.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

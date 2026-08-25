@@ -81,7 +81,7 @@ execSync("npx drizzle-kit migrate", {
 
 // 3. Apply RLS policies + triggers against the test DB.
 console.log("applying rls + triggers to test db ...");
-execSync("node src/server/db/scripts/apply-sql.mjs", {
+execSync("bun src/server/db/scripts/apply-sql.mjs", {
   stdio: "inherit",
   env: { ...process.env, DATABASE_URL: testUrl },
 });
