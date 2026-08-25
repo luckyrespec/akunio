@@ -11,7 +11,10 @@ import { incomeStatement } from "@/core/reports/statements";
 import { Money } from "@/core/money/money";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Reveal } from "@/components/motion";
+import { AnimatedNumber, Reveal, Stagger, staggerItem } from "@/components/motion";
+import { motion } from "motion/react";
+import { GlowCard } from "@/components/aceternity/glow-card";
+import { PageHeader } from "@/components/page-header";
 import Link from "next/link";
 
 export default async function DasborPage() {
@@ -46,16 +49,11 @@ export default async function DasborPage() {
 
   return (
     <section>
-      <Reveal>
-        <div className="flex items-baseline justify-between">
-          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight">Dasbor</h1>
-          <p className="hidden text-xs uppercase tracking-widest text-ink-soft sm:block">Ringkasan keuangan</p>
-        </div>
-      </Reveal>
+      <PageHeader title="Dasbor" eyebrow="Ringkasan keuangan" />
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Reveal delay={0.06}>
-          <div className="matte-card rounded-xl border border-rule bg-paper">
+      <Stagger className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-6">
+        <motion.div variants={staggerItem} className="md:col-span-2">
+          <GlowCard>
             <Card className="border-0 bg-transparent shadow-none">
               <CardHeader className="pb-2">
                 <CardTitle className="text-[11px] font-medium uppercase tracking-widest text-ink-soft">Periode Berjalan</CardTitle>
@@ -65,35 +63,45 @@ export default async function DasborPage() {
                 <Badge variant="outline" className="mt-2 border-rule bg-canvas text-ink-soft">{data.period?.status ?? "-"}</Badge>
               </CardContent>
             </Card>
-          </div>
-        </Reveal>
-        <Reveal delay={0.1}>
-          <div className="matte-card rounded-xl border border-rule bg-paper">
+          </GlowCard>
+        </motion.div>
+        <motion.div variants={staggerItem} className="md:col-span-2">
+          <GlowCard>
             <Card className="border-0 bg-transparent shadow-none">
               <CardHeader className="pb-2">
                 <CardTitle className="text-[11px] font-medium uppercase tracking-widest text-ink-soft">Saldo Kas &amp; Bank</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="font-display text-xl tracking-tight tnum">{Money.fromMinor(cashMinor).formatIdr()}</p>
+                <p className="font-display text-xl tracking-tight tnum">
+                  <AnimatedNumber
+                    value={Number(cashMinor)}
+                    format={(v) => Money.fromMinor(BigInt(Math.round(v))).formatIdr()}
+                  />
+                </p>
                 <p className="mt-1 text-xs text-ink-soft">Kumulatif sampai hari ini</p>
               </CardContent>
             </Card>
-          </div>
-        </Reveal>
-        <Reveal delay={0.14}>
-          <div className="matte-card rounded-xl border border-rule bg-paper">
+          </GlowCard>
+        </motion.div>
+        <motion.div variants={staggerItem} className="md:col-span-2">
+          <GlowCard>
             <Card className="border-0 bg-transparent shadow-none">
               <CardHeader className="pb-2">
                 <CardTitle className="text-[11px] font-medium uppercase tracking-widest text-ink-soft">Laba Tahun Ini</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="font-display text-xl tracking-tight tnum">{Money.fromMinor(ytd.netIncomeMinor).formatIdr()}</p>
+                <p className="font-display text-xl tracking-tight tnum">
+                  <AnimatedNumber
+                    value={Number(ytd.netIncomeMinor)}
+                    format={(v) => Money.fromMinor(BigInt(Math.round(v))).formatIdr()}
+                  />
+                </p>
                 <p className="mt-1 text-xs text-ink-soft">Januari sampai {year}</p>
               </CardContent>
             </Card>
-          </div>
-        </Reveal>
-      </div>
+          </GlowCard>
+        </motion.div>
+      </Stagger>
 
       <Reveal delay={0.18}>
         {data.findings.length > 0 ? (
