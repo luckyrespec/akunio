@@ -4,7 +4,7 @@ import "dotenv/config";
 function guardTestDb(url: string): string {
   if (!/ledger_test/.test(url)) {
     throw new Error(
-      `SAFETY: refusing to touch non-test database (${url}). Run "npm run test:db:setup" first.`,
+      `SAFETY: refusing to touch non-test database (${url}). Run "bun run test:db:setup" first.`,
     );
   }
   return url;
