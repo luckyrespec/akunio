@@ -2,6 +2,7 @@
 
 import { animate, motion, useInView, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type PropsWithChildren } from "react";
+import { Money } from "@/core/money/money";
 
 const EASE_OUT_SOFT: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -53,6 +54,20 @@ export const staggerItem = {
   show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE_OUT_SOFT } },
 };
 
+// StaggerItem — RSC-safe child for <Stagger> grids (use instead of raw motion.div)
+export function StaggerItem({
+  children,
+  className,
+}: PropsWithChildren<{ className?: string }>) {
+  const reduce = useReducedMotion();
+  if (reduce) return <div className={className}>{children}</div>;
+  return (
+    <motion.div variants={staggerItem} className={className}>
+      {children}
+    </motion.div>
+  );
+}
+
 // PageTransition — route content fade + lift
 export function PageTransition({ children }: PropsWithChildren) {
   const reduce = useReducedMotion();
@@ -84,38 +99,36 @@ export function Pressable({ children, className }: { children: React.ReactNode; 
   );
 }
 
-// AnimatedNumber — KPI counting up on first view
+// AnimatedNumber — KPI counting up on first view (RSC-safe: pass serializable minor units)
 export function AnimatedNumber({
-  value,
-  format,
+  minor,
   className,
 }: {
-  value: number;
-  format: (v: number) => string;
+  minor: bigint | number;
   className?: string;
 }) {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, margin: "-40px" });
-  const [display, setDisplay] = useState(reduce ? value : 0);
+  const [display, setDisplay] = useState(() => (reduce ? Number(minor) : 0));
 
   useEffect(() => {
     if (!inView) return;
     if (reduce) {
-      setDisplay(value);
+      setDisplay(Number(minor));
       return;
     }
-    const controls = animate(0, value, {
+    const controls = animate(0, Number(minor), {
       duration: 0.8,
       ease: EASE_OUT_SOFT,
       onUpdate: setDisplay,
     });
     return () => controls.stop();
-  }, [inView, value, reduce]);
+  }, [inView, minor, reduce]);
 
   return (
     <span ref={ref} className={className}>
-      {format(display)}
+      {Money.fromMinor(BigInt(Math.round(display))).formatIdr()}
     </span>
   );
 }

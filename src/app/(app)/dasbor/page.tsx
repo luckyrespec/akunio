@@ -11,8 +11,7 @@ import { incomeStatement } from "@/core/reports/statements";
 import { Money } from "@/core/money/money";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AnimatedNumber, Reveal, Stagger, staggerItem } from "@/components/motion";
-import { motion } from "motion/react";
+import { AnimatedNumber, Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { GlowCard } from "@/components/aceternity/glow-card";
 import { PageHeader } from "@/components/page-header";
 import Link from "next/link";
@@ -52,7 +51,7 @@ export default async function DasborPage() {
       <PageHeader title="Dasbor" eyebrow="Ringkasan keuangan" />
 
       <Stagger className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-6">
-        <motion.div variants={staggerItem} className="md:col-span-2">
+        <StaggerItem className="md:col-span-2">
           <GlowCard>
             <Card className="border-0 bg-transparent shadow-none">
               <CardHeader className="pb-2">
@@ -64,8 +63,8 @@ export default async function DasborPage() {
               </CardContent>
             </Card>
           </GlowCard>
-        </motion.div>
-        <motion.div variants={staggerItem} className="md:col-span-2">
+        </StaggerItem>
+        <StaggerItem className="md:col-span-2">
           <GlowCard>
             <Card className="border-0 bg-transparent shadow-none">
               <CardHeader className="pb-2">
@@ -73,17 +72,14 @@ export default async function DasborPage() {
               </CardHeader>
               <CardContent>
                 <p className="font-display text-xl tracking-tight tnum">
-                  <AnimatedNumber
-                    value={Number(cashMinor)}
-                    format={(v) => Money.fromMinor(BigInt(Math.round(v))).formatIdr()}
-                  />
+                  <AnimatedNumber minor={cashMinor} />
                 </p>
                 <p className="mt-1 text-xs text-ink-soft">Kumulatif sampai hari ini</p>
               </CardContent>
             </Card>
           </GlowCard>
-        </motion.div>
-        <motion.div variants={staggerItem} className="md:col-span-2">
+        </StaggerItem>
+        <StaggerItem className="md:col-span-2">
           <GlowCard>
             <Card className="border-0 bg-transparent shadow-none">
               <CardHeader className="pb-2">
@@ -91,16 +87,13 @@ export default async function DasborPage() {
               </CardHeader>
               <CardContent>
                 <p className="font-display text-xl tracking-tight tnum">
-                  <AnimatedNumber
-                    value={Number(ytd.netIncomeMinor)}
-                    format={(v) => Money.fromMinor(BigInt(Math.round(v))).formatIdr()}
-                  />
+                  <AnimatedNumber minor={ytd.netIncomeMinor} />
                 </p>
                 <p className="mt-1 text-xs text-ink-soft">Januari sampai {year}</p>
               </CardContent>
             </Card>
           </GlowCard>
-        </motion.div>
+        </StaggerItem>
       </Stagger>
 
       <Reveal delay={0.18}>
