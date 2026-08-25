@@ -72,14 +72,14 @@ export function AssistantWidget() {
     <>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-6 right-6 z-40 flex size-12 items-center justify-center rounded-full bg-terra text-white shadow-lg transition-transform hover:scale-105"
+        className="fixed bottom-6 right-6 z-40 flex size-12 items-center justify-center rounded-full bg-terra text-white shadow-md ring-terra/30 ring-4 transition-transform hover:scale-105"
         aria-label="Buka asisten"
       >
         {open ? <X className="size-5" /> : <MessageCircle className="size-5" />}
       </button>
 
       {open && (
-        <div className="fixed bottom-20 right-6 z-40 flex h-[520px] w-[380px] flex-col rounded-xl border border-rule bg-paper shadow-xl">
+        <div className="fixed bottom-20 right-6 z-40 flex h-[520px] w-[380px] flex-col overflow-hidden rounded-2xl border border-rule bg-paper shadow-md">
           <div className="border-b border-rule px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="flex size-6 items-center justify-center rounded-full bg-terra text-white"><Sparkles className="size-3" /></span>

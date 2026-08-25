@@ -7,6 +7,7 @@ import { listAccounts } from "@/server/db/repos/accounts.repo";
 import { listPeriods } from "@/server/db/repos/periods.repo";
 import { ArchiveToggle } from "@/components/settings/archive-toggle";
 import { PeriodActions } from "@/components/settings/period-actions";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 
 const TYPE_LABEL = {
@@ -44,22 +45,22 @@ export default async function PengaturanPage() {
 
   return (
     <section>
-      <h1 className="font-display text-2xl">Pengaturan</h1>
+      <PageHeader title="Pengaturan" eyebrow="Organisasi & periode" />
 
       <h2 className="mt-8 font-display text-lg">Bagan Akun</h2>
       <p className="mt-1 text-sm text-ink-soft">
         Akun yang diarsipkan tidak dapat dipakai untuk transaksi baru.
       </p>
-      <div className="mt-4 overflow-x-auto rounded-lg border border-rule bg-paper">
-        <table className="w-full text-sm">
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-rule bg-paper">
+        <table className="data-table text-sm">
           <thead>
-            <tr className="border-b border-rule text-left text-xs uppercase tracking-wide text-ink-soft">
-              <th className="px-4 py-3 font-medium">Kode</th>
-              <th className="px-4 py-3 font-medium">Nama</th>
-              <th className="px-4 py-3 font-medium">Tipe</th>
-              <th className="px-4 py-3 font-medium">Normal</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Aksi</th>
+            <tr className="border-b border-rule text-left">
+              <th className="px-4 py-3">Kode</th>
+              <th className="px-4 py-3">Nama</th>
+              <th className="px-4 py-3">Tipe</th>
+              <th className="px-4 py-3">Normal</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Aksi</th>
             </tr>
           </thead>
           <tbody>
@@ -85,14 +86,14 @@ export default async function PengaturanPage() {
       <p className="mt-1 text-sm text-ink-soft">
         Periode tutup buku menolak pencatatan transaksi baru.
       </p>
-      <div className="mt-4 overflow-x-auto rounded-lg border border-rule bg-paper">
-        <table className="w-full text-sm">
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-rule bg-paper">
+        <table className="data-table text-sm">
           <thead>
-            <tr className="border-b border-rule text-left text-xs uppercase tracking-wide text-ink-soft">
-              <th className="px-4 py-3 font-medium">Periode</th>
-              <th className="px-4 py-3 font-medium">Tanggal</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Aksi</th>
+            <tr className="border-b border-rule text-left">
+              <th className="px-4 py-3">Periode</th>
+              <th className="px-4 py-3">Tanggal</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Aksi</th>
             </tr>
           </thead>
           <tbody>
@@ -113,7 +114,7 @@ export default async function PengaturanPage() {
       </div>
 
       <h2 className="mt-10 font-display text-lg">Anggota</h2>
-      <div className="mt-4 max-w-xl divide-y divide-rule rounded-lg border border-rule bg-paper">
+      <div className="mt-4 max-w-xl divide-y divide-rule rounded-2xl border border-rule bg-paper">
         {data.members.map((m) => (
           <div key={m.email} className="flex items-center justify-between px-5 py-3 text-sm">
             <span>{m.email}</span>
