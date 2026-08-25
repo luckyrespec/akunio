@@ -5,6 +5,8 @@ import { getLedger } from "@/server/db/repos/ledger.repo";
 import { Money } from "@/core/money/money";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/motion";
+import { PageHeader } from "@/components/page-header";
+import { GlowCard } from "@/components/aceternity/glow-card";
 
 export default async function BukuBesarPage({
   searchParams,
@@ -25,14 +27,7 @@ export default async function BukuBesarPage({
 
   return (
     <section>
-      <Reveal>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="font-display text-[1.75rem] font-semibold tracking-tight">Buku Besar</h1>
-            <p className="mt-1 text-xs uppercase tracking-widest text-ink-soft">Detail mutasi per akun</p>
-          </div>
-        </div>
-      </Reveal>
+      <PageHeader title="Buku Besar" eyebrow="Detail mutasi per akun" />
 
       <Reveal delay={0.06}>
         <form method="get" className="mt-6 flex flex-wrap items-end gap-3">
@@ -51,18 +46,19 @@ export default async function BukuBesarPage({
 
       {ledger && (
         <Reveal delay={0.1}>
-          <div className="matte-card mt-6 overflow-x-auto rounded-xl border border-rule bg-paper">
-            <table className="w-full tnum text-sm">
-              <thead>
-                <tr className="border-b border-rule bg-canvas/60 text-left text-[11px] uppercase tracking-widest text-ink-soft">
-                  <th className="px-4 py-3 font-medium">Nomor</th>
-                  <th className="px-4 py-3 font-medium">Tanggal</th>
-                  <th className="px-4 py-3 font-medium">Keterangan</th>
-                  <th className="px-4 py-3 font-medium text-right">Debit</th>
-                  <th className="px-4 py-3 font-medium text-right">Kredit</th>
-                  <th className="px-4 py-3 font-medium text-right">Saldo</th>
-                </tr>
-              </thead>
+          <GlowCard className="mt-6">
+            <div className="overflow-x-auto p-1">
+              <table className="data-table tnum text-sm">
+                <thead>
+                  <tr className="border-b border-rule bg-canvas/60 text-left">
+                    <th className="px-4 py-3">Nomor</th>
+                    <th className="px-4 py-3">Tanggal</th>
+                    <th className="px-4 py-3">Keterangan</th>
+                    <th className="px-4 py-3 text-right">Debit</th>
+                    <th className="px-4 py-3 text-right">Kredit</th>
+                    <th className="px-4 py-3 text-right">Saldo</th>
+                  </tr>
+                </thead>
               <tbody>
                 {ledger.rows.map((r, i) => (
                   <tr key={`${r.number}-${i}`} className="border-b border-rule/60 last:border-0 transition-colors hover:bg-canvas">
@@ -96,7 +92,8 @@ export default async function BukuBesarPage({
                 </tr>
               </tfoot>
             </table>
-          </div>
+            </div>
+          </GlowCard>
         </Reveal>
       )}
     </section>
