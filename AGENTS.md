@@ -39,7 +39,7 @@ Copy `.env.example` → `.env`. Key vars: `DATABASE_URL` (postgres:root@127.0.0.
 - **Money:** `numeric(18,2)` in DB, `Money` class BigInt minor via `Money.parseIdr`/`formatIdr` — never JS `number` for amounts.
 - **Posting:** `validate → post → immutable` — `journal_entries.status` DRAFT→POSTED only, trigger `forbid_posted_mutation`, corrections via `reversal_of_id`, numbers `JE-YYYY-NNNN` per-year, `journal_seq_counters` per period + advisory lock.
 - **AI:** `@google/genai` Interactions API, `response_format` JSON Schema + zod `DraftEntrySchema`, `store:false`, retry 2, file whitelists `image/*`+`application/pdf` ≤5MB.
-- **UI:** Bahasa Indonesia copy, Paper & Ink tokens `src/app/globals.css` (`--color-canvas` etc.), `motion` primitives `src/components/motion`, `prefers-reduced-motion` respected. Sidebar `w-64 ↔ w-[4.25rem]` persisted `neraca:sidebar-collapsed`, topbar Cmd+K palette (`searchGlobalAction`).
+- **UI:** Bahasa Indonesia copy, Paper & Ink × Swiss 2.0 soft tokens `src/app/globals.css` (canvas/paper/ink/terra + elevation + gutter), Aceternity set `src/components/aceternity/*` (token-skinned), motion primitives `src/components/motion`, `prefers-reduced-motion` respected. Sidebar `w-64 ↔ w-[4.25rem]` persisted `neraca:sidebar-collapsed`, topbar Cmd+K palette (`searchGlobalAction`). Layout full-bleed fluid — no boxed max-width.
 
 ## Testing Quirks
 - `vitest.config.mts` sets `fileParallelism: false` (integration files share one Postgres and TRUNCATE). `setupFiles: ["tests/setup.ts"]` rewrites DB URL before any import.
