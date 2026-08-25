@@ -35,11 +35,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Avoid flash of wrong width before localStorage read
   if (!ready) {
     return (
-      <div className="mx-auto flex min-h-screen w-full max-w-[1600px]">
+      <div className="flex min-h-screen w-full">
         <SidebarNav collapsed={false} />
         <div className="flex min-h-0 flex-1 flex-col">
           <Topbar onToggleSidebar={toggle} />
-          <main className="flex-1 bg-paper px-6 py-6 lg:px-8">{children}</main>
+          <main className="flex-1 px-(--gutter) py-(--gutter) lg:px-(--gutter-lg)">{children}</main>
         </div>
         <AssistantWidget />
       </div>
@@ -51,7 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <SidebarNav collapsed={collapsed} onToggle={toggle} />
       <div className="flex min-h-0 flex-1 flex-col">
         <Topbar onToggleSidebar={toggle} />
-        <main className="flex-1 bg-paper px-6 py-6 lg:px-8">
+        <main className="flex-1 px-(--gutter) py-(--gutter) lg:px-(--gutter-lg)">
           <PageTransition key={pathname}>{children}</PageTransition>
         </main>
       </div>
