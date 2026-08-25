@@ -1,8 +1,25 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Pool } from "pg";
 import { makeOrg, truncateAll } from "./helpers";
+import { MOCK_TEXT_DRAFT, MOCK_DOCUMENT_DRAFT } from "@/server/ai/fixtures";
 
-process.env.AI_MOCK = "1";
+vi.mock("@google/genai", () => ({
+  GoogleGenAI: class {
+    interactions = {
+      create: vi.fn(async ({ input }: { input: unknown }) => {
+        const text = JSON.stringify(input);
+        const isDoc = text.includes("aGk=") || text.includes("document");
+        const draft = isDoc ? MOCK_DOCUMENT_DRAFT : MOCK_TEXT_DRAFT;
+        return { output_text: JSON.stringify(draft) };
+      }),
+    };
+    models = {
+      embedContent: vi.fn(async () => ({ embeddings: [{ values: new Array(768).fill(0.1) }] })),
+    };
+  },
+}));
+
+process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "test-key";
 
 describe.skipIf(process.env.SKIP_DB_TESTS === "1")("ai actions", () => {
   const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
@@ -40,12 +57,12 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("ai actions", () => {
     const empty = await mod.createDraftAction({ text: "   " });
     expect(empty.ok).toBe(false);
 
-    const prev = process.env.AI_MONTHLY_DRAFT_LIMIT;
-    process.env.AI_MONTHLY_DRAFT_LIMIT = "1";
+    const prev = process.env.ASSISTANT_MONTHLY_LIMIT;
+    process.env.ASSISTANT_MONTHLY_LIMIT = "1";
     const over = await mod.createDraftAction({ text: "beli lagi sesuatu" });
-    process.env.AI_MONTHLY_DRAFT_LIMIT = prev;
+    process.env.ASSISTANT_MONTHLY_LIMIT = prev;
     expect(over.ok).toBe(false);
-    if (!over.ok) expect(over.error).toContain("Kuota draft AI bulan ini habis");
+    if (!over.ok) expect(over.error).toContain("Kuota");
   });
 
   it("reject action flips status", async () => {

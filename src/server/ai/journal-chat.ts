@@ -1,7 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
-import { DraftEntrySchema, draftJsonSchema, type DraftEntry } from "./schema";
+import { DraftEntrySchema, type DraftEntry } from "./schema";
 import { buildDraftPrompt, type PromptAccount } from "./prompt";
-import { MOCK_TEXT_DRAFT, MOCK_DOCUMENT_DRAFT } from "./fixtures";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
@@ -56,32 +55,23 @@ export interface JournalChatResult {
 }
 
 function parseDraftFromToolArgs(args: unknown): DraftEntry {
+  const raw = args as Record<string, unknown>;
+  if (Array.isArray(raw.lines)) {
+    raw.lines = (raw.lines as Array<Record<string, unknown>>).map((l) => ({
+      ...l,
+      debitText: l.debitText === "0" || l.debitText === 0 ? "" : String(l.debitText ?? ""),
+      creditText: l.creditText === "0" || l.creditText === 0 ? "" : String(l.creditText ?? ""),
+    }));
+  }
   const withDefaults = {
     dateISO: new Date().toISOString().slice(0, 10),
     overallConfidence: 0.85,
-    ...(args as Record<string, unknown>),
+    ...raw,
   };
   return DraftEntrySchema.parse(withDefaults);
 }
 
 export async function journalChat(input: JournalChatInput): Promise<JournalChatResult> {
-  if (process.env.AI_MOCK === "1") {
-    const draft = input.document ? MOCK_DOCUMENT_DRAFT : MOCK_TEXT_DRAFT;
-    // Simple mock: if message contains "jurnal" or attachment, pretend function was called
-    const shouldCall = /jurnal|buat|catat|faktur|kwitansi/i.test(input.message) || !!input.document;
-    if (shouldCall) {
-      return {
-        answer: `Draft jurnal berhasil dibuat dari: "${input.message}". Silakan review di bawah dan posting jika sudah sesuai.`,
-        draft,
-        functionCalled: true,
-      };
-    }
-    return {
-      answer: `Halo! Saya asisten jurnal. Kirim deskripsi transaksi atau foto faktur, saya akan buatkan draft untuk Anda.`,
-      functionCalled: false,
-    };
-  }
-
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("AI_TIDAK_TERSEDIA");
   const ai = new GoogleGenAI({ apiKey });

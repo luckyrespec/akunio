@@ -1,8 +1,29 @@
 import { describe, it, expect } from "vitest";
 
+import { vi } from "vitest";
+function hashToVector(text: string, dim = 768): number[] {
+  const vec: number[] = new Array(dim);
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+  let seed = h >>> 0;
+  for (let i = 0; i < dim; i++) { seed = (seed * 1664525 + 1013904223) >>> 0; vec[i] = (seed / 0xffffffff) * 2 - 1; }
+  const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0));
+  return vec.map((v) => v / (norm || 1));
+}
+vi.mock("@google/genai", () => ({
+  GoogleGenAI: class {
+    models = {
+      embedContent: vi.fn(async ({ contents }: { contents: Array<{ parts: Array<{ text: string }> }> }) => {
+        const text = contents[0]?.parts[0]?.text ?? "default";
+        return { embeddings: [{ values: hashToVector(text) }] };
+      }),
+    };
+  },
+}));
+process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "test-key";
+
 describe("ifrs seed", () => {
   it("populates ifrs_chunks", async () => {
-    process.env.AI_MOCK = "1";
     const { seedIfsChunks } = await import("@/server/ai/seed-ifrs");
     const n = await seedIfsChunks();
     expect(n).toBeGreaterThan(0);

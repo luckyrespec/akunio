@@ -184,5 +184,11 @@ export async function postJournalEntry(
     await q.execute(sql`INSERT INTO rag_queue (org_id, kind, ref_id) VALUES (${orgId}, 'JOURNAL', ${entry.id})`);
   } catch {}
 
+  // Enqueue for Doctor scan (best-effort, never blocks posting)
+  try {
+    const { enqueueDoctorScan } = await import("@/server/ai/doctor-queue");
+    await enqueueDoctorScan(orgId, entry.id);
+  } catch {}
+
   return { id: entry.id, number };
 }

@@ -3,6 +3,7 @@ import { db } from "@/server/db";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
 import { countDraftsThisMonth, checkQuota, createDraft } from "@/server/db/repos/drafts.repo";
+import { checkAssistantQuota } from "@/server/db/repos/chat.repo";
 import { createDocumentRow } from "@/server/db/repos/documents.repo";
 import { putDocument, MAX_DOCUMENT_BYTES, ALLOWED_MIMES } from "@/server/storage/storage";
 import { resolveDraftAccounts } from "@/core/ai/map-accounts";
@@ -23,10 +24,8 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
 
-    // Quota check
-    const limit = Number(process.env.AI_MONTHLY_DRAFT_LIMIT ?? "100");
-    const used = await countDraftsThisMonth(db, ctx.orgId, new Date());
-    const quota = checkQuota(used, limit);
+    // Unified quota check
+    const quota = await checkAssistantQuota(db, ctx.orgId);
     // Allow chat even when quota exceeded if it's just a question (no draft), but block if draft would be created
     // For simplicity, block all chat when quota exceeded and message looks like draft request
     // We check after we know if draft was requested via function call, but for now check upfront for any chat that might create draft
@@ -59,10 +58,8 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
 
     const leaves = await db.select().from(accountsTable).where(eq(accountsTable.orgId, ctx.orgId)).then((rows) => rows.filter((a) => !rows.some((c) => c.parentCode === a.code)));
 
-    // If quota exceeded and this is a draft-creating message, block
-    // Heuristic: if message contains draft keywords, treat as draft request
-    const isDraftRequest = /jurnal|buat|catat|faktur|kwitansi|nota/i.test(message) || !!document;
-    if (isDraftRequest && !quota.allowed) {
+    // Unified quota blocks all if exceeded
+    if (!quota.allowed) {
       return { ok: false, error: quota.message };
     }
 
@@ -82,9 +79,8 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
 
     // If function was called and draft exists, persist it
     if (result.draft && result.functionCalled) {
-      // Re-check quota at persist time (race)
-      const used2 = await countDraftsThisMonth(db, ctx.orgId, new Date());
-      const q2 = checkQuota(used2, limit);
+      // Re-check unified quota at persist time (race)
+      const q2 = await checkAssistantQuota(db, ctx.orgId);
       if (!q2.allowed) return { ok: false, error: q2.message };
 
       const mapping = resolveDraftAccounts(
@@ -92,7 +88,7 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
         leaves.map((a) => ({ id: a.id, code: a.code, name: a.name })),
       );
       const draftWithMapping = { ...(result.draft as object), mapping };
-      const model = process.env.AI_MOCK === "1" ? "mock" : (process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite");
+      const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
       const row = await db.transaction(async (tx) => {
         const d = await createDraft(tx, {

@@ -43,12 +43,12 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("chat repo", () => {
     const quota = await checkAdvisorQuota(db, orgId);
     expect(quota.allowed).toBe(true);
 
-    // force limit 1 by env
-    const prev = process.env.ADVISOR_MONTHLY_MESSAGES_LIMIT;
-    process.env.ADVISOR_MONTHLY_MESSAGES_LIMIT = "1";
+    // force limit 1 by env (unified limiter)
+    const prev = process.env.ASSISTANT_MONTHLY_LIMIT;
+    process.env.ASSISTANT_MONTHLY_LIMIT = "1";
     const blocked = await checkAdvisorQuota(db, orgId);
     expect(blocked.allowed).toBe(false);
-    expect(blocked.message).toContain("Kuota tanya advisor");
-    process.env.ADVISOR_MONTHLY_MESSAGES_LIMIT = prev;
+    expect(blocked.message).toContain("Kuota");
+    process.env.ASSISTANT_MONTHLY_LIMIT = prev;
   });
 });

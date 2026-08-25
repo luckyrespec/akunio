@@ -8,7 +8,6 @@ import { accounts as accountsTable } from "@/server/db/schema/org";
 import { getDocumentRow, setDocumentStatus } from "@/server/db/repos/documents.repo";
 import {
   createDraft, getDraft, setDraftStatus, linkPostedEntry,
-  countDraftsThisMonth, checkQuota,
 } from "@/server/db/repos/drafts.repo";
 import { getDocument } from "@/server/storage/storage";
 import { generateJournalDraft } from "@/server/ai/adapter";
@@ -57,9 +56,8 @@ export async function createDraftAction(
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
 
-    const limit = Number(process.env.AI_MONTHLY_DRAFT_LIMIT ?? "100");
-    const used = await countDraftsThisMonth(db, ctx.orgId, new Date());
-    const quota = checkQuota(used, limit);
+    const { checkAssistantQuota } = await import("@/server/db/repos/chat.repo");
+    const quota = await checkAssistantQuota(db, ctx.orgId);
     if (!quota.allowed) return { ok: false, error: quota.message };
 
     let kind: "TEXT" | "DOCUMENT" = "TEXT";
@@ -96,9 +94,7 @@ export async function createDraftAction(
       leaves.map((a) => ({ id: a.id, code: a.code, name: a.name })),
     );
     const draftWithMapping = { ...draft, mapping };
-    const model = process.env.AI_MOCK === "1"
-      ? "mock"
-      : (process.env.GEMINI_MODEL ?? "gemini-3.5-flash");
+    const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
     const row = await db.transaction(async (tx) => {
       const d = await createDraft(tx, {

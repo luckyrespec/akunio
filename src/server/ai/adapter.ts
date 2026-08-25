@@ -1,7 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { DraftEntrySchema, draftJsonSchema, type DraftEntry } from "./schema";
 import { buildDraftPrompt, type PromptAccount } from "./prompt";
-import { MOCK_TEXT_DRAFT, MOCK_DOCUMENT_DRAFT } from "./fixtures";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"; // never legacy 2.5/2.0/1.5
 const MAX_RETRIES = 2;
@@ -15,7 +14,15 @@ export interface GenerateDraftInput {
 }
 
 function parseDraft(raw: string): DraftEntry {
-  return DraftEntrySchema.parse(JSON.parse(raw));
+  const obj = JSON.parse(raw) as Record<string, unknown>;
+  if (Array.isArray(obj.lines)) {
+    obj.lines = (obj.lines as Array<Record<string, unknown>>).map((l) => ({
+      ...l,
+      debitText: l.debitText === "0" || l.debitText === 0 ? "" : String(l.debitText ?? ""),
+      creditText: l.creditText === "0" || l.creditText === 0 ? "" : String(l.creditText ?? ""),
+    }));
+  }
+  return DraftEntrySchema.parse(obj);
 }
 
 // Interactions content blocks (public Content type is the legacy one).
@@ -71,8 +78,5 @@ async function callGemini(input: GenerateDraftInput): Promise<DraftEntry> {
 }
 
 export async function generateJournalDraft(input: GenerateDraftInput): Promise<DraftEntry> {
-  if (process.env.AI_MOCK === "1") {
-    return input.kind === "DOCUMENT" ? MOCK_DOCUMENT_DRAFT : MOCK_TEXT_DRAFT;
-  }
   return callGemini(input);
 }

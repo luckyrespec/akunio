@@ -22,8 +22,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const ITEMS = [
   { href: "/dasbor", label: "Dasbor", icon: LayoutDashboard },
   { href: "/jurnal", label: "Jurnal Umum", icon: BookOpen, match: (p: string) => p === "/jurnal" || p === "/jurnal/baru" },
-  { href: "/jurnal/ai", label: "Copilot Jurnal", icon: Sparkles },
-  { href: "/asisten", label: "Advisor", icon: MessageCircle },
+  { href: "/asisten", label: "Nara", icon: Sparkles },
   { href: "/buku-besar", label: "Buku Besar", icon: Library },
   { href: "/laporan", label: "Laporan", icon: FileBarChart },
   { href: "/pengaturan", label: "Pengaturan", icon: Settings2 },
@@ -92,23 +91,19 @@ export function SidebarNav({
           })}
 
           {/* Draft AI quick link when on Jurnal AI drafts? keep as item above handles it — this is for Temuan */}
-          <span
-            title={collapsed ? "Temuan — Segera" : undefined}
+          <Link
+            href="/temuan"
+            title={collapsed ? "Temuan" : undefined}
             className={cn(
-              "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-soft/50",
+              "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
               collapsed && "justify-center px-2",
+              isActive("/temuan") ? "bg-canvas font-medium text-terra" : "text-ink hover:bg-canvas",
             )}
           >
-            <Search className="size-4 shrink-0" />
-            {!collapsed && (
-              <>
-                <span className="flex-1">Temuan</span>
-                <Badge variant="outline" className="text-[10px]">
-                  Segera
-                </Badge>
-              </>
-            )}
-          </span>
+            <Search className={cn("size-4 shrink-0", isActive("/temuan") ? "text-terra" : "text-ink-soft group-hover:text-ink")} />
+            {!collapsed && <span className="truncate">Temuan</span>}
+            {isActive("/temuan") && !collapsed && <span className="ml-auto h-5 w-0.5 rounded-full bg-terra" aria-hidden />}
+          </Link>
         </nav>
       </div>
 

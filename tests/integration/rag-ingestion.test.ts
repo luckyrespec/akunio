@@ -1,8 +1,27 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Pool } from "pg";
 import { makeOrg, truncateAll } from "./helpers";
 
-process.env.AI_MOCK = "1";
+function hashToVector(text: string, dim = 768): number[] {
+  const vec: number[] = new Array(dim);
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+  let seed = h >>> 0;
+  for (let i = 0; i < dim; i++) { seed = (seed * 1664525 + 1013904223) >>> 0; vec[i] = (seed / 0xffffffff) * 2 - 1; }
+  const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0));
+  return vec.map((v) => v / (norm || 1));
+}
+vi.mock("@google/genai", () => ({
+  GoogleGenAI: class {
+    models = {
+      embedContent: vi.fn(async ({ contents }: { contents: Array<{ parts: Array<{ text: string }> }> }) => {
+        const text = contents[0]?.parts[0]?.text ?? "default";
+        return { embeddings: [{ values: hashToVector(text) }] };
+      }),
+    };
+  },
+}));
+process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "test-key";
 
 describe.skipIf(process.env.SKIP_DB_TESTS === "1")("rag ingestion", () => {
   const admin = new Pool({ connectionString: process.env.DATABASE_URL! });

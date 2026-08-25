@@ -66,8 +66,7 @@ export async function askAdvisor(
   const history = await listMessages(db, threadId);
   const lastMessages = history.slice(-6).map((m) => `${m.role}: ${m.content}`).join("\n");
 
-  let answer: string;
-  let citations: Citation[] = hits.map((h) => ({
+  const citations: Citation[] = hits.map((h) => ({
     kind: h.kind,
     ref: h.id,
     excerpt: h.excerpt,
@@ -76,28 +75,10 @@ export async function askAdvisor(
   }));
   let suggestedDraft: unknown | undefined;
 
-  if (process.env.AI_MOCK === "1") {
-    answer = `Jawaban mock untuk: ${question}. ${liveNumbers}`;
-    // Mock provides 2 citations deterministically
-    citations = citations.slice(0, 2);
-    // If question asks for correction, provide a mock suggested draft
-    if (question.toLowerCase().includes("koreksi") || question.toLowerCase().includes("perbaiki")) {
-      suggestedDraft = {
-        dateISO: new Date().toISOString().slice(0, 10),
-        memo: "Koreksi usulan advisor",
-        lines: [
-          { accountCode: "1110", debitText: "100.000", creditText: "", confidence: 0.8, reason: "Koreksi" },
-          { accountCode: "4100", debitText: "", creditText: "100.000", confidence: 0.8, reason: "Koreksi" },
-        ],
-        overallConfidence: 0.85,
-        explanation: "Draft koreksi mock",
-      };
-    }
-  } else {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("AI_TIDAK_TERSEDIA");
-    const ai = new GoogleGenAI({ apiKey });
-    const prompt = `Anda adalah advisor akuntansi untuk UMKM Indonesia (IFRS untuk SME).
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("AI_TIDAK_TERSEDIA");
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `Anda adalah advisor akuntansi untuk UMKM Indonesia (IFRS untuk SME).
 Jawab singkat dalam Bahasa Indonesia, kutip sumber [IFRS §…] untuk aturan dan [Jurnal JE-…] untuk angka.
 Jangan halusinasi angka.
 
@@ -110,21 +91,20 @@ ${lastMessages}
 
 Pertanyaan: ${question}`;
 
-    const interaction = await ai.interactions.create({
-      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
-      input: [{ type: "user_input", content: [{ type: "text", text: prompt }] } as never],
-      store: false,
-    });
-    answer = interaction.output_text ?? "Maaf, tidak ada jawaban.";
-    // Try to parse suggestedDraft if present (look for JSON block)
-    try {
-      const jsonMatch = answer.match(/\{[\s\S]*"suggestedDraft"[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.suggestedDraft) suggestedDraft = parsed.suggestedDraft;
-      }
-    } catch {}
-  }
+  const interaction = await ai.interactions.create({
+    model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
+    input: [{ type: "user_input", content: [{ type: "text", text: prompt }] } as never],
+    store: false,
+  });
+  const answer = interaction.output_text ?? "Maaf, tidak ada jawaban.";
+  // Try to parse suggestedDraft if present (look for JSON block)
+  try {
+    const jsonMatch = answer.match(/\{[\s\S]*"suggestedDraft"[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.suggestedDraft) suggestedDraft = parsed.suggestedDraft;
+    }
+  } catch {}
 
   // Save assistant message
   await db.transaction((tx) =>

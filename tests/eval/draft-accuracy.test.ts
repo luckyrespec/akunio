@@ -3,10 +3,8 @@ import { EVAL_CASES } from "@/server/ai/fixtures";
 import { DraftEntrySchema } from "@/server/ai/schema";
 import { Money } from "@/core/money/money";
 
-// With AI_MOCK=1 the adapter returns fixtures keyed by kind, so this suite
-// validates corpus integrity (10 balanced, schema-valid cases) rather than
-// live model accuracy. Real-model scoring runs manually with GEMINI_API_KEY.
-process.env.AI_MOCK = "1";
+// Validates corpus integrity (10 balanced, schema-valid cases).
+// Live model scoring runs manually with GEMINI_API_KEY.
 
 describe("eval corpus integrity", () => {
   it("has 10 balanced, schema-valid cases", () => {

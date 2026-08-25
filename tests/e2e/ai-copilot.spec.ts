@@ -11,11 +11,16 @@ async function signup(page: import("@playwright/test").Page) {
   await expect(page).toHaveURL(/\/dasbor/);
 }
 
-test("composer creates draft, review posts it", async ({ page }) => {
+test("Nara creates draft via chat, review posts it", async ({ page }) => {
   await signup(page);
-  await page.goto("/jurnal/ai");
-  await page.getByLabel("Deskripsi transaksi").fill("beli perlengkapan kantor tunai Rp 500.000");
-  await page.getByRole("button", { name: "Buat Draft" }).click();
+  await page.goto("/asisten");
+  // Nara chat input
+  const input = page.getByPlaceholder(/Tanya Nara|Tanya/);
+  await input.fill("buatkan jurnal beli perlengkapan kantor tunai Rp 500.000");
+  await page.getByRole("button", { name: "Kirim" }).click();
+  // Wait for draft card
+  await expect(page.getByText("Draft Jurnal")).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Lihat & Posting Draft" }).click();
   await expect(page).toHaveURL(/\/jurnal\/ai\/[0-9a-f-]{36}$/);
 
   await expect(page.getByText("Apa yang dibaca asisten")).toBeVisible();
@@ -24,10 +29,12 @@ test("composer creates draft, review posts it", async ({ page }) => {
   await expect(page.getByText("Diposting")).toBeVisible();
 });
 
-test("sidebar shows Asisten AI enabled", async ({ page }) => {
+test("sidebar shows Nara enabled and /jurnal/ai redirects", async ({ page }) => {
   await signup(page);
   await page.goto("/dasbor");
-  await page.getByRole("link", { name: "Asisten AI" }).click();
-  await expect(page).toHaveURL(/\/jurnal\/ai/);
-  await expect(page.getByText("Asisten siap membantu")).toBeVisible();
+  await page.getByRole("link", { name: "Nara" }).click();
+  await expect(page).toHaveURL(/\/asisten/);
+  await expect(page.getByText("Nara", { exact: false })).toBeVisible();
+  await page.goto("/jurnal/ai");
+  await expect(page).toHaveURL(/\/asisten/);
 });

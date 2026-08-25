@@ -12,6 +12,7 @@ import { Money } from "@/core/money/money";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal } from "@/components/motion";
+import Link from "next/link";
 
 export default async function DasborPage() {
   const ctx = await requireContext();
@@ -27,7 +28,12 @@ export default async function DasborPage() {
     const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
     const cashLines = await postedLinesThrough(tx, ctx.orgId, yearEndISO);
     const ytdLines = await postedLinesBetween(tx, ctx.orgId, yearStartISO, yearEndISO);
-    return { period, accRows, cashLines, ytdLines };
+    let findings: Array<{ id: string; type: string; severity: string }> = [];
+    try {
+      const { listFindings } = await import("@/server/db/repos/findings.repo");
+      findings = (await listFindings(tx, ctx.orgId, "open")).slice(0, 3) as never;
+    } catch {}
+    return { period, accRows, cashLines, ytdLines, findings };
   });
 
   const metas = reportMetaMap(data.accRows);
@@ -90,10 +96,27 @@ export default async function DasborPage() {
       </div>
 
       <Reveal delay={0.18}>
-        <div className="mt-6 flex items-center gap-3 rounded-xl border border-rule bg-canvas px-4 py-3.5 text-sm text-ink-soft">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-paper text-ink">✦</span>
-          <span>Asisten AI dan deteksi temuan hadir pada milestone berikutnya (M2–M4).</span>
-        </div>
+        {data.findings.length > 0 ? (
+          <div className="matte-card rounded-xl border border-rule bg-paper p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-widest text-ink-soft">Temuan terbaru</p>
+              <Link href="/temuan" className="text-xs text-terra underline">Lihat semua</Link>
+            </div>
+            <div className="mt-3 space-y-2">
+              {data.findings.map((f) => (
+                <div key={f.id} className="flex items-center justify-between rounded-lg bg-canvas px-3 py-2 text-sm">
+                  <span>{f.type}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${f.severity==="HIGH" ? "bg-terra/10 text-terra" : f.severity==="MEDIUM" ? "bg-amber-50 text-amber-700" : "text-ink-soft"}`}>{f.severity}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 rounded-xl border border-rule bg-canvas px-4 py-3.5 text-sm text-ink-soft">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-paper text-ink">✓</span>
+            <span>Tidak ada temuan — pembukuan rapi.</span>
+          </div>
+        )}
       </Reveal>
     </section>
   );

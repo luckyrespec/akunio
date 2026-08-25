@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
-import { createThread, getThread } from "@/server/db/repos/chat.repo";
-import { askAdvisor } from "@/server/ai/advisor";
-import { listMessages } from "@/server/db/repos/chat.repo";
+import { createThread, getThread, listMessages } from "@/server/db/repos/chat.repo";
+import { askNara } from "@/server/ai/nara";
 
+// Compatibility alias — /api/advisor/* delegates to Nara (unified assistant)
+// Keep for old widget/bookmarks; new clients should use /api/nara/*
 export async function GET(req: NextRequest) {
   const ctx = await requireContext();
   const threadId = new URL(req.url).searchParams.get("threadId");
@@ -34,11 +35,13 @@ export async function POST(req: NextRequest) {
       if (!t) return NextResponse.json({ error: "Thread tidak ditemukan." }, { status: 404 });
     }
 
-    const result = await askAdvisor(ctx.orgId, threadId, message);
-    return NextResponse.json({ threadId, ...result });
+    const result = await askNara(ctx.orgId, threadId, message);
+    // Map to legacy shape for old clients
+    return NextResponse.json({ threadId, answer: result.answer, citations: result.citations, suggestedDraft: result.draft, draft: result.draft, draftId: result.draftId });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Terjadi kesalahan.";
     if (msg.includes("Kuota")) return NextResponse.json({ error: msg }, { status: 429 });
+    if (msg === "AI_TIDAK_TERSEDIA") return NextResponse.json({ error: "Asisten sedang tidak tersedia. Coba lagi sebentar." }, { status: 503 });
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
