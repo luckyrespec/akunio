@@ -5,9 +5,9 @@ Milestone ini mengirimkan inti pembukuan; AI menyusul di M2–M4.
 
 ## Menjalankan Lokal (Windows PowerShell)
 
-Prasyarat: Node 20+, lalu salah satu jalur basis data di bawah.
+Prasyarat: Bun 1.3+ (Node tetap terinstall untuk tooling eslint/tsc), lalu salah satu jalur basis data di bawah.
 
-1. `npm install`
+1. `bun install`
 2. `Copy-Item .env.example .env` — sesuaikan dengan jalur yang dipilih.
 
 ### Jalur A — Docker (portabel)
@@ -15,7 +15,7 @@ Prasyarat: Node 20+, lalu salah satu jalur basis data di bawah.
 Postgres 16 + pgvector di port `54329` (pgvector baru dibutuhkan mulai M3).
 
 ```powershell
-npm run db:up
+bun run db:up
 ```
 
 Skrip init Docker (`docker/init/01-role.sql`) otomatis membuat peran
@@ -54,22 +54,22 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO app_user;
 
 ### Lanjutan (kedua jalur sama)
 
-3. `npx drizzle-kit migrate` — skema.
-4. `npm run db:sql` — RLS policies + immutability triggers.
-5. `npm run dev` → http://localhost:3000 (daftar → organisasi, bagan akun,
+3. `bunx drizzle-kit migrate` — skema.
+4. `bun run db:sql` — RLS policies + immutability triggers.
+5. `bun run dev` → http://localhost:3000 (daftar → organisasi, bagan akun,
    dan 12 periode dibuat otomatis).
 
 ## Pengujian
 
-- `npm test` — unit (core) + integration (butuh DB dari Jalur A/B).
-- `SKIP_DB_TESTS=1 npm test` — hanya unit.
-- `npm run e2e` — Playwright smoke 3 skenario (dev server otomatis).
+- `bun run test` — unit (core) + integration (butuh DB dari Jalur A/B).
+- `SKIP_DB_TESTS=1 bun run test` — hanya unit.
+- `bun run e2e` — Playwright smoke 3 skenario (dev server otomatis).
 
 ## Urutan Skema
 
 Skema bisnis ada di `src/server/db/schema/*.ts`; tabel auth di
 `schema/auth.ts`. Trigger imutabilitas dan RLS ada di
-`src/server/db/{triggers,rls}.sql`, diterapkan lewat `npm run db:sql`.
+`src/server/db/{triggers,rls}.sql`, diterapkan lewat `bun run db:sql`.
 
 ## Status Milestone Ini
 
@@ -119,6 +119,6 @@ Spesifikasi: docs/superpowers/specs/. Rencana: docs/superpowers/plans/.
 
 - Satu asisten `Nara` di `/asisten` (dan widget floating) — gabungan Copilot + Advisor. Natural conversation: tanya saldo/laba/IFRS, cari jurnal, lihat laporan, **buat draft jurnal via function calling** (tetap perlu review sebelum posting).
 - Draft direview di `/jurnal/ai/[id]` (editable + diff + confidence) sebelum diposting lewat pipeline yang sama.
-- Penyimpanan dokumen: SeaweedFS S3 — jalankan `npm run weed:dev` (butuh `weed.exe` di `D:\Lucky\weed_strorage`).
+- Penyimpanan dokumen: SeaweedFS S3 — jalankan `bun run weed:dev` (butuh `weed.exe` di `D:\Lucky\weed_strorage`).
 - Env AI: `GEMINI_API_KEY` (wajib, real), `GEMINI_MODEL=gemini-3.5-flash-lite`, `GEMINI_EMBED_MODEL=gemini-embedding`, `ASSISTANT_MONTHLY_LIMIT=200`, `ASSISTANT_NAME=Nara`.
 - Route lama `/jurnal/ai` redirect ke `/asisten`. Model legacy Gemini (2.5/2.0/1.5) tidak didukung.

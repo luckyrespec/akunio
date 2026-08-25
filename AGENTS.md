@@ -15,15 +15,15 @@ Next 16.3 (App Router, Turbopack) • React 19 • Tailwind 4 + shadcn/ui + luci
 
 ## Commands
 ```bash
-npm run dev          # http://localhost:3000 (needs DB + SeaweedFS)
-npm run build        # must stay green
-npx tsc --noEmit     # strict, no any
-npm run test         # vitest run — hits ledger_test only
-npm run e2e          # playwright (AI_MOCK=1 via webServer env)
-npm run test:db:setup # create ledger_test + drizzle migrate + rls/triggers/vector
-npm run db:sql       # apply src/server/db/*.sql to dev ledger
-npm run db:migrate   # drizzle-kit migrate (dev ledger)
-npm run weed:dev     # cmd /c scripts\weed-dev.cmd — S3 gateway :8333, bucket neraca-docs
+bun run dev          # http://localhost:3000 (needs DB + SeaweedFS)
+bun run build        # must stay green
+bunx tsc --noEmit    # strict, no any — do NOT use npx (bun shims break it)
+bun run test         # vitest run — hits ledger_test only
+bun run e2e          # playwright (AI_MOCK=1 via webServer env)
+bun run test:db:setup # create ledger_test + drizzle migrate + rls/triggers/vector
+bun run db:sql       # apply src/server/db/*.sql to dev ledger
+bun run db:migrate   # drizzle-kit migrate (dev ledger)
+bun run weed:dev     # cmd /c scripts\weed-dev.cmd — S3 gateway :8333, bucket neraca-docs
 ```
 
 ## Env
@@ -43,8 +43,9 @@ Copy `.env.example` → `.env`. Key vars: `DATABASE_URL` (postgres:root@127.0.0.
 
 ## Testing Quirks
 - `vitest.config.mts` sets `fileParallelism: false` (integration files share one Postgres and TRUNCATE). `setupFiles: ["tests/setup.ts"]` rewrites DB URL before any import.
+- Vitest intentionally stays on Node workers (plain `vitest run` in the `test` script) — Bun-runtime spike (`bun --bun vitest run`) fails on zod interop; revisit after Bun upgrades.
 - Storage tests skip when `SKIP_STORAGE_TESTS=1` or S3 unreachable (top-level await probe).
-- Playwright webServer is `reuseExistingServer:true`; kill stale `:3000` before `npm run e2e` or tests hit cold compile.
+- Playwright webServer is `reuseExistingServer:true`; kill stale `:3000` before `bun run e2e` or tests hit cold compile.
 - Shell: plain `bash` is WSL; use `C:\Program Files\Git\bin\bash.exe -c "..."` or PowerShell directly. Never `bash` heredoc for file writes — use `write` tool.
 
 ## Routes & Entrypoints
