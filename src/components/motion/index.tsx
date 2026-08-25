@@ -1,7 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
-import type { PropsWithChildren } from "react";
+import { animate, motion, useInView, useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState, type PropsWithChildren } from "react";
 
 const EASE_OUT_SOFT: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -81,5 +81,41 @@ export function Pressable({ children, className }: { children: React.ReactNode; 
     >
       {children}
     </motion.div>
+  );
+}
+
+// AnimatedNumber — KPI counting up on first view
+export function AnimatedNumber({
+  value,
+  format,
+  className,
+}: {
+  value: number;
+  format: (v: number) => string;
+  className?: string;
+}) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+  const [display, setDisplay] = useState(reduce ? value : 0);
+
+  useEffect(() => {
+    if (!inView) return;
+    if (reduce) {
+      setDisplay(value);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: EASE_OUT_SOFT,
+      onUpdate: setDisplay,
+    });
+    return () => controls.stop();
+  }, [inView, value, reduce]);
+
+  return (
+    <span ref={ref} className={className}>
+      {format(display)}
+    </span>
   );
 }
