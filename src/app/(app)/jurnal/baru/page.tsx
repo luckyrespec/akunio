@@ -2,6 +2,8 @@ import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { listAccounts } from "@/server/db/repos/accounts.repo";
 import { NewEntryForm } from "@/components/journal/new-entry-form";
+import { PageHeader } from "@/components/page-header";
+import { GlowCard } from "@/components/aceternity/glow-card";
 
 export default async function JurnalBaruPage() {
   const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
@@ -10,13 +12,17 @@ export default async function JurnalBaruPage() {
 
   return (
     <section className="max-w-3xl">
-      <h1 className="font-display text-2xl">Tulis Jurnal</h1>
-      <p className="mt-1 text-sm text-ink-soft">
+      <PageHeader title="Tulis Jurnal" eyebrow="Entri baru" />
+      <p className="mt-2 text-sm text-ink-soft">
         Debit dan kredit harus seimbang sebelum jurnal dapat diposting.
       </p>
-      <NewEntryForm
-        accounts={leaves.map((a) => ({ id: a.id, label: `${a.code} · ${a.name}` }))}
-      />
+      <GlowCard intensity="medium" className="mt-6">
+        <div className="p-6">
+          <NewEntryForm
+            accounts={leaves.map((a) => ({ id: a.id, label: `${a.code} · ${a.name}` }))}
+          />
+        </div>
+      </GlowCard>
     </section>
   );
 }

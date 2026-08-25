@@ -72,7 +72,7 @@ export function NewEntryForm({ accounts }: { accounts: Array<{ id: string; label
   }
 
   return (
-    <form onSubmit={submit} className="mt-6 space-y-5">
+    <form onSubmit={submit} className="space-y-5">
       <div className="flex gap-4">
         <div className="space-y-2">
           <Label htmlFor="tanggal">Tanggal</Label>

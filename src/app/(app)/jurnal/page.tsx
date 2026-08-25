@@ -8,7 +8,8 @@ import { Money } from "@/core/money/money";
 import { ReverseButton } from "@/components/journal/reverse-button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Reveal } from "@/components/motion";
+import { PageHeader } from "@/components/page-header";
+import { GlowCard } from "@/components/aceternity/glow-card";
 
 export default async function JurnalPage({
   searchParams,
@@ -19,13 +20,11 @@ export default async function JurnalPage({
 
   return (
     <section>
-      <Reveal>
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="font-display text-[1.75rem] font-semibold tracking-tight">Jurnal Umum</h1>
-            <p className="mt-1 text-xs uppercase tracking-widest text-ink-soft">Catatan transaksi harian</p>
-          </div>
-          <div className="flex items-center gap-3">
+      <PageHeader
+        title="Jurnal Umum"
+        eyebrow="Catatan transaksi harian"
+        actions={
+          <>
             <div className="flex gap-1 rounded-full border border-rule bg-paper p-1">
               <Link href="/jurnal"
                     className={tab === "manual"
@@ -43,9 +42,9 @@ export default async function JurnalPage({
             <Link href="/jurnal/baru">
               <Button className="bg-terra shadow-sm hover:bg-terra/90">+ Tulis Jurnal</Button>
             </Link>
-          </div>
-        </header>
-      </Reveal>
+          </>
+        }
+      />
 
       {tab === "draft" ? <DraftTab orgId={ctx.orgId} /> : <ManualTab orgId={ctx.orgId} />}
     </section>
@@ -57,18 +56,19 @@ async function ManualTab({ orgId }: { orgId: string }) {
 
   return (
     <>
-      <div className="matte-card mt-6 overflow-x-auto rounded-xl border border-rule bg-paper">
-        <table className="w-full tnum text-sm">
-          <thead>
-            <tr className="border-b border-rule bg-canvas/60 text-left text-[11px] uppercase tracking-widest text-ink-soft">
-              <th className="px-4 py-3 font-medium">Nomor</th>
-              <th className="px-4 py-3 font-medium">Tanggal</th>
-              <th className="px-4 py-3 font-medium">Akun &amp; Keterangan</th>
-              <th className="px-4 py-3 font-medium text-right">Debit</th>
-              <th className="px-4 py-3 font-medium text-right">Kredit</th>
-              <th className="px-4 py-3 font-medium">Aksi</th>
-            </tr>
-          </thead>
+      <GlowCard className="mt-6">
+        <div className="overflow-x-auto p-1">
+          <table className="data-table tnum text-sm">
+            <thead>
+              <tr className="border-b border-rule bg-canvas/60 text-left">
+                <th className="px-4 py-3">Nomor</th>
+                <th className="px-4 py-3">Tanggal</th>
+                <th className="px-4 py-3">Akun &amp; Keterangan</th>
+                <th className="px-4 py-3 text-right">Debit</th>
+                <th className="px-4 py-3 text-right">Kredit</th>
+                <th className="px-4 py-3">Aksi</th>
+              </tr>
+            </thead>
           <tbody>
             {entries.length === 0 && (
               <tr>
@@ -107,7 +107,8 @@ async function ManualTab({ orgId }: { orgId: string }) {
             ))}
           </tbody>
         </table>
-      </div>
+        </div>
+      </GlowCard>
 
       {entries.some((e) => e.reversalOfId) && (
         <p className="mt-3 text-xs text-ink-soft">
@@ -123,16 +124,17 @@ async function DraftTab({ orgId }: { orgId: string }) {
   const now = new Date();
 
   return (
-    <div className="mt-6 overflow-x-auto rounded-lg border border-rule bg-paper">
-      <table className="w-full tnum text-sm">
-        <thead>
-          <tr className="border-b border-rule text-left text-xs uppercase tracking-wide text-ink-soft">
-            <th className="px-4 py-3 font-medium">Tanggal</th>
-            <th className="px-4 py-3 font-medium">Sumber</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium text-right">Keyakinan</th>
-          </tr>
-        </thead>
+    <GlowCard className="mt-6">
+      <div className="overflow-x-auto p-1">
+        <table className="data-table tnum text-sm">
+          <thead>
+            <tr className="border-b border-rule text-left">
+              <th className="px-4 py-3">Tanggal</th>
+              <th className="px-4 py-3">Sumber</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 text-right">Keyakinan</th>
+            </tr>
+          </thead>
         <tbody>
           {drafts.length === 0 && (
             <tr>
@@ -175,6 +177,7 @@ async function DraftTab({ orgId }: { orgId: string }) {
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </GlowCard>
   );
 }
