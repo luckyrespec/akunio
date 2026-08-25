@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { authClient } from "@/server/auth/auth-client";
 import { cn } from "@/lib/utils";
+import { MovingBorder } from "@/components/aceternity/moving-border";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -73,37 +74,47 @@ export function SidebarNav({
             const Icon = item.icon;
             const active = isActive(item.href, (item as { match?: (p: string) => boolean }).match);
             return (
-              <Link
+              <MovingBorder
                 key={item.href}
-                href={item.href}
-                title={collapsed ? item.label : undefined}
-                className={cn(
-                  "group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
-                  collapsed && "justify-center px-2",
-                  active ? "bg-canvas font-medium text-terra" : "text-ink hover:bg-canvas",
-                )}
+                duration={3200}
+                className={cn(collapsed && "w-full")}
+                borderRadius="0.75rem"
               >
-                <Icon className={cn("size-4 shrink-0", active ? "text-terra" : "text-ink-soft group-hover:text-ink")} />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-                {active && !collapsed && <span className="ml-auto h-5 w-0.5 rounded-full bg-terra" aria-hidden />}
-              </Link>
+                <Link
+                  href={item.href}
+                  title={collapsed ? item.label : undefined}
+                  className={cn(
+                    "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
+                    collapsed && "justify-center px-2",
+                    active ? "bg-canvas font-medium text-terra" : "text-ink hover:bg-canvas",
+                  )}
+                >
+                  <Icon className={cn("size-4 shrink-0", active ? "text-terra" : "text-ink-soft group-hover:text-ink")} />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+                </Link>
+              </MovingBorder>
             );
           })}
 
           {/* Draft AI quick link when on Jurnal AI drafts? keep as item above handles it — this is for Temuan */}
-          <Link
-            href="/temuan"
-            title={collapsed ? "Temuan" : undefined}
-            className={cn(
-              "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
-              collapsed && "justify-center px-2",
-              isActive("/temuan") ? "bg-canvas font-medium text-terra" : "text-ink hover:bg-canvas",
-            )}
+          <MovingBorder
+            duration={3200}
+            className={cn(collapsed && "w-full")}
+            borderRadius="0.75rem"
           >
-            <Search className={cn("size-4 shrink-0", isActive("/temuan") ? "text-terra" : "text-ink-soft group-hover:text-ink")} />
-            {!collapsed && <span className="truncate">Temuan</span>}
-            {isActive("/temuan") && !collapsed && <span className="ml-auto h-5 w-0.5 rounded-full bg-terra" aria-hidden />}
-          </Link>
+            <Link
+              href="/temuan"
+              title={collapsed ? "Temuan" : undefined}
+              className={cn(
+                "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
+                collapsed && "justify-center px-2",
+                isActive("/temuan") ? "bg-canvas font-medium text-terra" : "text-ink hover:bg-canvas",
+              )}
+            >
+              <Search className={cn("size-4 shrink-0", isActive("/temuan") ? "text-terra" : "text-ink-soft group-hover:text-ink")} />
+              {!collapsed && <span className="truncate">Temuan</span>}
+            </Link>
+          </MovingBorder>
         </nav>
       </div>
 
