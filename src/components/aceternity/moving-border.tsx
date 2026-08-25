@@ -13,11 +13,13 @@ import { cn } from "@/lib/utils";
 
 export function MovingBorder({
   children,
+  active = false,
   duration = 3000,
   className,
   borderRadius = "0.75rem",
 }: {
   children: React.ReactNode;
+  active?: boolean;
   duration?: number;
   className?: string;
   borderRadius?: string;
@@ -27,7 +29,7 @@ export function MovingBorder({
   const progress = useMotionValue(0);
 
   useAnimationFrame((time) => {
-    if (reduce) return;
+    if (reduce || !active) return;
     const length = pathRef.current?.getTotalLength();
     if (length) {
       const pxPerMs = length / duration;
@@ -38,6 +40,16 @@ export function MovingBorder({
   const x = useTransform(progress, (val) => pathRef.current?.getPointAtLength(val).x ?? 0);
   const y = useTransform(progress, (val) => pathRef.current?.getPointAtLength(val).y ?? 0);
   const transform = useMotionTemplate`translateX(${x}px) translateY(${y}px)`;
+
+  if (!active) {
+    return (
+      <div className={cn("relative", className)} style={{ borderRadius }}>
+        <div className="relative" style={{ borderRadius }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("relative", className)} style={{ borderRadius }}>

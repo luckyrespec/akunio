@@ -51,7 +51,7 @@ export function SidebarNav({
   return (
     <aside
       className={cn(
-        "flex shrink-0 flex-col justify-between overflow-hidden border-r border-rule bg-paper py-6 transition-all duration-[240ms]",
+        "flex shrink-0 flex-col justify-between overflow-hidden border-r border-rule bg-paper py-6 transition-[width,padding] duration-[240ms]",
         collapsed ? "w-[4.25rem] px-2" : "w-64 px-4 pr-6",
       )}
       style={{ transitionTimingFunction: "var(--ease-out-soft, cubic-bezier(0.22,1,0.36,1))" }}
@@ -76,6 +76,7 @@ export function SidebarNav({
             return (
               <MovingBorder
                 key={item.href}
+                active={active}
                 duration={3200}
                 className={cn(collapsed && "w-full")}
                 borderRadius="0.75rem"
@@ -98,6 +99,7 @@ export function SidebarNav({
 
           {/* Draft AI quick link when on Jurnal AI drafts? keep as item above handles it — this is for Temuan */}
           <MovingBorder
+            active={isActive("/temuan")}
             duration={3200}
             className={cn(collapsed && "w-full")}
             borderRadius="0.75rem"
