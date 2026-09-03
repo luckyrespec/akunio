@@ -193,7 +193,32 @@ export async function getOnboardingView(q: Queryable, orgId: string) {
     profile,
     messages: messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     coaPreview,
+    chips: chipsForStep(step, profile),
   };
+}
+
+/** Chips for a freshly loaded view (mid-flow refresh must show the same chips). */
+export function chipsForStep(step: OnboardingStep, profile: OrgProfile | null): string[] {
+  switch (step) {
+    case "NAMA":
+      return NAMA_CHIPS;
+    case "USAHA":
+      return [];
+    case "JENIS":
+      return JENIS_CHIPS;
+    case "SKALA":
+      return profile?.revenueRange ? KARYAWAN_CHIPS : SKALA_CHIPS;
+    case "LOKASI":
+      return LOKASI_CHIPS;
+    case "REFERRAL":
+      return REFERRAL_CHIPS;
+    case "RINGKASAN":
+      return RINGKASAN_CHIPS;
+    case "COA":
+      return COA_CHIPS;
+    default:
+      return [];
+  }
 }
 
 export async function submitOnboardingMessage(

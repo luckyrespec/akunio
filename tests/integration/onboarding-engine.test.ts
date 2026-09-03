@@ -39,6 +39,24 @@ describe("onboarding engine", () => {
     expect(rows.some((a) => a.name === "Beban Komisi Delivery")).toBe(true);
   });
 
+  it("handles SKALA in two phases (revenue chip, then employees)", async () => {
+    const { orgId } = await makeOrg("Org Skala");
+    const { upsertProfile } = await import("@/server/db/repos/onboarding.repo");
+    await upsertProfile(db, orgId, {
+      displayName: "B",
+      businessName: "WB",
+      businessType: "DAGANG",
+      currentStep: "SKALA",
+    });
+    let r = await submitOnboardingMessage(db, orgId, "10–50jt / bulan");
+    expect(r.step).toBe("SKALA");
+    expect(r.chips).toContain("2–5 orang");
+    r = await submitOnboardingMessage(db, orgId, "2–5 orang");
+    expect(r.step).toBe("LOKASI");
+    r = await submitOnboardingMessage(db, orgId, "Lewati");
+    expect(r.step).toBe("REFERRAL");
+  });
+
   it("finalize is idempotent under double submit", async () => {
     const { orgId } = await makeOrg("Org Idem");
     const { upsertProfile } = await import("@/server/db/repos/onboarding.repo");

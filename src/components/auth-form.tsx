@@ -70,8 +70,9 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
         // requireEmailVerification: signup succeeds with token === null
         // (no session) until the user verifies their email.
         const token = (res.data as unknown as { token?: string | null } | null)?.token;
-        // Use hard navigation to ensure session cookies are fully sent to Server Components
-        window.location.href = token ? "/dasbor" : verificationUrl(email);
+        // Use hard navigation to ensure session cookies are fully sent to Server Components.
+        // Completed users pass the onboarding gate straight to /dasbor.
+        window.location.href = token ? "/onboarding" : verificationUrl(email);
         return;
       }
 
@@ -87,8 +88,9 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
         setError(msg || "Email atau kata sandi salah. Silakan periksa kembali.");
         return;
       }
-      // Use hard navigation to ensure session cookies are fully sent to Server Components
-      window.location.href = "/dasbor";
+      // Use hard navigation to ensure session cookies are fully sent to Server Components.
+      // Completed users pass the onboarding gate straight to /dasbor.
+      window.location.href = "/onboarding";
     } catch (err: any) {
       setBusy(false);
       setError(err?.message || "Terjadi kesalahan jaringan. Silakan coba lagi.");

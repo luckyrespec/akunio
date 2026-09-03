@@ -111,6 +111,15 @@ export default function AsistenClient({
     },
   });
 
+  // Testability marker: effects run only after hydration commits, so e2e
+  // can wait for this instead of racing keystrokes against hydration.
+  React.useEffect(() => {
+    document.body.dataset.asistenReady = "1";
+    return () => {
+      delete document.body.dataset.asistenReady;
+    };
+  }, []);
+
   // Load active thread messages
   React.useEffect(() => {
     if (!activeThreadId || currentView !== "chat") {

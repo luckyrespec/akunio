@@ -86,15 +86,20 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
   },
-  rateLimit: {
-    enabled: true,
-    window: 60,
-    max: 20,
-    customRules: {
-      "/sign-in/email": { window: 60, max: 10 },
-      "/sign-up/email": { window: 60, max: 10 },
-    },
-  },
+  rateLimit:
+    // Relaxed in AI_MOCK dev/test so parallel e2e workers never 429 each
+    // other on the shared localhost IP bucket. Production keeps strict caps.
+    process.env.AI_MOCK === "1"
+      ? { enabled: false }
+      : {
+          enabled: true,
+          window: 60,
+          max: 20,
+          customRules: {
+            "/sign-in/email": { window: 60, max: 10 },
+            "/sign-up/email": { window: 60, max: 10 },
+          },
+        },
   databaseHooks: {
     user: {
       create: {

@@ -1,40 +1,42 @@
 import { test, expect } from "@playwright/test";
-
-const unique = () => `e2e-ai-${Date.now()}@test.id`;
+import { signupAndVerify, walkOnboardingToDashboard } from "./helpers";
 
 async function signup(page: import("@playwright/test").Page) {
-  await page.goto("/daftar");
-  await page.getByLabel("Nama Organisasi").fill("Koperasi AI E2E");
-  await page.getByLabel("Email").fill(unique());
-  await page.getByLabel("Kata Sandi").fill("rahasia12345");
-  await page.getByRole("button", { name: "Daftar" }).click();
-  await expect(page).toHaveURL(/\/dasbor/);
+  await signupAndVerify(page, "Koperasi AI E2E", `e2e-ai-${Date.now()}@test.id`);
+  await walkOnboardingToDashboard(page, { businessName: "Koperasi AI E2E" });
 }
 
-test("Nara creates draft via chat, review posts it", async ({ page }) => {
+test("Nara answers a question via streaming chat", async ({ page }) => {
+  // Live-AI smoke for the unified /asisten UI (agent-first redesign retired
+  // the m2 inline "Draft Jurnal" card; tool-approval flows are covered by
+  // integration tests in tests/integration/nara-*.test.ts).
+  test.setTimeout(180_000);
   await signup(page);
   await page.goto("/asisten");
-  // Nara chat input
+  await page.waitForSelector('body[data-asisten-ready="1"]', { timeout: 30000 });
+  // Nara chat input (controlled PromptInputTextarea: real keystrokes, not fill)
   const input = page.getByPlaceholder(/Tanya Nara|Tanya/);
-  await input.fill("buatkan jurnal beli perlengkapan kantor tunai Rp 500.000");
+  await input.click();
+  const q = "Apa itu aset lancar dalam satu kalimat?";
+  await input.pressSequentially(q, { delay: 10 });
+  await expect(input).toHaveValue(q, { timeout: 10000 });
   await page.getByRole("button", { name: "Kirim" }).click();
-  // Wait for draft card
-  await expect(page.getByText("Draft Jurnal")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Lihat & Posting Draft" }).click();
-  await expect(page).toHaveURL(/\/jurnal\/ai\/[0-9a-f-]{36}$/);
-
-  await expect(page.getByText("Apa yang dibaca asisten")).toBeVisible();
-  await page.getByRole("button", { name: "Posting" }).click();
-  await expect(page).toHaveURL(/\/jurnal\?tab=draft/);
-  await expect(page.getByText("Diposting")).toBeVisible();
+  // User echo proves the send path persisted the message.
+  await expect(page.getByText(q).first()).toBeVisible({ timeout: 15000 });
+  // Assistant block appears once streaming starts; thinking indicator
+  // detaches only when the live response completes.
+  await expect(page.locator('[data-from="assistant"]')).not.toHaveCount(0, { timeout: 120000 });
+  await expect(
+    page.getByRole("status", { name: "Nara sedang berpikir" }),
+  ).toBeHidden({ timeout: 120000 });
 });
 
 test("sidebar shows Nara enabled and /jurnal/ai redirects", async ({ page }) => {
   await signup(page);
   await page.goto("/dasbor");
-  await page.getByRole("link", { name: "Nara" }).click();
+  await page.getByRole("link", { name: /Asisten AI Copilot/ }).click();
   await expect(page).toHaveURL(/\/asisten/);
-  await expect(page.getByText("Nara", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /bisa Nara bantu/ })).toBeVisible();
   await page.goto("/jurnal/ai");
   await expect(page).toHaveURL(/\/asisten/);
 });
