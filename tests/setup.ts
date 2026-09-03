@@ -25,9 +25,6 @@ if (!process.env.TEST_DATABASE_URL || !/ledger_test/.test(process.env.TEST_DATAB
 }
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
-if (process.env.APP_DATABASE_URL) {
-  process.env.APP_DATABASE_URL = process.env.APP_DATABASE_URL.replace(
-    /\/[^/?]+(\?|$)/,
-    "/ledger_test$1",
-  );
-}
+process.env.APP_DATABASE_URL = process.env.TEST_APP_DATABASE_URL ??
+  process.env.TEST_DATABASE_URL?.replace(/postgres:root@/, "app_user:app_pw@") ??
+  process.env.TEST_DATABASE_URL;
