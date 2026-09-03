@@ -10,7 +10,7 @@ BEGIN
                            'journal_entries','journal_lines','journal_seq_counters','audit_log',
                            'documents','ai_drafts',
                            'tenant_chunks','chat_threads','ai_findings','ai_proposals',
-                           'contacts','invoices']
+                           'contacts','invoices','bank_reconciliations']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -40,7 +40,7 @@ BEGIN
       WITH CHECK (EXISTS (
         SELECT 1 FROM invoices inv
         WHERE inv.id = invoice_items.invoice_id
-          AND inv.org_id = current_setting('app.current_org', true)::uuid
+          AND inv.org_id = current_setting('app.current_org')::uuid
       ))
     $p$;
   END IF;
@@ -61,7 +61,29 @@ BEGIN
       WITH CHECK (EXISTS (
         SELECT 1 FROM invoices inv
         WHERE inv.id = invoice_payments.invoice_id
-          AND inv.org_id = current_setting('app.current_org', true)::uuid
+          AND inv.org_id = current_setting('app.current_org')::uuid
+      ))
+    $p$;
+  END IF;
+END $$;
+
+-- bank_statement_lines are isolated via bank_reconciliations.org_id:
+ALTER TABLE bank_statement_lines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bank_statement_lines FORCE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'bank_statement_lines' AND policyname = 'tenant_isolation_bank_statement_lines') THEN
+    EXECUTE $p$
+      CREATE POLICY tenant_isolation_bank_statement_lines ON bank_statement_lines
+      USING (EXISTS (
+        SELECT 1 FROM bank_reconciliations rec
+        WHERE rec.id = bank_statement_lines.reconciliation_id
+          AND rec.org_id = current_setting('app.current_org', true)::uuid
+      ))
+      WITH CHECK (EXISTS (
+        SELECT 1 FROM bank_reconciliations rec
+        WHERE rec.id = bank_statement_lines.reconciliation_id
+          AND rec.org_id = current_setting('app.current_org')::uuid
       ))
     $p$;
   END IF;

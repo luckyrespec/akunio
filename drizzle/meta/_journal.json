@@ -50,6 +50,13 @@
       "when": 1788441585001,
       "tag": "0006_flimsy_warbird",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788443921344,
+      "tag": "0007_supreme_celestials",
+      "breakpoints": true
     }
   ]
 }
