@@ -159,6 +159,10 @@ function generateSmartTitle(prompt: string): string {
 
     const systemInstruction = `Anda adalah Nara, Asisten Akuntansi AI Cerdas untuk UMKM Indonesia (berdasarkan standar IFRS/SAK EMKM).
 - Anda ramah, solutif, teliti, dan selalu memberikan jawaban serta analisis pembukuan yang tuntas dalam Bahasa Indonesia.
+- Gaya Percakapan:
+  * Berkomunikasilah secara natural, hangat, dan mengalir seperti percakapan dengan rekan kerja akuntan pribadi.
+  * HINDARI penggunaan format markdown yang terlalu ramai, kaku, atau berlebihan (jangan gunakan banyak heading besar #/## atau list bersarang panjang jika tidak benar-benar diperlukan).
+  * Gunakan kalimat singkat, to the point, dan mudah dipahami.
 - Anda memiliki akses ke berbagai Tool Akuntansi untuk membaca dan mengubah data.
 - Daftar Tool yang tersedia:
   * Pembukuan Jurnal:
@@ -183,7 +187,7 @@ function generateSmartTitle(prompt: string): string {
   Pilihlah akun yang tepat dari Daftar Akun (COA) Tersedia (misal Kas: 1110, Modal Disetor: 3100), dan gunakan 'post_journal' atau 'create_journal_draft'.
   Pastikan jumlah Debit dan Kredit seimbang.
 - Aturan Pengambilan Laporan / Briefing:
-  Panggil tool terkait, lalu sampaikan analisis dan ringkasan angka secara lengkap dan informatif.
+  Panggil tool terkait, lalu sampaikan ringkasannya secara natural dan informatif.
 - Jangan pernah mengarang angka; selalu gunakan data dari konteks atau hasil tool.`;
 
     const pageContextStr = pageContext
@@ -250,6 +254,14 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
           result?: unknown;
         }> = [];
 
+        interface PendingCall {
+          index: number;
+          callId: string;
+          toolName: string;
+          argumentsJson: string;
+        }
+        const pendingCalls = new Map<number, PendingCall>();
+
         try {
           const interactionStream = await ai.interactions.create({
             model: selectedModel,
@@ -262,69 +274,109 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
 
           for await (const event of interactionStream as AsyncIterable<{
             event_type: string;
-            delta?: { type: string; text?: string; content?: { text?: string } };
+            index?: number;
+            delta?: { type: string; text?: string; content?: { text?: string }; arguments?: string };
             step?: { type: string; name?: string; arguments?: unknown; call_id?: string; id?: string };
           }>) {
-            if (event.event_type === "step.delta" && event.delta) {
-              if (event.delta.type === "thought_summary" && event.delta.content?.text) {
+            const idx = event.index ?? 0;
+
+            if (event.event_type === "step.start" && event.step?.type === "function_call") {
+              const call = event.step;
+              const toolName = call.name ?? "";
+              const callId = call.id ?? call.call_id ?? `call_${Date.now()}`;
+              let initialJson = "";
+              if (typeof call.arguments === "string") {
+                initialJson = call.arguments;
+              } else if (call.arguments && Object.keys(call.arguments as object).length > 0) {
+                initialJson = JSON.stringify(call.arguments);
+              }
+              pendingCalls.set(idx, {
+                index: idx,
+                callId,
+                toolName,
+                argumentsJson: initialJson,
+              });
+            } else if (event.event_type === "step.delta" && event.delta) {
+              if (event.delta.type === "arguments_delta" && event.delta.arguments) {
+                const current = pendingCalls.get(idx);
+                if (current) {
+                  current.argumentsJson += event.delta.arguments;
+                }
+              } else if (event.delta.type === "thought_summary" && event.delta.content?.text) {
                 fullReasoning += event.delta.content.text;
                 send({ type: "reasoning", delta: event.delta.content.text });
               } else if (event.delta.type === "text" && event.delta.text) {
                 fullText += event.delta.text;
                 send({ type: "text", delta: event.delta.text });
               }
-            } else if (event.event_type === "step.start" && event.step?.type === "function_call") {
-              const call = event.step;
-              const toolName = call.name ?? "";
-              const callId = call.id ?? call.call_id ?? `call_${Date.now()}`;
-              const args = (call.arguments ?? {}) as Record<string, unknown>;
+            } else if (event.event_type === "step.stop") {
+              if (pendingCalls.has(idx)) {
+                const pending = pendingCalls.get(idx)!;
+                pendingCalls.delete(idx);
 
-              const isSafe = SAFE_TOOLS.has(toolName);
-              const isMutating = MUTATING_TOOLS.has(toolName);
-              const shouldAutoExecute =
-                isSafe || hitlPolicy === "autonomous" || (isMutating && allowAllForSession);
-
-              if (shouldAutoExecute) {
-                send({ type: "tool_call", tool: toolName, status: "executing", args });
-                const exec = await executeNaraTool(ctx.orgId, ctx.userEmail, toolName, args);
-                send({ type: "tool_result", tool: toolName, result: exec.data ?? exec.error });
-                toolInvocations.push({
-                  callId,
-                  toolName,
-                  status: exec.success ? "auto" : "failed",
-                  args,
-                  result: exec.data ?? exec.error,
-                });
-
-                if (exec.success && exec.data && typeof exec.data === "object") {
-                  const dataObj = exec.data as Record<string, unknown>;
-                  if (Array.isArray(dataObj.suggestions) && dataObj.suggestions.length > 0) {
-                    send({ type: "suggestions", suggestions: dataObj.suggestions });
-                  }
-                  if (dataObj.batchId && Array.isArray(dataObj.items)) {
-                    send({ type: "queue_update", batchId: dataObj.batchId, items: dataObj.items });
-                  }
+                let args: Record<string, unknown> = {};
+                try {
+                  args = pending.argumentsJson ? JSON.parse(pending.argumentsJson) : {};
+                } catch (parseErr) {
+                  console.warn("Gagal parse argumentsJson tool call", pending.argumentsJson, parseErr);
+                  args = {};
                 }
-              } else {
-                // Must request HITL approval from user
-                send({
-                  type: "tool_approval_request",
-                  callId,
-                  toolName,
-                  args,
-                  explanation: `Nara membutuhkan konfirmasi Anda untuk menjalankan '${toolName}'.`,
-                });
-                toolInvocations.push({
-                  callId,
-                  toolName,
-                  status: "pending_approval",
-                  args,
-                });
 
-                if (!fullText) {
-                  const pendingMsg = `Saya telah menyiapkan transaksi untuk **${toolName}**. Silakan tinjau rinciannya pada kartu persetujuan di bawah ini dan klik **Setujui & Jalankan** untuk mencatatnya ke pembukuan.`;
-                  fullText = pendingMsg;
-                  send({ type: "text", delta: pendingMsg });
+                const toolName = pending.toolName;
+                const callId = pending.callId;
+
+                const isSafe = SAFE_TOOLS.has(toolName);
+                const isMutating = MUTATING_TOOLS.has(toolName);
+                const shouldAutoExecute =
+                  isSafe || hitlPolicy === "autonomous" || (isMutating && allowAllForSession);
+
+                if (shouldAutoExecute) {
+                  send({ type: "tool_call", tool: toolName, status: "executing", args });
+                  const exec = await executeNaraTool(ctx.orgId, ctx.userEmail, toolName, args);
+                  send({ type: "tool_result", tool: toolName, result: exec.data ?? exec.error });
+                  toolInvocations.push({
+                    callId,
+                    toolName,
+                    status: exec.success ? "auto" : "failed",
+                    args,
+                    result: exec.data ?? exec.error,
+                  });
+
+                  if (exec.success && exec.data && typeof exec.data === "object") {
+                    const dataObj = exec.data as Record<string, unknown>;
+                    if (Array.isArray(dataObj.suggestions) && dataObj.suggestions.length > 0) {
+                      send({ type: "suggestions", suggestions: dataObj.suggestions });
+                    }
+                    if (dataObj.batchId && Array.isArray(dataObj.items)) {
+                      send({ type: "queue_update", batchId: dataObj.batchId, items: dataObj.items });
+                    }
+                  }
+                } else {
+                  // Must request HITL approval from user with COMPLETE args
+                  send({
+                    type: "tool_approval_request",
+                    callId,
+                    toolName,
+                    args,
+                    explanation: `Nara membutuhkan konfirmasi Anda untuk menjalankan '${toolName}'.`,
+                  });
+                  toolInvocations.push({
+                    callId,
+                    toolName,
+                    status: "pending_approval",
+                    args,
+                  });
+
+                  if (!fullText) {
+                    let pendingMsg = `Saya telah menyiapkan tindakan **${toolName}**. Silakan periksa rinciannya di kartu bawah dan klik **Setujui & Jalankan**.`;
+                    if (toolName === "post_journal" || toolName === "create_journal_draft") {
+                      pendingMsg = `Saya sudah siapkan rincian pencatatan jurnalnya. Silakan periksa tabel debit-kredit pada kartu di bawah ya, lalu klik **Setujui & Jalankan** untuk mencatatnya ke pembukuan.`;
+                    } else if (toolName === "create_invoice") {
+                      pendingMsg = `Saya sudah siapkan draf faktur tersebut. Silakan tinjau rinciannya di kartu bawah dan klik **Setujui & Jalankan**.`;
+                    }
+                    fullText = pendingMsg;
+                    send({ type: "text", delta: pendingMsg });
+                  }
                 }
               }
             }
@@ -348,10 +400,9 @@ Konteks Saldo Terkini:
 ${liveNumbers}
 
 Tugas:
-1. Berikan penjelasan ringkas, ramah, dan tuntas dalam Bahasa Indonesia berdasarkan hasil tool di atas.
-2. Jika ini adalah briefing atau laporan, rangkum data penting dan angka-angkanya secara rapi dalam format markdown.
-3. Jika pengguna meminta mencatat transaksi dan baru saja mengambil data akun, buatkan rincian jurnalnya (Debit dan Kredit) secara seimbang.
-4. Jangan mengulang kalimat default sistem seperti "Tindakan berhasil dieksekusi", melainkan langsung sampaikan isi informasi yang dibutuhkan pengguna.`;
+1. Berikan penjelasan yang hangat, ramah, dan mengalir santai dalam Bahasa Indonesia berdasarkan hasil data di atas.
+2. Hindari format markdown yang berlebihan atau kaku (gunakan paragraf ringkas yang nyaman dibaca).
+3. Langsung sampaikan informasi intinya secara jelas dan solutif.`;
 
               const synthStream = await ai.interactions.create({
                 model: selectedModel,

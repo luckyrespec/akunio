@@ -1494,22 +1494,29 @@ export default function AsistenClient({
               {isStreaming && (
                 <Message from="assistant">
                   <MessageContent from="assistant">
-                    {streamingReasoning && (
-                      <Reasoning isStreaming={!streamingText}>
+                    {streamingText ? (
+                      <MessageResponse>
+                        {streamingText}
+                        <span className="inline-block w-1.5 h-3.5 bg-terra/70 ml-1 animate-pulse align-middle rounded-xs" />
+                      </MessageResponse>
+                    ) : (
+                      <div className="flex items-center gap-2 py-2 px-1 text-xs text-ink-soft select-none">
+                        <span className="font-medium text-ink/75">Nara sedang berpikir</span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="size-1.5 rounded-full bg-terra animate-bounce [animation-delay:-0.3s]" />
+                          <span className="size-1.5 rounded-full bg-terra animate-bounce [animation-delay:-0.15s]" />
+                          <span className="size-1.5 rounded-full bg-terra animate-bounce" />
+                        </span>
+                      </div>
+                    )}
+
+                    {streamingReasoning && streamingText && (
+                      <Reasoning isStreaming={false}>
                         <ReasoningTrigger>
-                          {!streamingText ? "Sedang menimbang aturan akuntansi..." : "Proses Berpikir"}
+                          Alur Pemikiran
                         </ReasoningTrigger>
                         <ReasoningContent>{streamingReasoning}</ReasoningContent>
                       </Reasoning>
-                    )}
-
-                    {streamingText ? (
-                      <MessageResponse>{streamingText}</MessageResponse>
-                    ) : (
-                      <div className="flex items-center gap-2 text-xs text-ink-soft py-1">
-                        <Loader2 className="size-3.5 animate-spin text-terra" />
-                        <span>Nara sedang menyusun jawaban...</span>
-                      </div>
                     )}
 
                     {streamingQueue && streamingQueue.length > 0 && (
