@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -21,12 +21,15 @@ export function useConversation() {
 
 export interface ConversationProps extends React.HTMLAttributes<HTMLDivElement> {
   autoScroll?: boolean;
+  onDropFiles?: (files: File[]) => void;
 }
 
 export const Conversation = React.forwardRef<HTMLDivElement, ConversationProps>(
-  ({ className, children, autoScroll = true, ...props }, ref) => {
+  ({ className, children, autoScroll = true, onDropFiles, ...props }, ref) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [isAtBottom, setIsAtBottom] = React.useState(true);
+    const [isDragging, setIsDragging] = React.useState(false);
+    const dragCounter = React.useRef(0);
 
     const handleScroll = React.useCallback(() => {
       const el = containerRef.current;
@@ -52,6 +55,43 @@ export const Conversation = React.forwardRef<HTMLDivElement, ConversationProps>(
       }
     });
 
+    // Drag and drop support across the entire conversation area
+    const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current += 1;
+      if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+        setIsDragging(true);
+      }
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current -= 1;
+      if (dragCounter.current <= 0) {
+        setIsDragging(false);
+        dragCounter.current = 0;
+      }
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      dragCounter.current = 0;
+
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const filesArray = Array.from(e.dataTransfer.files);
+        onDropFiles?.(filesArray);
+      }
+    };
+
     React.useImperativeHandle(ref, () => containerRef.current as HTMLDivElement);
 
     return (
@@ -59,9 +99,28 @@ export const Conversation = React.forwardRef<HTMLDivElement, ConversationProps>(
         <div
           ref={containerRef}
           onScroll={handleScroll}
-          className={cn("relative flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 scroll-smooth bg-canvas", className)}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={cn(
+            "relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden transition-colors",
+            isDragging && "bg-terra/5",
+            className,
+          )}
           {...props}
         >
+          {/* Full-Window Drop Overlay (ChatGPT / Gemini style) */}
+          {isDragging && (
+            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-paper/85 backdrop-blur-xs border-2 border-dashed border-terra p-6 animate-in fade-in-0 pointer-events-none">
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-terra/15 text-terra shadow-sm mb-3">
+                <UploadCloud className="size-8 animate-bounce" />
+              </div>
+              <h3 className="font-display text-base font-bold text-ink">Lepaskan berkas di sini untuk melampirkan</h3>
+              <p className="text-xs text-ink-soft mt-1">Berkas akan langsung disematkan ke percakapan Nara</p>
+            </div>
+          )}
+
           {children}
         </div>
       </ConversationContext.Provider>
@@ -70,67 +129,72 @@ export const Conversation = React.forwardRef<HTMLDivElement, ConversationProps>(
 );
 Conversation.displayName = "Conversation";
 
-export const ConversationContent = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("mx-auto max-w-4xl lg:max-w-5xl space-y-6", className)} {...props} />
-));
-ConversationContent.displayName = "ConversationContent";
+export function ConversationContent({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("mx-auto flex w-full max-w-4xl lg:max-w-5xl flex-col gap-4 p-4 md:p-6", className)}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
 
-export const ConversationScrollButton = React.forwardRef<
-  HTMLButtonElement,
-  React.ComponentPropsWithoutRef<typeof Button>
->(({ className, ...props }, ref) => {
+export function ConversationScrollButton({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof Button>) {
   const { isAtBottom, scrollToBottom } = useConversation();
 
   if (isAtBottom) return null;
 
   return (
     <Button
-      ref={ref}
-      variant="secondary"
+      type="button"
       size="icon"
+      variant="secondary"
+      onClick={scrollToBottom}
       className={cn(
-        "absolute bottom-6 right-6 z-20 size-9 rounded-full shadow-md transition-opacity hover:opacity-100 border border-rule bg-paper text-ink",
+        "absolute bottom-4 right-4 z-30 size-8 rounded-full border border-rule bg-paper/90 shadow-md backdrop-blur-xs hover:bg-canvas transition-transform active:scale-95 text-ink",
         className,
       )}
-      onClick={scrollToBottom}
       aria-label="Scroll to bottom"
       {...props}
     >
-      <ArrowDown className="size-4" />
+      <ArrowDown className="size-4 text-ink-soft" />
     </Button>
   );
-});
-ConversationScrollButton.displayName = "ConversationScrollButton";
-
-export interface ConversationEmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {
-  icon?: React.ReactNode;
-  title: string;
-  description: string;
 }
 
 export function ConversationEmptyState({
   icon,
   title,
   description,
-  className,
   children,
+  className,
   ...props
-}: ConversationEmptyStateProps) {
+}: {
+  icon?: React.ReactNode;
+  title: string;
+  description?: string;
+  children?: React.ReactNode;
+} & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "flex min-h-[420px] flex-col items-center justify-center p-6 md:p-10 text-center",
+        "my-auto flex flex-col items-center justify-center py-12 text-center",
         className,
       )}
       {...props}
     >
-      {icon && <div className="mb-4 text-terra">{icon}</div>}
-      <h3 className="font-display text-2xl md:text-3xl font-normal tracking-tight text-ink">{title}</h3>
-      <p className="mt-2 max-w-lg text-sm text-ink-soft leading-relaxed">{description}</p>
-      {children && <div className="mt-8 w-full max-w-2xl">{children}</div>}
+      {icon && <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-canvas/80 shadow-2xs border border-rule">{icon}</div>}
+      <h3 className="font-display text-xl md:text-2xl font-semibold tracking-tight text-ink">{title}</h3>
+      {description && <p className="mt-2 max-w-md text-xs md:text-sm text-ink-soft leading-relaxed">{description}</p>}
+      {children && <div className="mt-6 w-full max-w-xl">{children}</div>}
     </div>
   );
 }

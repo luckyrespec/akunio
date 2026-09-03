@@ -230,65 +230,72 @@ export default function AsistenClient({
     }
   }, [currentView, fetchLibraryFiles]);
 
-  // Handle file uploads to /api/nara/upload with instant local preview
-  const handleFileUpload = async (files: FileList | File[], forChat = true) => {
+  const pendingFilesRef = React.useRef<Map<string, File>>(new Map());
+
+  // Attach files locally with instant preview (Deferred Upload - zero orphaned files)
+  const handleAttachFiles = React.useCallback((files: FileList | File[]) => {
     const validFiles = Array.from(files);
     if (validFiles.length === 0) return;
 
-    if (forChat) {
-      // Instant client-side preview for 0ms perceived latency
-      const instantPreviews: Attachment[] = validFiles.map((f) => ({
-        id: `temp-${Date.now()}-${Math.random()}`,
+    const newAttachments: Attachment[] = [];
+
+    for (const f of validFiles) {
+      const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      pendingFilesRef.current.set(localId, f);
+      newAttachments.push({
+        id: localId,
         fileName: f.name,
-        mime: f.type,
+        mime: f.type || "application/octet-stream",
         sizeBytes: f.size,
         previewUrl: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
-        status: "uploading",
-      }));
-      setAttachments((prev) => [...prev, ...instantPreviews]);
+        status: "done",
+      });
     }
+
+    setAttachments((prev) => {
+      // Deduplicate files by filename and size
+      const existingKeys = new Set(prev.map((p) => `${p.fileName}-${p.sizeBytes}`));
+      const nonDuplicate = newAttachments.filter((n) => !existingKeys.has(`${n.fileName}-${n.sizeBytes}`));
+      return [...prev, ...nonDuplicate];
+    });
+  }, []);
+
+  // Remove attachment locally (revokes memory URL, zero orphaned server storage)
+  const handleRemoveAttachment = React.useCallback((id: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((a) => a.id !== id);
+    });
+    pendingFilesRef.current.delete(id);
+  }, []);
+
+  // Dedicated upload for Library view direct uploads
+  const handleLibraryDirectUpload = async (files: FileList | File[]) => {
+    const validFiles = Array.from(files);
+    if (validFiles.length === 0) return;
 
     setUploading(true);
     setErrorBanner(null);
     try {
       const fd = new FormData();
-      for (const f of validFiles) {
-        fd.append("files", f);
-      }
+      for (const f of validFiles) fd.append("files", f);
 
       const res = await fetch("/api/nara/upload", {
         method: "POST",
         body: fd,
       });
 
-      const data = await res.json();
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Gagal mengunggah berkas.");
       }
 
-      if (forChat && Array.isArray(data.files)) {
-        setAttachments((prev) => {
-          const nonTemp = prev.filter((p) => !p.id.startsWith("temp-"));
-          const confirmed = data.files.map((cf: Attachment) => {
-            const match = prev.find((p) => p.fileName === cf.fileName);
-            return {
-              ...cf,
-              previewUrl: match?.previewUrl || cf.url,
-              status: "done" as const,
-            };
-          });
-          return [...nonTemp, ...confirmed];
-        });
-      } else {
-        // Refresh library files if uploaded from library view
-        fetchLibraryFiles();
-      }
+      fetchLibraryFiles();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Gagal mengunggah berkas.";
-      setErrorBanner(msg);
-      if (forChat) {
-        setAttachments((prev) => prev.filter((p) => !p.id.startsWith("temp-")));
-      }
+      setErrorBanner(err instanceof Error ? err.message : "Gagal mengunggah berkas.");
     } finally {
       setUploading(false);
     }
@@ -386,13 +393,59 @@ export default function AsistenClient({
     }
   };
 
-  // Submit prompt with streaming SSE
+  // Submit prompt with streaming SSE (Uploads pending files just-in-time)
   const handleSendMessage = async (textToSend?: string) => {
     const prompt = (textToSend ?? input).trim();
     if (!prompt && attachments.length === 0) return;
-    if (isStreaming) return;
+    if (isStreaming || uploading) return;
 
     setErrorBanner(null);
+
+    // 1. Just-in-time upload of any pending local attachments
+    let readyAttachments: Attachment[] = [];
+    const localAttachments = attachments.filter((a) => a.id.startsWith("local-"));
+    const alreadyUploaded = attachments.filter((a) => !a.id.startsWith("local-"));
+
+    const filesToUpload: File[] = [];
+    for (const a of localAttachments) {
+      const f = pendingFilesRef.current.get(a.id);
+      if (f) filesToUpload.push(f);
+    }
+
+    if (filesToUpload.length > 0) {
+      setUploading(true);
+      try {
+        const fd = new FormData();
+        for (const f of filesToUpload) fd.append("files", f);
+        const upRes = await fetch("/api/nara/upload", { method: "POST", body: fd });
+        const upData = await upRes.json();
+        if (!upRes.ok) throw new Error(upData.error || "Gagal mengunggah berkas.");
+        if (Array.isArray(upData.files)) {
+          readyAttachments = [
+            ...alreadyUploaded,
+            ...upData.files.map((cf: Attachment) => {
+              const localMatch = localAttachments.find((l) => l.fileName === cf.fileName);
+              return {
+                ...cf,
+                previewUrl: localMatch?.previewUrl,
+              };
+            }),
+          ];
+        }
+      } catch (uploadErr) {
+        setUploading(false);
+        setErrorBanner(uploadErr instanceof Error ? uploadErr.message : "Gagal mengunggah berkas.");
+        return;
+      } finally {
+        setUploading(false);
+      }
+    } else {
+      readyAttachments = [...alreadyUploaded];
+    }
+
+    // Clean pending local file map
+    pendingFilesRef.current.clear();
+
     setIsStreaming(true);
     setStreamingReasoning("");
     setStreamingText("");
@@ -402,13 +455,12 @@ export default function AsistenClient({
       id: `temp-${Date.now()}`,
       role: "user",
       content: prompt || "Lampiran dikirim",
-      attachments: attachments.length > 0 ? [...attachments] : null,
+      attachments: readyAttachments.length > 0 ? [...readyAttachments] : null,
       createdAt: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    const sentAttachments = [...attachments];
     setAttachments([]);
 
     abortControllerRef.current = new AbortController();
@@ -421,7 +473,7 @@ export default function AsistenClient({
         body: JSON.stringify({
           threadId: activeThreadId ?? undefined,
           message: prompt,
-          attachments: sentAttachments,
+          attachments: readyAttachments,
           modelPreset,
           allowAllForSession,
         }),
@@ -922,7 +974,7 @@ export default function AsistenClient({
                 accept="image/*,application/pdf"
                 className="hidden"
                 onChange={(e) => {
-                  if (e.target.files) handleFileUpload(e.target.files, false);
+                  if (e.target.files) handleLibraryDirectUpload(e.target.files);
                 }}
               />
               <Button
@@ -1223,8 +1275,8 @@ export default function AsistenClient({
             </div>
           )}
 
-          {/* Conversation Feed */}
-          <Conversation autoScroll={isStreaming}>
+          {/* Conversation Feed with Full Window Drop Support */}
+          <Conversation autoScroll={isStreaming} onDropFiles={handleAttachFiles}>
             <ConversationContent>
               {messages.length === 0 && !isStreaming ? (
                 <ConversationEmptyState
@@ -1440,7 +1492,7 @@ export default function AsistenClient({
             <div className="mx-auto max-w-4xl lg:max-w-5xl">
               <PromptInput
                 onSubmit={() => handleSendMessage()}
-                onDropFiles={(files) => handleFileUpload(files, true)}
+                onDropFiles={(files) => handleAttachFiles(files)}
               >
                 {/* Attachment Chips inside Prompt Input Header */}
                 {attachments.length > 0 && (
@@ -1451,7 +1503,7 @@ export default function AsistenClient({
                           key={att.id}
                           attachment={att}
                           variant="inline"
-                          onRemove={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
+                          onRemove={() => handleRemoveAttachment(att.id)}
                         />
                       ))}
                     </Attachments>
@@ -1461,7 +1513,7 @@ export default function AsistenClient({
                 {uploading && (
                   <div className="flex items-center gap-1.5 rounded-xl border border-rule bg-canvas px-3 py-1 text-xs text-ink-soft mb-2">
                     <Loader2 className="size-3.5 animate-spin text-terra" />
-                    <span>Mengunggah berkas...</span>
+                    <span>Menyiapkan lampiran & mengirim...</span>
                   </div>
                 )}
 
@@ -1484,7 +1536,7 @@ export default function AsistenClient({
                       accept="image/*,application/pdf"
                       className="hidden"
                       onChange={(e) => {
-                        if (e.target.files) handleFileUpload(e.target.files, true);
+                        if (e.target.files) handleAttachFiles(e.target.files);
                       }}
                     />
                     <Tooltip>

@@ -181,52 +181,46 @@ export function AssistantWidget() {
     loadThread();
   }, [activeThreadId, open]);
 
-  // Handle file upload with instant local preview
-  const handleFileUpload = async (files: FileList | File[]) => {
+  const pendingFilesRef = React.useRef<Map<string, File>>(new Map());
+
+  // Attach files locally with instant preview (Deferred Upload - zero orphaned files)
+  const handleAttachFiles = React.useCallback((files: FileList | File[]) => {
     const validFiles = Array.from(files);
     if (validFiles.length === 0) return;
 
-    // Instant client-side preview for 0ms perceived latency
-    const instantPreviews: Attachment[] = validFiles.map((f) => ({
-      id: `temp-${Date.now()}-${Math.random()}`,
-      fileName: f.name,
-      mime: f.type,
-      sizeBytes: f.size,
-      previewUrl: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
-      status: "uploading",
-    }));
-    setAttachments((prev) => [...prev, ...instantPreviews]);
+    const newAttachments: Attachment[] = [];
 
-    setUploading(true);
-    setErrorBanner(null);
-    try {
-      const fd = new FormData();
-      for (const f of validFiles) fd.append("files", f);
-
-      const res = await fetch("/api/nara/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal mengunggah.");
-      if (Array.isArray(data.files)) {
-        setAttachments((prev) => {
-          const nonTemp = prev.filter((p) => !p.id.startsWith("temp-"));
-          const confirmed = data.files.map((cf: Attachment) => {
-            const match = prev.find((p) => p.fileName === cf.fileName);
-            return {
-              ...cf,
-              previewUrl: match?.previewUrl || cf.url,
-              status: "done" as const,
-            };
-          });
-          return [...nonTemp, ...confirmed];
-        });
-      }
-    } catch (e) {
-      setErrorBanner(e instanceof Error ? e.message : "Gagal mengunggah berkas.");
-      setAttachments((prev) => prev.filter((p) => !p.id.startsWith("temp-")));
-    } finally {
-      setUploading(false);
+    for (const f of validFiles) {
+      const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      pendingFilesRef.current.set(localId, f);
+      newAttachments.push({
+        id: localId,
+        fileName: f.name,
+        mime: f.type || "application/octet-stream",
+        sizeBytes: f.size,
+        previewUrl: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
+        status: "done",
+      });
     }
-  };
+
+    setAttachments((prev) => {
+      const existingKeys = new Set(prev.map((p) => `${p.fileName}-${p.sizeBytes}`));
+      const nonDuplicate = newAttachments.filter((n) => !existingKeys.has(`${n.fileName}-${n.sizeBytes}`));
+      return [...prev, ...nonDuplicate];
+    });
+  }, []);
+
+  // Remove attachment locally (revokes memory URL, zero orphaned server storage)
+  const handleRemoveAttachment = React.useCallback((id: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((a) => a.id !== id);
+    });
+    pendingFilesRef.current.delete(id);
+  }, []);
 
   // Start new chat
   const handleNewChat = () => {
@@ -236,15 +230,61 @@ export function AssistantWidget() {
     setAttachments([]);
     setPendingApproval(null);
     setErrorBanner(null);
+    pendingFilesRef.current.clear();
   };
 
-  // Send message via streaming SSE with injected pageContext
+  // Send message via streaming SSE with injected pageContext (Uploads pending files just-in-time)
   const handleSendMessage = async (textToSend?: string) => {
     const prompt = (textToSend ?? input).trim();
     if (!prompt && attachments.length === 0) return;
-    if (isStreaming) return;
+    if (isStreaming || uploading) return;
 
     setErrorBanner(null);
+
+    // 1. Just-in-time upload of any pending local attachments
+    let readyAttachments: Attachment[] = [];
+    const localAttachments = attachments.filter((a) => a.id.startsWith("local-"));
+    const alreadyUploaded = attachments.filter((a) => !a.id.startsWith("local-"));
+
+    const filesToUpload: File[] = [];
+    for (const a of localAttachments) {
+      const f = pendingFilesRef.current.get(a.id);
+      if (f) filesToUpload.push(f);
+    }
+
+    if (filesToUpload.length > 0) {
+      setUploading(true);
+      try {
+        const fd = new FormData();
+        for (const f of filesToUpload) fd.append("files", f);
+        const upRes = await fetch("/api/nara/upload", { method: "POST", body: fd });
+        const upData = await upRes.json();
+        if (!upRes.ok) throw new Error(upData.error || "Gagal mengunggah berkas.");
+        if (Array.isArray(upData.files)) {
+          readyAttachments = [
+            ...alreadyUploaded,
+            ...upData.files.map((cf: Attachment) => {
+              const localMatch = localAttachments.find((l) => l.fileName === cf.fileName);
+              return {
+                ...cf,
+                previewUrl: localMatch?.previewUrl,
+              };
+            }),
+          ];
+        }
+      } catch (uploadErr) {
+        setUploading(false);
+        setErrorBanner(uploadErr instanceof Error ? uploadErr.message : "Gagal mengunggah berkas.");
+        return;
+      } finally {
+        setUploading(false);
+      }
+    } else {
+      readyAttachments = [...alreadyUploaded];
+    }
+
+    pendingFilesRef.current.clear();
+
     setIsStreaming(true);
     setStreamingReasoning("");
     setStreamingText("");
@@ -254,12 +294,11 @@ export function AssistantWidget() {
       id: `temp-${Date.now()}`,
       role: "user",
       content: prompt || "Lampiran dikirim",
-      attachments: attachments.length > 0 ? [...attachments] : null,
+      attachments: readyAttachments.length > 0 ? [...readyAttachments] : null,
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    const sentAttachments = [...attachments];
     setAttachments([]);
 
     abortControllerRef.current = new AbortController();
@@ -273,7 +312,7 @@ export function AssistantWidget() {
         body: JSON.stringify({
           threadId: activeThreadId ?? undefined,
           message: prompt,
-          attachments: sentAttachments,
+          attachments: readyAttachments,
           modelPreset: "fast",
           allowAllForSession,
           pageContext: {
@@ -547,8 +586,8 @@ export function AssistantWidget() {
           </div>
         )}
 
-        {/* Conversation Body (ai-elements) */}
-        <Conversation autoScroll={isStreaming} className="bg-canvas">
+        {/* Conversation Body (ai-elements with Full Dropzone) */}
+        <Conversation autoScroll={isStreaming} onDropFiles={handleAttachFiles} className="bg-canvas">
           <ConversationContent className="p-3 space-y-3">
             {messages.length === 0 && !isStreaming ? (
               <ConversationEmptyState
@@ -694,7 +733,7 @@ export function AssistantWidget() {
         <div className="border-t border-rule bg-paper p-3 shrink-0">
           <PromptInput
             onSubmit={() => handleSendMessage()}
-            onDropFiles={(files) => handleFileUpload(files)}
+            onDropFiles={(files) => handleAttachFiles(files)}
           >
             {/* Attachment preview chips */}
             {attachments.length > 0 && (
@@ -705,7 +744,7 @@ export function AssistantWidget() {
                       key={att.id}
                       attachment={att}
                       variant="inline"
-                      onRemove={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
+                      onRemove={() => handleRemoveAttachment(att.id)}
                     />
                   ))}
                 </Attachments>
@@ -715,7 +754,7 @@ export function AssistantWidget() {
             {uploading && (
               <div className="flex items-center gap-1.5 rounded-lg border border-rule bg-canvas px-2.5 py-1 text-xs text-ink-soft mb-2">
                 <Loader2 className="size-3 animate-spin text-terra" />
-                <span>Mengunggah...</span>
+                <span>Menyiapkan lampiran...</span>
               </div>
             )}
 
@@ -738,7 +777,7 @@ export function AssistantWidget() {
                   accept="image/*,application/pdf"
                   className="hidden"
                   onChange={(e) => {
-                    if (e.target.files) handleFileUpload(e.target.files);
+                    if (e.target.files) handleAttachFiles(e.target.files);
                   }}
                 />
                 <Tooltip>
