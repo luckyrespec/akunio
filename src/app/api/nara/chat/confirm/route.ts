@@ -58,7 +58,22 @@ export async function POST(req: NextRequest) {
     let confirmationText = `Tindakan ${toolName} berhasil dieksekusi.`;
     if (toolName === "post_journal") {
       const jData = execution.data as { number?: string; memo?: string };
-      confirmationText = `Jurnal transaksi ${jData?.number ?? ""} ("${jData?.memo ?? ""}") berhasil diposting ke buku besar.`;
+      confirmationText = `Jurnal transaksi ${jData?.number ?? ""} ("${jData?.memo ?? ""}") berhasil diposting ke buku besar dengan status POSTED.`;
+    } else if (toolName === "create_journal_draft") {
+      const dData = execution.data as { id?: string; memo?: string };
+      confirmationText = `Draft jurnal untuk "${dData?.memo ?? ""}" berhasil dibuat. Silakan tinjau dan posting di menu Jurnal.`;
+    } else if (toolName === "create_invoice") {
+      const iData = execution.data as { invoiceNumber?: string; customerName?: string; totalFormatted?: string };
+      confirmationText = `Faktur #${iData?.invoiceNumber ?? ""} untuk ${iData?.customerName ?? ""} senilai ${iData?.totalFormatted ?? ""} berhasil dibuat.`;
+    } else if (toolName === "record_invoice_payment") {
+      const pData = execution.data as { invoiceNumber?: string; amountFormatted?: string };
+      confirmationText = `Pelunasan faktur #${pData?.invoiceNumber ?? ""} sebesar ${pData?.amountFormatted ?? ""} berhasil dicatat.`;
+    } else if (toolName === "post_invoice_to_journal") {
+      const pData = execution.data as { invoiceNumber?: string; journalEntryId?: string };
+      confirmationText = `Faktur #${pData?.invoiceNumber ?? ""} berhasil diposting ke jurnal buku besar.`;
+    } else if (toolName === "auto_match_bank_reconciliation") {
+      const mData = execution.data as { exactMatchesCount?: number; aiSuggestionsCount?: number };
+      confirmationText = `Auto-match rekonsiliasi selesai: ${mData?.exactMatchesCount ?? 0} transaksi otomatis cocok, ${mData?.aiSuggestionsCount ?? 0} saran AI dihasilkan.`;
     } else if (toolName === "create_account") {
       const aData = execution.data as { code?: string; name?: string };
       confirmationText = `Akun ${aData?.code ?? ""} - ${aData?.name ?? ""} berhasil ditambahkan ke bagan akun (COA).`;

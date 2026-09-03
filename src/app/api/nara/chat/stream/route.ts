@@ -150,12 +150,41 @@ function generateSmartTitle(prompt: string): string {
     const history = await listMessages(db, threadId!);
     const lastMessages = history.slice(-6).map((m) => `${m.role}: ${m.content}`).join("\n");
 
+    // Fetch Chart of Accounts (COA) leaf accounts so Gemini knows exact codes
+    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
+    const leafAccs = accRows.filter((a) => !accRows.some((c) => c.parentCode === a.code));
+    const coaSummary = leafAccs
+      .map((a) => `${a.code}: ${a.name} (${a.type}, normal ${a.normal})`)
+      .join(", ");
+
     const systemInstruction = `Anda adalah Nara, Asisten Akuntansi AI Cerdas untuk UMKM Indonesia (berdasarkan standar IFRS/SAK EMKM).
-- Anda ramah, solutif, teliti, dan selalu memberikan saran pembukuan yang tepat.
-- Anda memiliki akses ke berbagai Tool Akuntansi untuk membaca dan mengubah data (COA, Jurnal, Periode, Laporan, Diagnostik).
-- Jika pengguna ingin mencatat transaksi atau pengeluaran, gunakan tool 'create_journal_draft' atau 'post_journal'.
-- Jangan pernah mengarang angka; selalu gunakan live numbers atau hasil dari tool.
-- Selalu jelaskan alasan jurnal double-entry (Debit & Kredit harus seimbang).`;
+- Anda ramah, solutif, teliti, dan selalu memberikan jawaban serta analisis pembukuan yang tuntas dalam Bahasa Indonesia.
+- Anda memiliki akses ke berbagai Tool Akuntansi untuk membaca dan mengubah data.
+- Daftar Tool yang tersedia:
+  * Pembukuan Jurnal:
+    - 'post_journal': Posting jurnal double-entry resmi ke buku besar (JE-YYYY-NNNN).
+    - 'create_journal_draft': Buat draft jurnal untuk ditinjau oleh pengguna.
+    - 'reverse_journal': Balikkan/batalkan entri jurnal yang salah.
+    - 'search_journals', 'list_journals': Cari atau lihat riwayat entri jurnal.
+  * Faktur & Tagihan:
+    - 'create_invoice': Buat faktur penjualan (INVOICE) atau tagihan pembelian (BILL).
+    - 'record_invoice_payment': Catat pelunasan faktur.
+    - 'post_invoice_to_journal': Posting faktur ke jurnal buku besar.
+    - 'get_ar_ap_aging': Analisis umur piutang dan utang usaha.
+  * Rekonsiliasi Bank:
+    - 'get_bank_reconciliation_status': Cek saldo bank vs saldo buku kas vs selisih.
+    - 'auto_match_bank_reconciliation': Jalankan pencocokan otomatis mutasi bank.
+  * Laporan & Operasional:
+    - 'get_daily_briefing': Ringkasan harian kas, laba, dan transaksi tertunda.
+    - 'get_report': Laporan neraca, laba_rugi, arus_kas, perubahan_ekuitas.
+    - 'list_accounts', 'drilldown_account_details', 'check_accounting_health', 'list_periods'.
+- Aturan Pencatatan Transaksi:
+  Ketika pengguna meminta mencatat transaksi (misal: "catat awal modal usaha saya 1 juta ya" atau "catat bayar sewa 5jt"):
+  Pilihlah akun yang tepat dari Daftar Akun (COA) Tersedia (misal Kas: 1110, Modal Disetor: 3100), dan gunakan 'post_journal' atau 'create_journal_draft'.
+  Pastikan jumlah Debit dan Kredit seimbang.
+- Aturan Pengambilan Laporan / Briefing:
+  Panggil tool terkait, lalu sampaikan analisis dan ringkasan angka secara lengkap dan informatif.
+- Jangan pernah mengarang angka; selalu gunakan data dari konteks atau hasil tool.`;
 
     const pageContextStr = pageContext
       ? `\nKonteks Layar Saat Ini:\n- Halaman aktif: ${pageContext.pathname} (${pageContext.title || "Tanpa Judul"})${pageContext.summary ? `\n- Data/Ringkasan layar: ${pageContext.summary}` : ""}\n(Gunakan konteks ini bila pengguna menanyakan transaksi/data yang tampak di layar mereka saat ini.)\n`
@@ -165,6 +194,9 @@ function generateSmartTitle(prompt: string): string {
 
 Konteks Angka Terkini:
 ${liveNumbers}
+
+Daftar Akun (COA) Tersedia:
+${coaSummary}
 ${pageContextStr}
 Konteks Dokumen / Aturan:
 ${ragContext}
@@ -264,10 +296,6 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                   result: exec.data ?? exec.error,
                 });
 
-                if (exec.success && !fullText) {
-                  fullText = `Tindakan ${toolName} berhasil dieksekusi.`;
-                }
-
                 if (exec.success && exec.data && typeof exec.data === "object") {
                   const dataObj = exec.data as Record<string, unknown>;
                   if (Array.isArray(dataObj.suggestions) && dataObj.suggestions.length > 0) {
@@ -292,8 +320,67 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                   status: "pending_approval",
                   args,
                 });
+
+                if (!fullText) {
+                  const pendingMsg = `Saya telah menyiapkan transaksi untuk **${toolName}**. Silakan tinjau rinciannya pada kartu persetujuan di bawah ini dan klik **Setujui & Jalankan** untuk mencatatnya ke pembukuan.`;
+                  fullText = pendingMsg;
+                  send({ type: "text", delta: pendingMsg });
+                }
               }
             }
+          }
+
+          // If auto-executed tools ran and no full answer was streamed yet,
+          // invoke Gemini synthesis turn to generate a rich, natural explanation of the tool output!
+          const executedTools = toolInvocations.filter((t) => t.status === "auto");
+          if (executedTools.length > 0) {
+            try {
+              const toolContext = executedTools
+                .map((t) => `Hasil Tool [${t.toolName}]:\n${JSON.stringify(t.result, null, 2)}`)
+                .join("\n\n");
+
+              const synthPrompt = `Anda adalah Nara, Asisten Akuntansi AI Cerdas.
+Pengguna bertanya: "${trimmedMsg}"
+Hasil eksekusi data di sistem:
+${toolContext}
+
+Konteks Saldo Terkini:
+${liveNumbers}
+
+Tugas:
+1. Berikan penjelasan ringkas, ramah, dan tuntas dalam Bahasa Indonesia berdasarkan hasil tool di atas.
+2. Jika ini adalah briefing atau laporan, rangkum data penting dan angka-angkanya secara rapi dalam format markdown.
+3. Jika pengguna meminta mencatat transaksi dan baru saja mengambil data akun, buatkan rincian jurnalnya (Debit dan Kredit) secara seimbang.
+4. Jangan mengulang kalimat default sistem seperti "Tindakan berhasil dieksekusi", melainkan langsung sampaikan isi informasi yang dibutuhkan pengguna.`;
+
+              const synthStream = await ai.interactions.create({
+                model: selectedModel,
+                input: [{ type: "user_input", content: [{ type: "text", text: synthPrompt }] } as never],
+                stream: true,
+                store: false,
+              });
+
+              for await (const sEvent of synthStream as AsyncIterable<{
+                event_type: string;
+                delta?: { type: string; text?: string };
+              }>) {
+                if (sEvent.event_type === "step.delta" && sEvent.delta?.type === "text" && sEvent.delta.text) {
+                  fullText += sEvent.delta.text;
+                  send({ type: "text", delta: sEvent.delta.text });
+                }
+              }
+            } catch (sErr) {
+              console.warn("Gagal sintesis teks respons tool", sErr);
+              if (!fullText) {
+                fullText = executedTools.map((t) => `Tindakan ${t.toolName} selesai diproses.`).join("\n");
+                send({ type: "text", delta: fullText });
+              }
+            }
+          }
+
+          if (!fullText) {
+            fullText = "Maaf, saya tidak menerima respons yang dapat ditampilkan. Silakan coba tanyakan kembali.";
+            send({ type: "text", delta: fullText });
           }
 
           // Persist assistant message to database
