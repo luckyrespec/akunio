@@ -62,12 +62,18 @@ export async function POST(req: NextRequest) {
       attachments = [],
       modelPreset = "fast",
       allowAllForSession = false,
+      pageContext,
     } = body as {
       threadId?: string;
       message: string;
       attachments?: AttachmentMeta[];
       modelPreset?: "fast" | "deep";
       allowAllForSession?: boolean;
+      pageContext?: {
+        pathname: string;
+        title?: string;
+        summary?: string;
+      };
     };
 
     const trimmedMsg = String(message ?? "").trim();
@@ -151,11 +157,15 @@ function generateSmartTitle(prompt: string): string {
 - Jangan pernah mengarang angka; selalu gunakan live numbers atau hasil dari tool.
 - Selalu jelaskan alasan jurnal double-entry (Debit & Kredit harus seimbang).`;
 
+    const pageContextStr = pageContext
+      ? `\nKonteks Layar Saat Ini:\n- Halaman aktif: ${pageContext.pathname} (${pageContext.title || "Tanpa Judul"})${pageContext.summary ? `\n- Data/Ringkasan layar: ${pageContext.summary}` : ""}\n(Gunakan konteks ini bila pengguna menanyakan transaksi/data yang tampak di layar mereka saat ini.)\n`
+      : "";
+
     const fullPrompt = `${systemInstruction}
 
 Konteks Angka Terkini:
 ${liveNumbers}
-
+${pageContextStr}
 Konteks Dokumen / Aturan:
 ${ragContext}
 
