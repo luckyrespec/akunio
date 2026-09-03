@@ -10,7 +10,8 @@ BEGIN
                            'journal_entries','journal_lines','journal_seq_counters','audit_log',
                            'documents','ai_drafts',
                            'tenant_chunks','chat_threads','ai_findings','ai_proposals',
-                           'contacts','invoices','bank_reconciliations']
+                           'contacts','invoices','bank_reconciliations',
+                           'fixed_assets','asset_depreciation_lines','asset_disposals']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
