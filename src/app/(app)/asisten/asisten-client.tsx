@@ -19,10 +19,25 @@ import {
   Shield,
   RotateCcw,
   MessageSquare,
+  Library,
+  Pin,
+  MoreHorizontal,
+  SquarePen,
+  FileText,
+  Image as ImageIcon,
+  Download,
+  FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Conversation,
   ConversationContent,
@@ -103,6 +118,16 @@ interface PendingApproval {
   explanation: string;
 }
 
+interface LibraryFile {
+  id: string;
+  storageKey: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  status: string;
+  createdAt: string;
+}
+
 export default function AsistenClient({
   initialThreads,
   initialHitlPolicy = "smart",
@@ -127,7 +152,12 @@ export default function AsistenClient({
     initialHitlPolicy === "autonomous",
   );
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [searchModalOpen, setSearchModalOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [libraryModalOpen, setLibraryModalOpen] = React.useState(false);
+  const [libraryFiles, setLibraryFiles] = React.useState<LibraryFile[]>([]);
+  const [libraryLoading, setLibraryLoading] = React.useState(false);
+  const [librarySearch, setLibrarySearch] = React.useState("");
   const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null);
   const [editingTitle, setEditingTitle] = React.useState("");
   const [deletingThreadId, setDeletingThreadId] = React.useState<string | null>(null);
@@ -160,6 +190,23 @@ export default function AsistenClient({
 
     loadThread();
   }, [activeThreadId]);
+
+  // Load library files when modal is opened
+  const openLibrary = async () => {
+    setLibraryModalOpen(true);
+    setLibraryLoading(true);
+    try {
+      const res = await fetch("/api/nara/library");
+      if (res.ok) {
+        const data = await res.json();
+        setLibraryFiles(data.files ?? []);
+      }
+    } catch (err) {
+      console.error("Gagal memuat pustaka dokumen", err);
+    } finally {
+      setLibraryLoading(false);
+    }
+  };
 
   // Handle file uploads to /api/nara/upload
   const handleFileUpload = async (files: FileList | File[]) => {
@@ -231,6 +278,33 @@ export default function AsistenClient({
     } finally {
       setEditingThreadId(null);
       setEditingTitle("");
+    }
+  };
+
+  // Pin/Unpin thread
+  const handleTogglePin = async (thread: Thread) => {
+    try {
+      const nextPinned = !thread.pinned;
+      const res = await fetch(`/api/nara/threads/${thread.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: nextPinned }),
+      });
+
+      if (res.ok) {
+        setThreads((prev) => {
+          const updated = prev.map((t) => (t.id === thread.id ? { ...t, pinned: nextPinned } : t));
+          // Re-sort: pinned first, then by updatedAt
+          return updated.sort((a, b) => {
+            if (Boolean(a.pinned) !== Boolean(b.pinned)) {
+              return a.pinned ? -1 : 1;
+            }
+            return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
+          });
+        });
+      }
+    } catch (err) {
+      console.error("Gagal mengubah status pin sesi", err);
     }
   };
 
@@ -328,10 +402,12 @@ export default function AsistenClient({
             if (data.type === "init" && data.threadId) {
               if (!activeThreadId) {
                 setActiveThreadId(data.threadId);
+                // Smart 2-3 word Indonesian title from server
+                const smartTitle = data.title || prompt.split(/\s+/).slice(0, 3).join(" ") || "Percakapan Baru";
                 setThreads((prev) => [
                   {
                     id: data.threadId,
-                    title: prompt.slice(0, 30) || "Percakapan baru",
+                    title: smartTitle,
                     modelPreset,
                     createdAt: new Date(),
                     updatedAt: new Date(),
@@ -440,62 +516,95 @@ export default function AsistenClient({
     }
   };
 
-  // Filter threads by search query
-  const filteredThreads = threads.filter((t) =>
+  // Filtered threads for search dialog
+  const searchMatchingThreads = threads.filter((t) =>
     t.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  // Filtered library files
+  const filteredLibraryFiles = libraryFiles.filter((f) =>
+    f.fileName.toLowerCase().includes(librarySearch.toLowerCase()),
   );
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-canvas">
-      {/* 1. SIDEBAR SESI PERCAKAPAN (Paper & Ink Matte Theme) */}
+      {/* 1. SIDEBAR SESI PERCAKAPAN (ChatGPT Style layout per Gambar 2) */}
       <aside
         className={cn(
           "relative flex h-full flex-col border-r border-rule bg-paper transition-all duration-300 ease-in-out shrink-0",
-          sidebarOpen ? "w-72 md:w-80" : "w-0 -translate-x-full overflow-hidden border-r-0 md:w-0",
+          sidebarOpen ? "w-64 md:w-72" : "w-0 -translate-x-full overflow-hidden border-r-0 md:w-0",
         )}
       >
-        {/* Sidebar Header */}
-        <div className="flex items-center justify-between p-3.5 border-b border-rule">
-          <Button
-            onClick={handleNewChat}
-            variant="outline"
-            className="flex-1 justify-start gap-2 h-9 text-xs font-medium rounded-xl border-rule bg-canvas/70 hover:bg-canvas text-ink shadow-2xs transition-colors"
-          >
-            <Plus className="size-4 text-terra" />
-            <span>Percakapan Baru</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarOpen(false)}
-            className="ml-1.5 size-8 text-ink-soft hover:text-ink hover:bg-canvas rounded-lg"
-            aria-label="Tutup sidebar"
-          >
-            <SidebarClose className="size-4" />
-          </Button>
-        </div>
+        {/* Sidebar Header (Exactly h-14 to match Main Header line!) */}
+        <div className="flex h-14 items-center justify-between px-3.5 border-b border-rule shrink-0">
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-4 text-terra" />
+            <span className="font-display font-semibold text-sm text-ink tracking-tight">Nara AI</span>
+          </div>
 
-        {/* Search Threads */}
-        <div className="px-3.5 py-2.5">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 size-3.5 text-ink-soft" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari percakapan..."
-              className="h-8 pl-8 text-xs rounded-xl border-rule bg-canvas/50 text-ink placeholder:text-ink-soft/60 focus-visible:ring-terra/30"
-            />
+          <div className="flex items-center gap-1">
+            {/* Search Icon Button (Gambar 2 & 3) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSearchModalOpen(true)}
+              className="size-8 text-ink-soft hover:text-ink hover:bg-canvas rounded-lg"
+              aria-label="Cari percakapan"
+              title="Cari percakapan (Ctrl+K)"
+            >
+              <Search className="size-4" />
+            </Button>
+
+            {/* Collapse Sidebar Button (Gambar 2) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(false)}
+              className="size-8 text-ink-soft hover:text-ink hover:bg-canvas rounded-lg"
+              aria-label="Tutup sidebar"
+            >
+              <SidebarClose className="size-4" />
+            </Button>
           </div>
         </div>
 
+        {/* Sidebar Action Menu (New Chat & Library per Gambar 2) */}
+        <div className="p-2.5 space-y-1">
+          <button
+            type="button"
+            onClick={handleNewChat}
+            className={cn(
+              "flex h-9 w-full items-center gap-2.5 rounded-xl px-2.5 text-xs font-medium text-ink transition-colors hover:bg-canvas",
+              !activeThreadId && "bg-canvas font-semibold shadow-2xs",
+            )}
+          >
+            <SquarePen className="size-4 text-ink-soft" />
+            <span>Percakapan baru</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openLibrary}
+            className="flex h-9 w-full items-center gap-2.5 rounded-xl px-2.5 text-xs font-medium text-ink transition-colors hover:bg-canvas"
+          >
+            <Library className="size-4 text-ink-soft" />
+            <span>Pustaka Berkas (Library)</span>
+          </button>
+        </div>
+
+        {/* Chats Section Header (Gambar 2) */}
+        <div className="px-3.5 pt-2 pb-1 text-[11px] font-semibold text-ink-soft uppercase tracking-wider">
+          Chats
+        </div>
+
         {/* Threads List */}
-        <div className="flex-1 overflow-y-auto px-2.5 py-1 space-y-1">
-          {filteredThreads.length === 0 ? (
+        <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
+          {threads.length === 0 ? (
             <div className="p-4 text-center text-xs text-ink-soft">
-              {searchQuery ? "Tidak ada percakapan yang cocok." : "Belum ada riwayat percakapan."}
+              Belum ada riwayat percakapan.
             </div>
           ) : (
-            filteredThreads.map((t) => {
+            threads.map((t) => {
               const isActive = t.id === activeThreadId;
               const isEditing = t.id === editingThreadId;
 
@@ -503,9 +612,9 @@ export default function AsistenClient({
                 <div
                   key={t.id}
                   className={cn(
-                    "group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs transition-all",
+                    "group relative flex items-center justify-between rounded-xl px-2.5 py-2 text-xs transition-all",
                     isActive
-                      ? "bg-canvas border border-rule/90 font-medium text-ink shadow-2xs"
+                      ? "bg-canvas font-medium text-ink shadow-2xs"
                       : "text-ink-soft hover:bg-canvas/60 hover:text-ink",
                   )}
                 >
@@ -543,39 +652,54 @@ export default function AsistenClient({
                       <button
                         type="button"
                         onClick={() => setActiveThreadId(t.id)}
-                        className="flex-1 truncate text-left"
+                        className="flex-1 truncate text-left flex items-center gap-1.5"
                       >
-                        {t.title}
+                        {t.pinned && <Pin className="size-3 text-terra shrink-0 fill-current" />}
+                        <span className="truncate">{t.title}</span>
                       </button>
 
-                      {/* Action buttons (Rename & Delete) */}
-                      <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingThreadId(t.id);
-                            setEditingTitle(t.title);
-                          }}
-                          className="size-6 text-ink-soft hover:text-ink hover:bg-canvas rounded"
-                          aria-label="Edit judul sesi"
-                        >
-                          <Edit2 className="size-3" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeletingThreadId(t.id);
-                          }}
-                          className="size-6 text-ink-soft hover:text-destructive hover:bg-canvas rounded"
-                          aria-label="Hapus sesi"
-                        >
-                          <Trash2 className="size-3" />
-                        </Button>
-                      </div>
+                      {/* Dropdown Menu (More Vert Icon - Gambar 4) */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={(e) => e.stopPropagation()}
+                            className={cn(
+                              "size-6 rounded flex items-center justify-center text-ink-soft hover:text-ink hover:bg-paper transition-opacity",
+                              isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                            )}
+                            aria-label="Opsi percakapan"
+                          >
+                            <MoreHorizontal className="size-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditingThreadId(t.id);
+                              setEditingTitle(t.title);
+                            }}
+                          >
+                            <Edit2 className="size-3.5 mr-2 text-ink-soft" />
+                            <span>Ganti nama</span>
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem onClick={() => handleTogglePin(t)}>
+                            <Pin className={cn("size-3.5 mr-2 text-ink-soft", t.pinned && "fill-current text-terra")} />
+                            <span>{t.pinned ? "Lepas sematan" : "Sematkan chat"}</span>
+                          </DropdownMenuItem>
+
+                          <DropdownMenuSeparator />
+
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => setDeletingThreadId(t.id)}
+                          >
+                            <Trash2 className="size-3.5 mr-2 text-destructive" />
+                            <span>Hapus chat</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </>
                   )}
                 </div>
@@ -585,7 +709,7 @@ export default function AsistenClient({
         </div>
 
         {/* Sidebar Footer */}
-        <div className="border-t border-rule p-3 bg-paper flex items-center justify-between text-[11px] text-ink-soft">
+        <div className="border-t border-rule p-3 bg-paper flex items-center justify-between text-[11px] text-ink-soft shrink-0">
           <div className="flex items-center gap-1.5">
             <Shield className="size-3.5 text-terra" />
             <span>HITL: {initialHitlPolicy.toUpperCase()}</span>
@@ -597,6 +721,173 @@ export default function AsistenClient({
           )}
         </div>
       </aside>
+
+      {/* SEARCH MODAL (Gambar 3) */}
+      {searchModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-xs pt-20 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-rule bg-paper shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95">
+            {/* Search Input Bar */}
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-rule">
+              <Search className="size-4 text-ink-soft shrink-0" />
+              <input
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search..."
+                className="flex-1 bg-transparent text-sm text-ink placeholder:text-ink-soft/60 outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setSearchModalOpen(false)}
+                className="rounded-lg p-1 text-ink-soft hover:bg-canvas hover:text-ink"
+                aria-label="Tutup pencarian"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Search Results / Recent chats list */}
+            <div className="p-3">
+              <div className="px-2 py-1 text-xs font-semibold text-ink-soft">
+                {searchQuery ? "Hasil pencarian" : "Recent chats"}
+              </div>
+
+              <div className="mt-1 max-h-80 overflow-y-auto space-y-0.5">
+                {searchMatchingThreads.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-ink-soft">
+                    Tidak ditemukan percakapan yang cocok.
+                  </div>
+                ) : (
+                  searchMatchingThreads.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveThreadId(t.id);
+                        setSearchModalOpen(false);
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs text-ink hover:bg-canvas transition-colors text-left"
+                    >
+                      <MessageSquare className="size-4 text-ink-soft shrink-0" />
+                      <span className="truncate flex-1 font-medium">{t.title}</span>
+                      {t.pinned && <Pin className="size-3 text-terra shrink-0 fill-current" />}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIBRARY MODAL (Pustaka Berkas Yang Pernah Diunggah) */}
+      {libraryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-rule bg-paper shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in-0 zoom-in-95">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-rule shrink-0">
+              <div className="flex items-center gap-2.5">
+                <FolderOpen className="size-5 text-terra" />
+                <div>
+                  <h3 className="font-display text-base font-semibold text-ink">Pustaka Berkas (Library)</h3>
+                  <p className="text-xs text-ink-soft">Daftar semua berkas nota, faktur, dan bukti transaksi yang diunggah ke Nara.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLibraryModalOpen(false)}
+                className="rounded-lg p-1 text-ink-soft hover:bg-canvas hover:text-ink"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Library Search */}
+            <div className="px-5 py-3 border-b border-rule bg-canvas/30 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 size-3.5 text-ink-soft" />
+                <Input
+                  value={librarySearch}
+                  onChange={(e) => setLibrarySearch(e.target.value)}
+                  placeholder="Cari berkas berdasarkan nama..."
+                  className="h-8 pl-8 text-xs rounded-xl border-rule bg-paper text-ink"
+                />
+              </div>
+            </div>
+
+            {/* Library Files List */}
+            <div className="flex-1 overflow-y-auto p-5">
+              {libraryLoading ? (
+                <div className="flex items-center justify-center p-12 text-xs text-ink-soft gap-2">
+                  <Loader2 className="size-4 animate-spin text-terra" />
+                  <span>Memuat pustaka berkas...</span>
+                </div>
+              ) : filteredLibraryFiles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 text-center">
+                  <FolderOpen className="size-10 text-ink-soft/40 mb-3" />
+                  <p className="text-sm font-medium text-ink">Belum ada berkas terunggah</p>
+                  <p className="text-xs text-ink-soft mt-1">Unggah nota, kuitansi, atau faktur melalui tombol (+) di kolom pesan.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {filteredLibraryFiles.map((file) => {
+                    const isPdf = file.mime === "application/pdf";
+                    const sizeFormatted = `${(file.sizeBytes / 1024).toFixed(0)} KB`;
+                    const dateFormatted = new Date(file.createdAt).toLocaleDateString("id-ID", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    });
+
+                    return (
+                      <div
+                        key={file.id}
+                        className="flex items-center justify-between rounded-xl border border-rule bg-canvas/40 p-3 hover:bg-canvas transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-paper border border-rule">
+                            {isPdf ? <FileText className="size-4 text-terra" /> : <ImageIcon className="size-4 text-blue-600" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-ink truncate" title={file.fileName}>
+                              {file.fileName}
+                            </p>
+                            <p className="text-[10px] text-ink-soft mt-0.5">
+                              {sizeFormatted} • {dateFormatted}
+                            </p>
+                          </div>
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            // Attach this file to the current turn!
+                            setAttachments((prev) => [
+                              ...prev,
+                              {
+                                id: file.id,
+                                fileName: file.fileName,
+                                mime: file.mime,
+                                sizeBytes: file.sizeBytes,
+                                storageKey: file.storageKey,
+                              },
+                            ]);
+                            setLibraryModalOpen(false);
+                          }}
+                          className="h-7 text-[10px] px-2 text-terra hover:text-terra hover:bg-paper"
+                        >
+                          Lampirkan
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {deletingThreadId && (
@@ -630,8 +921,8 @@ export default function AsistenClient({
 
       {/* 2. AREA PERCAKAPAN UTAMA (Canvas & Messages) */}
       <main className="relative flex flex-1 min-h-0 flex-col overflow-hidden min-w-0">
-        {/* Subtle Chat Header */}
-        <div className="flex h-12 items-center justify-between border-b border-rule bg-paper/60 px-4 md:px-6 backdrop-blur-sm shrink-0">
+        {/* Main Header (Exactly h-14 to match Sidebar Header line!) */}
+        <div className="flex h-14 items-center justify-between border-b border-rule bg-paper/60 px-4 md:px-6 backdrop-blur-sm shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             {!sidebarOpen && (
               <Button
@@ -977,7 +1268,7 @@ export default function AsistenClient({
                   />
                 </PromptInputTools>
 
-                {/* 4. Tombol Submit / Stop */}
+                {/* 4. Tombol Submit / Stop dengan icon Enter */}
                 <PromptInputSubmit
                   isStreaming={isStreaming}
                   onStop={handleStopStreaming}

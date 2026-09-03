@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, Square } from "lucide-react";
+import { CornerDownLeft, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +64,11 @@ export const PromptInputTextarea = React.forwardRef<
   const internalRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter") {
+      if (e.altKey || e.shiftKey) {
+        // Alt+Enter or Shift+Enter allows newline without sending
+        return;
+      }
       e.preventDefault();
       onSubmit?.();
     }
@@ -188,10 +192,11 @@ export const PromptInputSubmit = React.forwardRef<
       )}
       onClick={onClick}
       disabled={disabled}
-      aria-label="Kirim pesan"
+      aria-label="Kirim pesan (Enter)"
+      title="Kirim (Enter, Alt+Enter untuk baris baru)"
       {...props}
     >
-      <ArrowUp className="size-4" />
+      <CornerDownLeft className="size-4" />
     </Button>
   );
 });

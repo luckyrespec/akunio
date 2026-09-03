@@ -80,8 +80,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: quota.message ?? "Kuota interaksi AI habis bulan ini." }, { status: 429 });
     }
 
+function generateSmartTitle(prompt: string): string {
+  if (!prompt) return "Percakapan Baru";
+  const clean = prompt
+    .replace(/^(tolong|mohon|bisa|coba|tolong buatkan|catat transaksi|tampilkan|apakah|bagaimana|cek|lihat)\s+/i, "")
+    .replace(/[?.!,;:]+$/g, "")
+    .trim();
+
+  const words = clean.split(/\s+/).slice(0, 3);
+  if (words.length === 0 || !words[0]) return "Percakapan Baru";
+
+  return words
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
     if (!threadId) {
-      const title = trimmedMsg.split(/\s+/).slice(0, 5).join(" ") || "Percakapan baru";
+      const title = generateSmartTitle(trimmedMsg);
       const newT = await db.transaction((tx) => createThread(tx, ctx.orgId, title, modelPreset));
       threadId = newT.id;
     } else {

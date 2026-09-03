@@ -23,7 +23,7 @@ export async function listThreads(q: Queryable, orgId: string): Promise<ChatThre
     .select()
     .from(chatThreads)
     .where(eq(chatThreads.orgId, orgId))
-    .orderBy(desc(chatThreads.updatedAt));
+    .orderBy(desc(chatThreads.pinned), desc(chatThreads.updatedAt));
 }
 
 export async function getThread(q: Queryable, orgId: string, threadId: string): Promise<ChatThread | null> {
