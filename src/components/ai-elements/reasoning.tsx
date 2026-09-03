@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Sparkles, Brain } from "lucide-react";
+import { ChevronDown, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ReasoningContextValue {
@@ -59,7 +59,7 @@ export function Reasoning({
     <ReasoningContext.Provider value={{ isOpen, setIsOpen, isStreaming, duration }}>
       <div
         className={cn(
-          "my-2 rounded-xl border border-border/60 bg-muted/40 text-xs text-muted-foreground transition-all",
+          "my-2.5 rounded-xl border border-rule/80 bg-canvas/60 text-xs text-ink-soft transition-all",
           className,
         )}
         {...props}
@@ -82,16 +82,16 @@ export function ReasoningTrigger({
       type="button"
       onClick={() => setIsOpen(!isOpen)}
       className={cn(
-        "flex w-full items-center justify-between px-3.5 py-2.5 font-medium transition-colors hover:text-foreground",
+        "flex w-full items-center justify-between px-3.5 py-2 font-medium transition-colors hover:text-ink text-ink-soft",
         className,
       )}
       {...props}
     >
       <div className="flex items-center gap-2">
-        <Brain className={cn("size-3.5", isStreaming && "animate-pulse text-amber-600 dark:text-amber-400")} />
-        <span>{children ?? (isStreaming ? "Sedang menganalisis..." : "Proses Berpikir")}</span>
+        <Brain className={cn("size-3.5", isStreaming ? "animate-pulse text-terra" : "text-ink-soft")} />
+        <span>{children ?? (isStreaming ? "Sedang menimbang aturan akuntansi..." : "Proses Berpikir (Chain of Thought)")}</span>
         {duration !== undefined && !isStreaming && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+          <span className="rounded bg-rule/50 px-1.5 py-0.5 text-[10px] font-mono text-ink-soft">
             {duration.toFixed(1)}s
           </span>
         )}
@@ -115,7 +115,7 @@ export function ReasoningContent({
   return (
     <div
       className={cn(
-        "border-t border-border/50 px-3.5 py-2.5 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground/80",
+        "border-t border-rule/70 px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-ink/80 bg-canvas/30",
         className,
       )}
       {...props}

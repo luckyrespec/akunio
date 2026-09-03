@@ -37,10 +37,10 @@ export const MessageContent = React.forwardRef<HTMLDivElement, MessageContentPro
       <div
         ref={ref}
         className={cn(
-          "relative max-w-[85%] rounded-2xl px-4 py-3 shadow-xs md:max-w-[75%]",
+          "relative max-w-[88%] md:max-w-[80%] rounded-2xl px-5 py-3.5 shadow-xs transition-all",
           from === "user"
-            ? "bg-primary text-primary-foreground"
-            : "border border-border/70 bg-card text-card-foreground",
+            ? "bg-terra text-white"
+            : "border border-rule bg-paper text-ink",
           className,
         )}
         {...props}
@@ -60,8 +60,8 @@ export const MessageResponse = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "prose prose-sm dark:prose-invert max-w-none break-words leading-relaxed",
-        "prose-p:leading-relaxed prose-pre:bg-muted prose-pre:border prose-pre:border-border",
+        "prose prose-sm dark:prose-invert max-w-none break-words leading-relaxed text-ink",
+        "prose-p:leading-relaxed prose-p:my-1.5 prose-pre:bg-canvas prose-pre:border prose-pre:border-rule prose-pre:text-ink prose-headings:font-display prose-headings:text-ink",
         className,
       )}
       {...props}

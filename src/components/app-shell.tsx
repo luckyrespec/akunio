@@ -12,6 +12,7 @@ const STORAGE_KEY = "neraca:sidebar-collapsed";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -21,6 +22,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     } catch {}
     setReady(true);
   }, []);
+
+  // Close mobile drawer on route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   function toggle() {
     setCollapsed((v) => {
@@ -32,30 +38,61 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   }
 
+  const isAsisten = pathname.startsWith("/asisten");
+
   // Avoid flash of wrong width before localStorage read
   if (!ready) {
     return (
-      <div className="flex min-h-screen w-full">
-        <SidebarNav collapsed={false} />
-        <div className="flex min-h-0 flex-1 flex-col">
-          <Topbar onToggleSidebar={toggle} />
-          <main className="flex-1 px-(--gutter) py-(--gutter) lg:px-(--gutter-lg)">{children}</main>
+      <div className="flex min-h-screen w-full bg-canvas">
+        <SidebarNav
+          collapsed={false}
+          mobileOpen={mobileMenuOpen}
+          onCloseMobile={() => setMobileMenuOpen(false)}
+        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden">
+          <Topbar
+            onToggleSidebar={toggle}
+            onOpenMobile={() => setMobileMenuOpen(true)}
+          />
+          <main
+            className={
+              isAsisten
+                ? "flex-1 w-full h-[calc(100vh-3.5rem)] overflow-hidden p-0 m-0 max-w-none"
+                : "flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8"
+            }
+          >
+            {children}
+          </main>
         </div>
-        <AssistantWidget />
+        {!isAsisten && <AssistantWidget />}
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-[1600px]">
-      <SidebarNav collapsed={collapsed} onToggle={toggle} />
-      <div className="flex min-h-0 flex-1 flex-col">
-        <Topbar onToggleSidebar={toggle} />
-        <main className="flex-1 px-(--gutter) py-(--gutter) lg:px-(--gutter-lg)">
+    <div className="flex min-h-screen w-full bg-canvas">
+      <SidebarNav
+        collapsed={collapsed}
+        onToggle={toggle}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
+      />
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden">
+        <Topbar
+          onToggleSidebar={toggle}
+          onOpenMobile={() => setMobileMenuOpen(true)}
+        />
+        <main
+          className={
+            isAsisten
+              ? "flex-1 w-full h-[calc(100vh-3.5rem)] overflow-hidden p-0 m-0 max-w-none"
+              : "flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8"
+          }
+        >
           <PageTransition key={pathname}>{children}</PageTransition>
         </main>
       </div>
-      <AssistantWidget />
+      {!isAsisten && <AssistantWidget />}
     </div>
   );
 }

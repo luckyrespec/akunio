@@ -59,7 +59,7 @@ export const Conversation = React.forwardRef<HTMLDivElement, ConversationProps>(
         <div
           ref={containerRef}
           onScroll={handleScroll}
-          className={cn("relative flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth", className)}
+          className={cn("relative flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 scroll-smooth bg-canvas", className)}
           {...props}
         >
           {children}
@@ -74,7 +74,7 @@ export const ConversationContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("mx-auto max-w-4xl space-y-6", className)} {...props} />
+  <div ref={ref} className={cn("mx-auto max-w-4xl lg:max-w-5xl space-y-6", className)} {...props} />
 ));
 ConversationContent.displayName = "ConversationContent";
 
@@ -92,7 +92,7 @@ export const ConversationScrollButton = React.forwardRef<
       variant="secondary"
       size="icon"
       className={cn(
-        "absolute bottom-6 right-6 z-20 size-9 rounded-full shadow-md transition-opacity hover:opacity-100",
+        "absolute bottom-6 right-6 z-20 size-9 rounded-full shadow-md transition-opacity hover:opacity-100 border border-rule bg-paper text-ink",
         className,
       )}
       onClick={scrollToBottom}
@@ -122,15 +122,15 @@ export function ConversationEmptyState({
   return (
     <div
       className={cn(
-        "flex min-h-[400px] flex-col items-center justify-center p-8 text-center",
+        "flex min-h-[420px] flex-col items-center justify-center p-6 md:p-10 text-center",
         className,
       )}
       {...props}
     >
-      {icon && <div className="mb-4 text-muted-foreground">{icon}</div>}
-      <h3 className="font-serif text-2xl font-normal tracking-tight text-foreground">{title}</h3>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
-      {children && <div className="mt-6 w-full max-w-xl">{children}</div>}
+      {icon && <div className="mb-4 text-terra">{icon}</div>}
+      <h3 className="font-display text-2xl md:text-3xl font-normal tracking-tight text-ink">{title}</h3>
+      <p className="mt-2 max-w-lg text-sm text-ink-soft leading-relaxed">{description}</p>
+      {children && <div className="mt-8 w-full max-w-2xl">{children}</div>}
     </div>
   );
 }

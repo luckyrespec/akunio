@@ -46,15 +46,15 @@ export function ModelSelector({
         size="sm"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
-        className="h-8 gap-1.5 rounded-full px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+        className="h-8 gap-1.5 rounded-full border border-rule/70 bg-paper px-3 text-xs font-medium text-ink shadow-2xs hover:bg-canvas transition-colors"
       >
-        <CurrentIcon className={cn("size-3.5", value === "deep" ? "text-purple-500" : "text-amber-500")} />
+        <CurrentIcon className={cn("size-3.5", value === "deep" ? "text-purple-600" : "text-amber-600")} />
         <span>{currentLabel}</span>
-        <ChevronDown className="size-3 opacity-60" />
+        <ChevronDown className="size-3 text-ink-soft" />
       </Button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 z-50 mb-1.5 w-56 rounded-xl border border-border/80 bg-popover p-1 text-popover-foreground shadow-lg backdrop-blur-md">
+        <div className="absolute bottom-full left-0 z-50 mb-1.5 w-60 rounded-xl border border-rule bg-paper p-1.5 text-ink shadow-md backdrop-blur-md">
           <button
             type="button"
             onClick={() => {
@@ -62,14 +62,14 @@ export function ModelSelector({
               setIsOpen(false);
             }}
             className={cn(
-              "flex w-full items-start gap-2.5 rounded-lg p-2 text-left text-xs transition-colors hover:bg-accent",
-              value === "fast" && "bg-accent font-medium",
+              "flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left text-xs transition-colors hover:bg-canvas",
+              value === "fast" && "bg-canvas font-medium border border-rule/60",
             )}
           >
-            <Zap className="mt-0.5 size-4 text-amber-500 shrink-0" />
+            <Zap className="mt-0.5 size-4 text-amber-600 shrink-0" />
             <div>
-              <div className="font-semibold text-foreground">Nara Kilat (Flash)</div>
-              <div className="text-[11px] text-muted-foreground">Eksekusi cepat untuk tugas dan pencarian rutin</div>
+              <div className="font-semibold text-ink">Nara Kilat (Flash)</div>
+              <div className="text-[11px] text-ink-soft">Eksekusi cepat untuk tugas dan pencarian rutin</div>
             </div>
           </button>
 
@@ -80,14 +80,14 @@ export function ModelSelector({
               setIsOpen(false);
             }}
             className={cn(
-              "flex w-full items-start gap-2.5 rounded-lg p-2 text-left text-xs transition-colors hover:bg-accent",
-              value === "deep" && "bg-accent font-medium",
+              "flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left text-xs transition-colors hover:bg-canvas",
+              value === "deep" && "bg-canvas font-medium border border-rule/60",
             )}
           >
-            <Brain className="mt-0.5 size-4 text-purple-500 shrink-0" />
+            <Brain className="mt-0.5 size-4 text-purple-600 shrink-0" />
             <div>
-              <div className="font-semibold text-foreground">Nara Analis (Deep Thinking)</div>
-              <div className="text-[11px] text-muted-foreground">Penalaran bertahap untuk audit & rekonsiliasi kompleks</div>
+              <div className="font-semibold text-ink">Nara Analis (Deep Thinking)</div>
+              <div className="text-[11px] text-ink-soft">Penalaran bertahap untuk audit & rekonsiliasi kompleks</div>
             </div>
           </button>
         </div>

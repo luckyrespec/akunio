@@ -17,9 +17,7 @@ import {
   AlertCircle,
   FileCheck,
   Loader2,
-  ArrowUpRight,
   Shield,
-  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -441,29 +439,29 @@ export default function AsistenClient({
   );
 
   return (
-    <div className="flex h-[calc(100vh-4.25rem)] w-full overflow-hidden bg-background">
-      {/* 1. SIDEBAR SESI PERCAKAPAN (ChatGPT Style) */}
+    <div className="flex h-full w-full overflow-hidden bg-canvas">
+      {/* 1. SIDEBAR SESI PERCAKAPAN (Paper & Ink Matte Theme) */}
       <aside
         className={cn(
-          "relative flex flex-col border-r border-border/80 bg-card/60 backdrop-blur-xs transition-all duration-300 ease-in-out",
+          "relative flex flex-col border-r border-rule bg-paper transition-all duration-300 ease-in-out shrink-0",
           sidebarOpen ? "w-72 md:w-80" : "w-0 -translate-x-full overflow-hidden border-r-0 md:w-0",
         )}
       >
         {/* Sidebar Header */}
-        <div className="flex items-center justify-between p-3.5 border-b border-border/60">
+        <div className="flex items-center justify-between p-3.5 border-b border-rule">
           <Button
             onClick={handleNewChat}
             variant="outline"
-            className="flex-1 justify-start gap-2 h-9 text-xs font-medium rounded-xl border-border/80 bg-background/80 hover:bg-muted"
+            className="flex-1 justify-start gap-2 h-9 text-xs font-medium rounded-xl border-rule bg-canvas/70 hover:bg-canvas text-ink shadow-2xs transition-colors"
           >
-            <Plus className="size-4 text-primary" />
+            <Plus className="size-4 text-terra" />
             <span>Percakapan Baru</span>
           </Button>
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setSidebarOpen(false)}
-            className="ml-1.5 size-8 text-muted-foreground hover:text-foreground"
+            className="ml-1.5 size-8 text-ink-soft hover:text-ink hover:bg-canvas rounded-lg"
             aria-label="Tutup sidebar"
           >
             <SidebarClose className="size-4" />
@@ -471,22 +469,22 @@ export default function AsistenClient({
         </div>
 
         {/* Search Threads */}
-        <div className="px-3.5 py-2">
+        <div className="px-3.5 py-2.5">
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2.5 size-3.5 text-ink-soft" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari percakapan..."
-              className="h-8 pl-8 text-xs rounded-lg border-border/60 bg-muted/40"
+              className="h-8 pl-8 text-xs rounded-xl border-rule bg-canvas/50 text-ink placeholder:text-ink-soft/60 focus-visible:ring-terra/30"
             />
           </div>
         </div>
 
         {/* Threads List */}
-        <div className="flex-1 overflow-y-auto px-2 py-1 space-y-1">
+        <div className="flex-1 overflow-y-auto px-2.5 py-1 space-y-1">
           {filteredThreads.length === 0 ? (
-            <div className="p-4 text-center text-xs text-muted-foreground">
+            <div className="p-4 text-center text-xs text-ink-soft">
               {searchQuery ? "Tidak ada percakapan yang cocok." : "Belum ada riwayat percakapan."}
             </div>
           ) : (
@@ -500,8 +498,8 @@ export default function AsistenClient({
                   className={cn(
                     "group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs transition-all",
                     isActive
-                      ? "bg-accent font-medium text-accent-foreground shadow-2xs"
-                      : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                      ? "bg-canvas border border-rule/90 font-medium text-ink shadow-2xs"
+                      : "text-ink-soft hover:bg-canvas/60 hover:text-ink",
                   )}
                 >
                   {isEditing ? (
@@ -514,7 +512,7 @@ export default function AsistenClient({
                           if (e.key === "Escape") setEditingThreadId(null);
                         }}
                         autoFocus
-                        className="h-7 text-xs"
+                        className="h-7 text-xs border-rule bg-paper text-ink"
                       />
                       <Button
                         size="icon"
@@ -527,7 +525,7 @@ export default function AsistenClient({
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-7 text-muted-foreground"
+                        className="size-7 text-ink-soft"
                         onClick={() => setEditingThreadId(null)}
                       >
                         <X className="size-3.5" />
@@ -553,7 +551,7 @@ export default function AsistenClient({
                             setEditingThreadId(t.id);
                             setEditingTitle(t.title);
                           }}
-                          className="size-6 text-muted-foreground hover:text-foreground"
+                          className="size-6 text-ink-soft hover:text-ink hover:bg-canvas rounded"
                           aria-label="Edit judul sesi"
                         >
                           <Edit2 className="size-3" />
@@ -565,7 +563,7 @@ export default function AsistenClient({
                             e.stopPropagation();
                             setDeletingThreadId(t.id);
                           }}
-                          className="size-6 text-muted-foreground hover:text-destructive"
+                          className="size-6 text-ink-soft hover:text-destructive hover:bg-canvas rounded"
                           aria-label="Hapus sesi"
                         >
                           <Trash2 className="size-3" />
@@ -580,13 +578,13 @@ export default function AsistenClient({
         </div>
 
         {/* Sidebar Footer */}
-        <div className="border-t border-border/60 p-3 bg-muted/20 flex items-center justify-between text-[11px] text-muted-foreground">
+        <div className="border-t border-rule p-3 bg-paper flex items-center justify-between text-[11px] text-ink-soft">
           <div className="flex items-center gap-1.5">
-            <Shield className="size-3.5 text-primary" />
+            <Shield className="size-3.5 text-terra" />
             <span>HITL: {initialHitlPolicy.toUpperCase()}</span>
           </div>
           {allowAllForSession && (
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-amber-500/40 text-amber-600">
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-amber-600/40 text-amber-700 bg-amber-50 dark:bg-amber-950/30">
               Auto-Allow
             </Badge>
           )}
@@ -596,16 +594,16 @@ export default function AsistenClient({
       {/* Delete Confirmation Modal */}
       {deletingThreadId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl">
-            <h4 className="text-sm font-semibold text-foreground">Hapus Percakapan Ini?</h4>
-            <p className="mt-1 text-xs text-muted-foreground">
+          <div className="w-full max-w-sm rounded-2xl border border-rule bg-paper p-5 shadow-xl">
+            <h4 className="font-display text-sm font-semibold text-ink">Hapus Percakapan Ini?</h4>
+            <p className="mt-1 text-xs text-ink-soft leading-relaxed">
               Semua pesan dan riwayat interaksi di dalam percakapan ini akan dihapus secara permanen.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs"
+                className="h-8 text-xs border-rule"
                 onClick={() => setDeletingThreadId(null)}
               >
                 Batal
@@ -624,22 +622,22 @@ export default function AsistenClient({
       )}
 
       {/* 2. AREA PERCAKAPAN UTAMA (Canvas & Messages) */}
-      <main className="relative flex flex-1 flex-col overflow-hidden">
-        {/* Top bar header when sidebar is collapsed */}
-        <div className="flex h-12 items-center justify-between border-b border-border/70 px-4">
-          <div className="flex items-center gap-2">
+      <main className="relative flex flex-1 flex-col overflow-hidden min-w-0">
+        {/* Top bar header */}
+        <div className="flex h-14 items-center justify-between border-b border-rule bg-paper/80 px-4 md:px-6 backdrop-blur-md shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
             {!sidebarOpen && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setSidebarOpen(true)}
-                className="size-8 text-muted-foreground hover:text-foreground"
+                className="size-8 text-ink-soft hover:text-ink hover:bg-canvas rounded-lg"
                 aria-label="Buka sidebar"
               >
                 <SidebarOpen className="size-4" />
               </Button>
             )}
-            <h2 className="text-sm font-medium text-foreground truncate max-w-md">
+            <h2 className="font-display text-sm md:text-base font-semibold text-ink truncate max-w-lg">
               {threads.find((t) => t.id === activeThreadId)?.title || "Percakapan Baru"}
             </h2>
           </div>
@@ -657,7 +655,7 @@ export default function AsistenClient({
         {errorBanner && (
           <div className="flex items-center justify-between bg-destructive/10 border-b border-destructive/20 px-4 py-2 text-xs text-destructive">
             <div className="flex items-center gap-2">
-              <AlertCircle className="size-4" />
+              <AlertCircle className="size-4 shrink-0" />
               <span>{errorBanner}</span>
             </div>
             <Button
@@ -676,22 +674,24 @@ export default function AsistenClient({
           <ConversationContent>
             {messages.length === 0 && !isStreaming ? (
               <ConversationEmptyState
-                icon={<Sparkles className="size-10 text-primary/80" />}
+                icon={<Sparkles className="size-10 text-terra" />}
                 title="Ada yang bisa Nara bantu hari ini?"
                 description="Konsultasikan pembukuan, minta ringkasan laporan keuangan, atau catat transaksi langsung dari foto nota."
               >
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 text-left mt-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-left mt-4">
                   <button
                     type="button"
                     onClick={() => {
                       setInput("Catat transaksi pembelian perlengkapan kantor Rp 350.000 tunai");
                     }}
-                    className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-xs shadow-2xs transition-all hover:border-primary/50 hover:bg-accent/40"
+                    className="flex items-start gap-3 rounded-2xl border border-rule bg-paper p-4 text-xs shadow-2xs transition-all hover:border-terra/70 hover:shadow-xs"
                   >
-                    <Receipt className="mt-0.5 size-4 text-amber-500 shrink-0" />
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-700">
+                      <Receipt className="size-4" />
+                    </div>
                     <div>
-                      <div className="font-semibold text-foreground">Catat Pengeluaran</div>
-                      <div className="text-[11px] text-muted-foreground">Beli ATK, bensin, atau konsumsi operasional</div>
+                      <div className="font-display font-semibold text-ink text-sm">Catat Pengeluaran</div>
+                      <div className="mt-0.5 text-[11px] text-ink-soft leading-relaxed">Beli ATK, bensin, atau konsumsi operasional</div>
                     </div>
                   </button>
 
@@ -701,12 +701,14 @@ export default function AsistenClient({
                       setInput("Tampilkan ringkasan laporan laba rugi bulan ini");
                       handleSendMessage("Tampilkan ringkasan laporan laba rugi bulan ini");
                     }}
-                    className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-xs shadow-2xs transition-all hover:border-primary/50 hover:bg-accent/40"
+                    className="flex items-start gap-3 rounded-2xl border border-rule bg-paper p-4 text-xs shadow-2xs transition-all hover:border-terra/70 hover:shadow-xs"
                   >
-                    <FileSpreadsheet className="mt-0.5 size-4 text-emerald-500 shrink-0" />
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
+                      <FileSpreadsheet className="size-4" />
+                    </div>
                     <div>
-                      <div className="font-semibold text-foreground">Laporan Laba Rugi</div>
-                      <div className="text-[11px] text-muted-foreground">Lihat pendapatan dan total beban berjalan</div>
+                      <div className="font-display font-semibold text-ink text-sm">Laporan Laba Rugi</div>
+                      <div className="mt-0.5 text-[11px] text-ink-soft leading-relaxed">Lihat pendapatan dan total beban berjalan</div>
                     </div>
                   </button>
 
@@ -716,12 +718,14 @@ export default function AsistenClient({
                       setInput("Berapa saldo kas dan bank saat ini?");
                       handleSendMessage("Berapa saldo kas dan bank saat ini?");
                     }}
-                    className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-xs shadow-2xs transition-all hover:border-primary/50 hover:bg-accent/40"
+                    className="flex items-start gap-3 rounded-2xl border border-rule bg-paper p-4 text-xs shadow-2xs transition-all hover:border-terra/70 hover:shadow-xs"
                   >
-                    <FileCheck className="mt-0.5 size-4 text-blue-500 shrink-0" />
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700">
+                      <FileCheck className="size-4" />
+                    </div>
                     <div>
-                      <div className="font-semibold text-foreground">Cek Saldo Kas & Bank</div>
-                      <div className="text-[11px] text-muted-foreground">Posisi likuiditas kas & rekening bank live</div>
+                      <div className="font-display font-semibold text-ink text-sm">Cek Saldo Kas & Bank</div>
+                      <div className="mt-0.5 text-[11px] text-ink-soft leading-relaxed">Posisi likuiditas kas & rekening bank live</div>
                     </div>
                   </button>
 
@@ -731,12 +735,14 @@ export default function AsistenClient({
                       setInput("Jalankan diagnosa kesehatan pembukuan dan cek temuan anomali");
                       handleSendMessage("Jalankan diagnosa kesehatan pembukuan dan cek temuan anomali");
                     }}
-                    className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-xs shadow-2xs transition-all hover:border-primary/50 hover:bg-accent/40"
+                    className="flex items-start gap-3 rounded-2xl border border-rule bg-paper p-4 text-xs shadow-2xs transition-all hover:border-terra/70 hover:shadow-xs"
                   >
-                    <Shield className="mt-0.5 size-4 text-purple-500 shrink-0" />
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-700">
+                      <Shield className="size-4" />
+                    </div>
                     <div>
-                      <div className="font-semibold text-foreground">Diagnosa Kesehatan</div>
-                      <div className="text-[11px] text-muted-foreground">Audit anomali saldo & jurnal tidak seimbang</div>
+                      <div className="font-display font-semibold text-ink text-sm">Diagnosa Kesehatan</div>
+                      <div className="mt-0.5 text-[11px] text-ink-soft leading-relaxed">Audit anomali saldo & jurnal tidak seimbang</div>
                     </div>
                   </button>
                 </div>
@@ -747,14 +753,14 @@ export default function AsistenClient({
                   <MessageContent from={m.role}>
                     {/* User attachments preview */}
                     {m.role === "user" && m.attachments && m.attachments.length > 0 && (
-                      <div className="mb-2 flex flex-wrap gap-1.5">
+                      <div className="mb-2.5 flex flex-wrap gap-1.5">
                         {m.attachments.map((att) => (
                           <div
                             key={att.id}
-                            className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2 py-1 text-xs text-primary-foreground"
+                            className="flex items-center gap-1.5 rounded-lg bg-white/20 px-2.5 py-1 text-xs text-white"
                           >
                             <Paperclip className="size-3" />
-                            <span className="truncate max-w-[120px] font-medium">{att.fileName}</span>
+                            <span className="truncate max-w-[140px] font-medium">{att.fileName}</span>
                           </div>
                         ))}
                       </div>
@@ -770,16 +776,16 @@ export default function AsistenClient({
 
                     {/* Tool Invocations Badge / Details */}
                     {m.toolInvocations && m.toolInvocations.length > 0 && (
-                      <div className="my-1.5 flex flex-wrap gap-1.5">
+                      <div className="my-2 flex flex-wrap gap-1.5">
                         {m.toolInvocations.map((ti, i) => (
                           <Badge
                             key={i}
                             variant="outline"
                             className={cn(
-                              "text-[10px] font-mono",
+                              "text-[10px] font-mono rounded-md px-2 py-0.5",
                               ti.status === "approved" || ti.status === "auto"
-                                ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
-                                : "border-muted-foreground/30 text-muted-foreground",
+                                ? "border-emerald-600/30 text-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/30"
+                                : "border-rule text-ink-soft bg-canvas/60",
                             )}
                           >
                             ✓ {ti.toolName} ({ti.status})
@@ -793,10 +799,10 @@ export default function AsistenClient({
 
                     {/* Citations */}
                     {m.citations && m.citations.length > 0 && (
-                      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border/40 pt-2 text-[10px] text-muted-foreground">
-                        <span className="font-semibold">Sumber:</span>
+                      <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-rule/60 pt-2.5 text-[10px] text-ink-soft">
+                        <span className="font-semibold text-ink">Sumber Referensi:</span>
                         {m.citations.map((c, i) => (
-                          <span key={i} className="rounded bg-muted px-1.5 py-0.5 font-mono">
+                          <span key={i} className="rounded bg-canvas px-1.5 py-0.5 font-mono border border-rule/50">
                             [{c.kind} {c.section ?? c.ref}]
                           </span>
                         ))}
@@ -823,8 +829,8 @@ export default function AsistenClient({
                   {streamingText ? (
                     <MessageResponse>{streamingText}</MessageResponse>
                   ) : (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-                      <Loader2 className="size-3.5 animate-spin" />
+                    <div className="flex items-center gap-2 text-xs text-ink-soft py-1">
+                      <Loader2 className="size-3.5 animate-spin text-terra" />
                       <span>Nara sedang menyusun jawaban...</span>
                     </div>
                   )}
@@ -840,15 +846,15 @@ export default function AsistenClient({
                     Konfirmasi Aksi: {pendingApproval.toolName.replace(/_/g, " ").toUpperCase()}
                   </ConfirmationTitle>
                   <ConfirmationRequest>
-                    <p className="font-sans text-xs">{pendingApproval.explanation}</p>
-                    <div className="rounded-lg bg-background/80 p-2.5 font-mono text-[11px] leading-relaxed border border-border/60">
+                    <p className="font-sans text-xs text-ink">{pendingApproval.explanation}</p>
+                    <div className="rounded-xl bg-canvas p-3 font-mono text-[11px] leading-relaxed border border-rule text-ink">
                       {JSON.stringify(pendingApproval.args, null, 2)}
                     </div>
                   </ConfirmationRequest>
                   <ConfirmationActions>
                     <ConfirmationAction
                       variant="default"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white"
                       disabled={confirmingLoading}
                       onClick={() => handleToolDecision(true, false)}
                     >
@@ -858,6 +864,7 @@ export default function AsistenClient({
 
                     <ConfirmationAction
                       variant="outline"
+                      className="border-rule text-ink hover:bg-canvas"
                       disabled={confirmingLoading}
                       onClick={() => handleToolDecision(true, true)}
                     >
@@ -880,9 +887,9 @@ export default function AsistenClient({
           <ConversationScrollButton />
         </Conversation>
 
-        {/* 3. BILAH INPUT BAWAH (Sticky Prompt Input) */}
-        <div className="border-t border-border/70 bg-card/50 p-4 backdrop-blur-xs">
-          <div className="mx-auto max-w-3xl">
+        {/* 3. BILAH INPUT BAWAH (Sticky Prompt Input - Full Width Container) */}
+        <div className="border-t border-rule bg-paper/80 p-4 md:p-6 backdrop-blur-md shrink-0">
+          <div className="mx-auto max-w-4xl lg:max-w-5xl">
             {/* Attachment Chips Preview */}
             <Attachments>
               {attachments.map((att) => (
@@ -893,8 +900,8 @@ export default function AsistenClient({
                 />
               ))}
               {uploading && (
-                <div className="flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
+                <div className="flex items-center gap-1.5 rounded-xl border border-rule bg-canvas px-3 py-1.5 text-xs text-ink-soft">
+                  <Loader2 className="size-3.5 animate-spin text-terra" />
                   <span>Mengunggah berkas...</span>
                 </div>
               )}
@@ -910,7 +917,7 @@ export default function AsistenClient({
               />
 
               <PromptInputActions>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   {/* Hidden File Input */}
                   <input
                     ref={fileInputRef}
@@ -928,7 +935,7 @@ export default function AsistenClient({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="size-8 rounded-full text-ink-soft hover:bg-canvas hover:text-ink transition-colors"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading || isStreaming}
                     aria-label="Lampirkan dokumen atau nota"

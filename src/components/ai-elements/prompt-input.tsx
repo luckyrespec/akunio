@@ -15,7 +15,7 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
       <div
         ref={ref}
         className={cn(
-          "relative flex flex-col w-full rounded-2xl border border-border/80 bg-card p-3 shadow-sm transition-all focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20",
+          "relative flex flex-col w-full rounded-2xl border border-rule bg-paper p-3 shadow-xs transition-all focus-within:border-terra/70 focus-within:ring-2 focus-within:ring-terra/15",
           className,
         )}
         {...props}
@@ -61,7 +61,7 @@ export const PromptInputTextarea = React.forwardRef<
       onKeyDown={handleKeyDown}
       onChange={handleChange}
       className={cn(
-        "max-h-[200px] min-h-[36px] w-full resize-none border-0 bg-transparent px-1 py-1 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0",
+        "max-h-[200px] min-h-[38px] w-full resize-none border-0 bg-transparent px-1.5 py-1 text-sm leading-relaxed text-ink placeholder:text-ink-soft/60 focus:outline-none focus:ring-0",
         className,
       )}
       {...props}
@@ -77,7 +77,7 @@ export function PromptInputActions({
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("mt-2 flex items-center justify-between gap-2 pt-1 border-t border-border/30", className)}
+      className={cn("mt-2 flex items-center justify-between gap-2 pt-1.5 border-t border-rule/50", className)}
       {...props}
     >
       {children}
@@ -102,7 +102,7 @@ export const PromptInputSubmit = React.forwardRef<
         type="button"
         size="icon"
         variant="destructive"
-        className={cn("size-8 rounded-full shadow-xs transition-transform active:scale-95", className)}
+        className={cn("size-8 rounded-full shadow-2xs transition-transform active:scale-95", className)}
         onClick={onStop}
         aria-label="Stop response"
         {...props}
@@ -118,7 +118,7 @@ export const PromptInputSubmit = React.forwardRef<
       type="button"
       size="icon"
       className={cn(
-        "size-8 rounded-full bg-primary text-primary-foreground shadow-xs transition-transform hover:opacity-90 active:scale-95 disabled:opacity-40",
+        "size-8 rounded-full bg-terra text-white shadow-2xs transition-transform hover:bg-terra/90 active:scale-95 disabled:opacity-40 disabled:hover:bg-terra",
         className,
       )}
       onClick={onClick}

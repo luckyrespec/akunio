@@ -19,10 +19,10 @@ export function Confirmation({
     <div
       data-status={status}
       className={cn(
-        "my-3 rounded-xl border p-4 shadow-xs transition-all",
-        status === "pending" && "border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/20",
-        status === "approved" && "border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20",
-        status === "rejected" && "border-rose-500/30 bg-rose-500/5 dark:bg-rose-950/20",
+        "my-3 rounded-2xl border p-4 shadow-xs transition-all bg-paper",
+        status === "pending" && "border-amber-600/30 bg-amber-500/5",
+        status === "approved" && "border-emerald-600/30 bg-emerald-500/5",
+        status === "rejected" && "border-rose-600/30 bg-rose-500/5",
         className,
       )}
       {...props}
@@ -39,10 +39,10 @@ export function ConfirmationTitle({
 }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h4
-      className={cn("flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground", className)}
+      className={cn("flex items-center gap-2 text-sm font-semibold tracking-tight text-ink font-display", className)}
       {...props}
     >
-      <ShieldAlert className="size-4 text-amber-600 dark:text-amber-400" />
+      <ShieldAlert className="size-4 text-terra" />
       <span>{children}</span>
     </h4>
   );
@@ -54,7 +54,7 @@ export function ConfirmationRequest({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("mt-2 text-xs text-foreground/90 space-y-2", className)} {...props}>
+    <div className={cn("mt-2 text-xs text-ink/90 space-y-2", className)} {...props}>
       {children}
     </div>
   );
@@ -68,7 +68,7 @@ export function ConfirmationAccepted({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300",
+        "flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-400",
         className,
       )}
       {...props}
@@ -87,7 +87,7 @@ export function ConfirmationRejected({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-xs font-medium text-rose-700 dark:text-rose-300",
+        "flex items-center gap-2 text-xs font-medium text-rose-700 dark:text-rose-400",
         className,
       )}
       {...props}
@@ -105,7 +105,7 @@ export function ConfirmationActions({
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("mt-4 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3", className)}
+      className={cn("mt-4 flex flex-wrap items-center gap-2 border-t border-rule/70 pt-3", className)}
       {...props}
     >
       {children}
@@ -117,6 +117,6 @@ export const ConfirmationAction = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof Button>
 >(({ className, size = "sm", ...props }, ref) => {
-  return <Button ref={ref} size={size} className={cn("text-xs h-8 px-3", className)} {...props} />;
+  return <Button ref={ref} size={size} className={cn("text-xs h-8 px-3 rounded-lg shadow-2xs", className)} {...props} />;
 });
 ConfirmationAction.displayName = "ConfirmationAction";
