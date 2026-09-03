@@ -37,6 +37,7 @@ export const SAFE_TOOLS = new Set<string>([
   "list_journals",
   "get_report",
   "get_financial_kpis",
+  "get_daily_briefing",
   "list_periods",
   "check_accounting_health",
 ]);
@@ -104,6 +105,12 @@ export const ALL_NARA_TOOLS = [
     type: "function",
     name: "get_financial_kpis",
     description: "Ambil metrik finansial real-time: Total Kas & Bank, dan Laba Bersih Tahun Berjalan.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    type: "function",
+    name: "get_daily_briefing",
+    description: "Ambil ringkasan briefing keuangan harian: saldo kas/bank live, pending draft review, piutang tempo, dan dokumen belum dicatat.",
     parameters: { type: "object", properties: {}, required: [] },
   },
   {
@@ -364,6 +371,12 @@ export async function executeNaraTool(
             ytdNetIncome: Money.fromMinor(ytd.netIncomeMinor).formatIdr(),
           },
         };
+      }
+
+      case "get_daily_briefing": {
+        const { getDailyBriefingData } = await import("@/server/reports/briefing");
+        const briefing = await getDailyBriefingData(orgId);
+        return { success: true, data: briefing };
       }
 
       case "list_periods": {
