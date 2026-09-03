@@ -9,7 +9,8 @@ BEGIN
   FOREACH t IN ARRAY ARRAY['memberships','accounts','fiscal_periods',
                            'journal_entries','journal_lines','journal_seq_counters','audit_log',
                            'documents','ai_drafts',
-                           'tenant_chunks','chat_threads','ai_findings','ai_proposals']
+                           'tenant_chunks','chat_threads','ai_findings','ai_proposals',
+                           'contacts','invoices']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -21,6 +22,49 @@ BEGIN
       $p$, t, t);
     END IF;
   END LOOP;
+END $$;
+
+-- invoice_items and invoice_payments are isolated via invoices.org_id:
+ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_items FORCE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'invoice_items' AND policyname = 'tenant_isolation_invoice_items') THEN
+    EXECUTE $p$
+      CREATE POLICY tenant_isolation_invoice_items ON invoice_items
+      USING (EXISTS (
+        SELECT 1 FROM invoices inv
+        WHERE inv.id = invoice_items.invoice_id
+          AND inv.org_id = current_setting('app.current_org', true)::uuid
+      ))
+      WITH CHECK (EXISTS (
+        SELECT 1 FROM invoices inv
+        WHERE inv.id = invoice_items.invoice_id
+          AND inv.org_id = current_setting('app.current_org', true)::uuid
+      ))
+    $p$;
+  END IF;
+END $$;
+
+ALTER TABLE invoice_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_payments FORCE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'invoice_payments' AND policyname = 'tenant_isolation_invoice_payments') THEN
+    EXECUTE $p$
+      CREATE POLICY tenant_isolation_invoice_payments ON invoice_payments
+      USING (EXISTS (
+        SELECT 1 FROM invoices inv
+        WHERE inv.id = invoice_payments.invoice_id
+          AND inv.org_id = current_setting('app.current_org', true)::uuid
+      ))
+      WITH CHECK (EXISTS (
+        SELECT 1 FROM invoices inv
+        WHERE inv.id = invoice_payments.invoice_id
+          AND inv.org_id = current_setting('app.current_org', true)::uuid
+      ))
+    $p$;
+  END IF;
 END $$;
 
 -- organizations itself is keyed by id, not org_id:
