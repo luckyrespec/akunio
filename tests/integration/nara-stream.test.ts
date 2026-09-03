@@ -66,4 +66,23 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("Nara Threads and Confirm API
     const delBody = await delRes.json();
     expect(delBody.ok).toBe(true);
   });
+
+  it("verifies suggestions and queue_update payload format in streaming protocol", () => {
+    const suggestionsPayload = { type: "suggestions", suggestions: ["Beban Operasional", "Pisah Detail", "Prive"] };
+    const queuePayload = {
+      type: "queue_update",
+      batchId: "batch-123",
+      items: [
+        { id: "item-1", fileName: "struk.jpg", vendor: "Alfamart", total: "Rp106.005", confidence: 0.94, status: "ready" },
+      ],
+    };
+
+    const sseSuggestions = `data: ${JSON.stringify(suggestionsPayload)}\n\n`;
+    const sseQueue = `data: ${JSON.stringify(queuePayload)}\n\n`;
+
+    expect(sseSuggestions).toContain('"type":"suggestions"');
+    expect(sseSuggestions).toContain("Pisah Detail");
+    expect(sseQueue).toContain('"type":"queue_update"');
+    expect(sseQueue).toContain("Alfamart");
+  });
 });

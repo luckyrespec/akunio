@@ -267,6 +267,16 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                 if (exec.success && !fullText) {
                   fullText = `Tindakan ${toolName} berhasil dieksekusi.`;
                 }
+
+                if (exec.success && exec.data && typeof exec.data === "object") {
+                  const dataObj = exec.data as Record<string, unknown>;
+                  if (Array.isArray(dataObj.suggestions) && dataObj.suggestions.length > 0) {
+                    send({ type: "suggestions", suggestions: dataObj.suggestions });
+                  }
+                  if (dataObj.batchId && Array.isArray(dataObj.items)) {
+                    send({ type: "queue_update", batchId: dataObj.batchId, items: dataObj.items });
+                  }
+                }
               } else {
                 // Must request HITL approval from user
                 send({
