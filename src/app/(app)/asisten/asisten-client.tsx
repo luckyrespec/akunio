@@ -1,473 +1,955 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import * as React from "react";
+import {
+  Sparkles,
+  Plus,
+  Search,
+  Paperclip,
+  Trash2,
+  Edit2,
+  Check,
+  X,
+  SidebarClose,
+  SidebarOpen,
+  Receipt,
+  FileSpreadsheet,
+  AlertCircle,
+  FileCheck,
+  Loader2,
+  ArrowUpRight,
+  Shield,
+  Clock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Paperclip, X, Sparkles, ChevronDown, ArrowUpRight, Wallet, BarChart3, Search, Receipt, RefreshCw, Loader2 } from "lucide-react";
-import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+  ConversationEmptyState,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+  Reasoning,
+  ReasoningTrigger,
+  ReasoningContent,
+} from "@/components/ai-elements/reasoning";
+import {
+  Confirmation,
+  ConfirmationTitle,
+  ConfirmationRequest,
+  ConfirmationAccepted,
+  ConfirmationRejected,
+  ConfirmationActions,
+  ConfirmationAction,
+} from "@/components/ai-elements/confirmation";
+import {
+  PromptInput,
+  PromptInputTextarea,
+  PromptInputActions,
+  PromptInputSubmit,
+} from "@/components/ai-elements/prompt-input";
+import {
+  Attachments,
+  AttachmentItem,
+  type Attachment,
+} from "@/components/ai-elements/attachments";
+import {
+  ModelSelector,
+  type ModelPreset,
+} from "@/components/ai-elements/model-selector";
+import { cn } from "@/lib/utils";
 
 interface Thread {
   id: string;
   title: string;
+  modelPreset?: string;
+  pinned?: boolean;
   createdAt: string | Date;
+  updatedAt?: string | Date;
 }
 
-interface Message {
+interface MessageItem {
   id: string;
   role: "user" | "assistant";
   content: string;
-  citations: Array<{ kind: string; ref: string; excerpt: string; section?: string }> | null;
-  draft?: unknown;
-  draftId?: string;
-  suggestedDraft?: unknown;
+  reasoning?: string | null;
+  attachments?: Attachment[] | null;
+  toolInvocations?: Array<{
+    callId?: string;
+    toolName: string;
+    status: string;
+    args?: Record<string, unknown>;
+    result?: unknown;
+    error?: string;
+  }> | null;
+  citations?: Array<{ kind: string; ref: string; excerpt: string; section?: string }> | null;
+  createdAt?: string | Date;
 }
 
-const NARA = process.env.NEXT_PUBLIC_ASSISTANT_NAME ?? "Nara";
+interface PendingApproval {
+  callId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  explanation: string;
+}
 
-type Suggestion = { label: string; prompt: string; icon: React.ElementType };
+export default function AsistenClient({
+  initialThreads,
+  initialHitlPolicy = "smart",
+}: {
+  initialThreads: Thread[];
+  initialHitlPolicy?: "smart" | "strict" | "autonomous";
+}) {
+  const [threads, setThreads] = React.useState<Thread[]>(initialThreads);
+  const [activeThreadId, setActiveThreadId] = React.useState<string | null>(
+    initialThreads[0]?.id ?? null,
+  );
+  const [messages, setMessages] = React.useState<MessageItem[]>([]);
+  const [input, setInput] = React.useState("");
+  const [attachments, setAttachments] = React.useState<Attachment[]>([]);
+  const [uploading, setUploading] = React.useState(false);
+  const [modelPreset, setModelPreset] = React.useState<ModelPreset>("fast");
+  const [isStreaming, setIsStreaming] = React.useState(false);
+  const [streamingReasoning, setStreamingReasoning] = React.useState("");
+  const [streamingText, setStreamingText] = React.useState("");
+  const [pendingApproval, setPendingApproval] = React.useState<PendingApproval | null>(null);
+  const [allowAllForSession, setAllowAllForSession] = React.useState(false);
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = React.useState("");
+  const [deletingThreadId, setDeletingThreadId] = React.useState<string | null>(null);
+  const [confirmingLoading, setConfirmingLoading] = React.useState(false);
+  const [errorBanner, setErrorBanner] = React.useState<string | null>(null);
 
-const ICON_MAP: Record<string, React.ElementType> = { Receipt, Wallet, BarChart3, Search };
-const STORAGE_KEY = "nara:suggestions:cache:v2";
-const STORAGE_TTL = 6 * 60 * 60 * 1000;
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
 
-export default function AsistenClient({ initialThreads }: { initialThreads: Thread[] }) {
-  const [threads, setThreads] = useState<Thread[]>(initialThreads);
-  const [selectedId, setSelectedId] = useState<string | null>(initialThreads[0]?.id ?? null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [sending, setSending] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<Suggestion[] | null>(null);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const shouldReduceMotion = useReducedMotion();
+  // Load active thread messages
+  React.useEffect(() => {
+    if (!activeThreadId) {
+      setMessages([]);
+      return;
+    }
 
-  // Persist & restore AI suggestions across navigation (6h TTL)
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { at: number; data: Array<{ label: string; prompt: string; icon: string }> };
-      if (!parsed?.data || !Array.isArray(parsed.data) || Date.now() - parsed.at > STORAGE_TTL) {
-        localStorage.removeItem(STORAGE_KEY);
-        return;
+    async function loadThread() {
+      try {
+        const res = await fetch(`/api/nara/threads/${activeThreadId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.thread?.modelPreset) {
+          setModelPreset(data.thread.modelPreset as ModelPreset);
+        }
+        setMessages(data.messages ?? []);
+      } catch (err) {
+        console.error("Gagal memuat pesan sesi", err);
       }
-      const mapped: Suggestion[] = parsed.data.map((s) => ({
-        label: s.label,
-        prompt: s.prompt,
-        icon: ICON_MAP[s.icon] ?? Search,
-      }));
-      if (mapped.length === 8) {
-        setAiSuggestions(mapped);
-        setExpanded(true);
+    }
+
+    loadThread();
+  }, [activeThreadId]);
+
+  // Handle file uploads to /api/nara/upload
+  const handleFileUpload = async (files: FileList | File[]) => {
+    const validFiles = Array.from(files);
+    if (validFiles.length === 0) return;
+
+    setUploading(true);
+    setErrorBanner(null);
+    try {
+      const fd = new FormData();
+      for (const f of validFiles) {
+        fd.append("files", f);
       }
-    } catch {}
-  }, []);
 
-  function persistSuggestions(data: Suggestion[]) {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ at: Date.now(), data: data.map((s) => ({ label: s.label, prompt: s.prompt, icon: Object.keys(ICON_MAP).find((k) => ICON_MAP[k] === s.icon) ?? "Search" })) })
-      );
-    } catch {}
-  }
+      const res = await fetch("/api/nara/upload", {
+        method: "POST",
+        body: fd,
+      });
 
-  async function fetchSuggestions() {
-    setSuggestionsLoading(true);
-    // ensure expanded is true to show skeletons immediately
-    setExpanded(true);
-    try {
-      const res = await fetch(`/api/nara/suggestions`);
       const data = await res.json();
-      if (res.ok && Array.isArray(data.suggestions) && data.suggestions.length >= 8) {
-        const mapped: Suggestion[] = data.suggestions.map((s: { label: string; prompt: string; icon: string }) => ({
-          label: s.label,
-          prompt: s.prompt,
-          icon: ICON_MAP[s.icon] ?? Search,
-        }));
-        setAiSuggestions(mapped);
-        persistSuggestions(mapped);
-        return;
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal mengunggah berkas.");
       }
-      if (Array.isArray(data.suggestions)) {
-        const mapped: Suggestion[] = data.suggestions.map((s: { label: string; prompt: string; icon: string }) => ({
-          label: s.label,
-          prompt: s.prompt,
-          icon: ICON_MAP[s.icon] ?? Search,
-        }));
-        if (mapped.length) {
-          setAiSuggestions(mapped);
-          persistSuggestions(mapped);
+
+      if (Array.isArray(data.files)) {
+        setAttachments((prev) => [...prev, ...data.files]);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Gagal mengunggah berkas.";
+      setErrorBanner(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Create new chat session
+  const handleNewChat = () => {
+    setActiveThreadId(null);
+    setMessages([]);
+    setInput("");
+    setAttachments([]);
+    setPendingApproval(null);
+    setAllowAllForSession(false);
+    setErrorBanner(null);
+  };
+
+  // Rename thread
+  const handleSaveRename = async (threadId: string) => {
+    if (!editingTitle.trim()) {
+      setEditingThreadId(null);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/nara/threads/${threadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editingTitle.trim() }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setThreads((prev) =>
+          prev.map((t) => (t.id === threadId ? { ...t, title: updated.title } : t)),
+        );
+      }
+    } catch (err) {
+      console.error("Gagal mengubah nama sesi", err);
+    } finally {
+      setEditingThreadId(null);
+      setEditingTitle("");
+    }
+  };
+
+  // Delete thread
+  const handleDeleteThread = async (threadId: string) => {
+    try {
+      const res = await fetch(`/api/nara/threads/${threadId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setThreads((prev) => prev.filter((t) => t.id !== threadId));
+        if (activeThreadId === threadId) {
+          handleNewChat();
         }
       }
-    } catch {
-      // keep button to retry
+    } catch (err) {
+      console.error("Gagal menghapus sesi", err);
     } finally {
-      setSuggestionsLoading(false);
+      setDeletingThreadId(null);
     }
-  }
+  };
 
-  function handleToggleSuggestions() {
-    if (expanded) {
-      setExpanded(false);
-      return;
-    }
-    if (aiSuggestions) {
-      setExpanded(true);
-      return;
-    }
-    fetchSuggestions();
-  }
+  // Submit prompt with streaming SSE
+  const handleSendMessage = async (textToSend?: string) => {
+    const prompt = (textToSend ?? input).trim();
+    if (!prompt && attachments.length === 0) return;
+    if (isStreaming) return;
 
-  function handleRefreshSuggestions() {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {}
-    setAiSuggestions(null);
-    fetchSuggestions();
-  }
+    setErrorBanner(null);
+    setIsStreaming(true);
+    setStreamingReasoning("");
+    setStreamingText("");
+    setPendingApproval(null);
 
-  useEffect(() => {
-    if (!selectedId) return;
-    fetch(`/api/nara/chat?threadId=${selectedId}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => {
-        if (Array.isArray(data)) setMessages(data.map((m: Message & { citations: Message["citations"] }) => ({
-          ...m,
-          draft: (m as unknown as { draft?: unknown }).draft ?? m.suggestedDraft,
-        })));
-      })
-      .catch(() => {});
-  }, [selectedId]);
-
-  async function send() {
-    if ((!input.trim() && !file) || sending) return;
-    const text = input.trim() || (file ? "Buat jurnal dari dokumen terlampir" : "");
-    const currentFile = file;
-    setInput("");
-    setFile(null);
-    if (fileRef.current) fileRef.current.value = "";
-    setSending(true);
-    const tempUser: Message = {
-      id: crypto.randomUUID(),
+    const userMessage: MessageItem = {
+      id: `temp-${Date.now()}`,
       role: "user",
-      content: text + (currentFile ? ` [${currentFile.name}]` : ""),
-      citations: null,
+      content: prompt || "Lampiran dikirim",
+      attachments: attachments.length > 0 ? [...attachments] : null,
+      createdAt: new Date().toISOString(),
     };
-    setMessages((m) => [...m, tempUser]);
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    const sentAttachments = [...attachments];
+    setAttachments([]);
+
+    abortControllerRef.current = new AbortController();
+
     try {
-      let res: Response;
-      if (currentFile) {
-        const fd = new FormData();
-        if (selectedId) fd.set("threadId", selectedId);
-        fd.set("message", text);
-        fd.set("file", currentFile);
-        res = await fetch("/api/nara/chat", { method: "POST", body: fd });
-      } else {
-        res = await fetch("/api/nara/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ threadId: selectedId, message: text }),
-        });
+      const res = await fetch("/api/nara/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: abortControllerRef.current.signal,
+        body: JSON.stringify({
+          threadId: activeThreadId ?? undefined,
+          message: prompt,
+          attachments: sentAttachments,
+          modelPreset,
+          allowAllForSession,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Gagal memproses pesan.");
       }
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Gagal");
-      if (!selectedId && data.threadId) {
-        setSelectedId(data.threadId);
-        setThreads((t) => [{ id: data.threadId, title: text.slice(0, 30) || "Percakapan baru", createdAt: new Date().toISOString() }, ...t]);
+
+      if (!res.body) {
+        throw new Error("Respons streaming kosong.");
       }
-      const assistant: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: data.answer,
-        citations: data.citations,
-        draft: data.draft ?? data.suggestedDraft,
-        draftId: data.draftId,
-      };
-      setMessages((m) => [...m, assistant]);
-    } catch (e) {
-      setMessages((m) => [
-        ...m,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: e instanceof Error ? e.message : "Terjadi kesalahan.",
-          citations: null,
-        },
-      ]);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() ?? "";
+
+        for (const block of lines) {
+          const trimmed = block.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const jsonStr = trimmed.slice(5).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const data = JSON.parse(jsonStr);
+
+            if (data.type === "init" && data.threadId) {
+              if (!activeThreadId) {
+                setActiveThreadId(data.threadId);
+                setThreads((prev) => [
+                  {
+                    id: data.threadId,
+                    title: prompt.slice(0, 30) || "Percakapan baru",
+                    modelPreset,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                  },
+                  ...prev,
+                ]);
+              }
+            } else if (data.type === "reasoning" && data.delta) {
+              setStreamingReasoning((prev) => prev + data.delta);
+            } else if (data.type === "text" && data.delta) {
+              setStreamingText((prev) => prev + data.delta);
+            } else if (data.type === "tool_approval_request") {
+              setPendingApproval({
+                callId: data.callId,
+                toolName: data.toolName,
+                args: data.args,
+                explanation: data.explanation,
+              });
+            } else if (data.type === "error") {
+              setErrorBanner(data.message);
+            } else if (data.type === "done") {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: data.messageId || `asst-${Date.now()}`,
+                  role: "assistant",
+                  content: streamingText,
+                  reasoning: streamingReasoning || undefined,
+                  citations: data.citations,
+                  createdAt: new Date().toISOString(),
+                },
+              ]);
+            }
+          } catch (parseErr) {
+            console.warn("Gagal parsing SSE chunk", parseErr, jsonStr);
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        const msg = err instanceof Error ? err.message : "Terjadi kesalahan saat memproses jawaban.";
+        setErrorBanner(msg);
+      }
     } finally {
-      setSending(false);
+      setIsStreaming(false);
+      setStreamingReasoning("");
+      setStreamingText("");
     }
-  }
+  };
+
+  // Stop generation
+  const handleStopStreaming = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsStreaming(false);
+    }
+  };
+
+  // Handle Tool Approval / Rejection (HITL)
+  const handleToolDecision = async (approved: boolean, allowAll = false) => {
+    if (!pendingApproval || !activeThreadId) return;
+
+    setConfirmingLoading(true);
+    try {
+      const res = await fetch("/api/nara/chat/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: activeThreadId,
+          callId: pendingApproval.callId,
+          toolName: pendingApproval.toolName,
+          args: pendingApproval.args,
+          approved,
+          allowAllForSession: allowAll,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal memproses konfirmasi.");
+      }
+
+      if (allowAll) {
+        setAllowAllForSession(true);
+      }
+
+      if (data.message) {
+        setMessages((prev) => [...prev, data.message]);
+      } else if (!approved) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `rej-${Date.now()}`,
+            role: "assistant",
+            content: `Tindakan ${pendingApproval.toolName} dibatalkan.`,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
+      setPendingApproval(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Gagal memproses persetujuan.";
+      setErrorBanner(msg);
+    } finally {
+      setConfirmingLoading(false);
+    }
+  };
+
+  // Filter threads by search query
+  const filteredThreads = threads.filter((t) =>
+    t.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
-      {/* Thread list */}
-      <div className="w-64 shrink-0 rounded-xl border border-rule bg-paper p-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex size-5 items-center justify-center rounded-full bg-terra text-white"><Sparkles className="size-3" /></span>
-            <h2 className="text-xs font-medium uppercase tracking-widest text-ink-soft">{NARA}</h2>
-          </div>
-          <Button size="sm" variant="ghost" onClick={() => { setSelectedId(null); setMessages([]); }}>
-            Baru
+    <div className="flex h-[calc(100vh-4.25rem)] w-full overflow-hidden bg-background">
+      {/* 1. SIDEBAR SESI PERCAKAPAN (ChatGPT Style) */}
+      <aside
+        className={cn(
+          "relative flex flex-col border-r border-border/80 bg-card/60 backdrop-blur-xs transition-all duration-300 ease-in-out",
+          sidebarOpen ? "w-72 md:w-80" : "w-0 -translate-x-full overflow-hidden border-r-0 md:w-0",
+        )}
+      >
+        {/* Sidebar Header */}
+        <div className="flex items-center justify-between p-3.5 border-b border-border/60">
+          <Button
+            onClick={handleNewChat}
+            variant="outline"
+            className="flex-1 justify-start gap-2 h-9 text-xs font-medium rounded-xl border-border/80 bg-background/80 hover:bg-muted"
+          >
+            <Plus className="size-4 text-primary" />
+            <span>Percakapan Baru</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarOpen(false)}
+            className="ml-1.5 size-8 text-muted-foreground hover:text-foreground"
+            aria-label="Tutup sidebar"
+          >
+            <SidebarClose className="size-4" />
           </Button>
         </div>
-        <div className="mt-3 space-y-1">
-          {threads.length === 0 && <p className="text-xs text-ink-soft">Belum ada percakapan.</p>}
-          {threads.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setSelectedId(t.id)}
-              className={`w-full truncate rounded-md px-3 py-2 text-left text-sm ${selectedId === t.id ? "bg-canvas font-medium text-terra" : "hover:bg-canvas"}`}
-            >
-              {t.title}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Chat pane */}
-      <div className="flex flex-1 flex-col rounded-xl border border-rule bg-paper">
-        <div className="border-b border-rule px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="flex size-7 items-center justify-center rounded-full bg-terra text-white">
-              <Sparkles className="size-3.5" />
-            </span>
-            <div>
-              <p className="text-sm font-medium leading-none">{NARA}</p>
-              <p className="text-[11px] text-ink-soft">Tanya apa saja, atau minta buatkan jurnal</p>
+        {/* Search Threads */}
+        <div className="px-3.5 py-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari percakapan..."
+              className="h-8 pl-8 text-xs rounded-lg border-border/60 bg-muted/40"
+            />
+          </div>
+        </div>
+
+        {/* Threads List */}
+        <div className="flex-1 overflow-y-auto px-2 py-1 space-y-1">
+          {filteredThreads.length === 0 ? (
+            <div className="p-4 text-center text-xs text-muted-foreground">
+              {searchQuery ? "Tidak ada percakapan yang cocok." : "Belum ada riwayat percakapan."}
+            </div>
+          ) : (
+            filteredThreads.map((t) => {
+              const isActive = t.id === activeThreadId;
+              const isEditing = t.id === editingThreadId;
+
+              return (
+                <div
+                  key={t.id}
+                  className={cn(
+                    "group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs transition-all",
+                    isActive
+                      ? "bg-accent font-medium text-accent-foreground shadow-2xs"
+                      : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                  )}
+                >
+                  {isEditing ? (
+                    <div className="flex flex-1 items-center gap-1">
+                      <Input
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveRename(t.id);
+                          if (e.key === "Escape") setEditingThreadId(null);
+                        }}
+                        autoFocus
+                        className="h-7 text-xs"
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7 text-emerald-600"
+                        onClick={() => handleSaveRename(t.id)}
+                      >
+                        <Check className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7 text-muted-foreground"
+                        onClick={() => setEditingThreadId(null)}
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setActiveThreadId(t.id)}
+                        className="flex-1 truncate text-left"
+                      >
+                        {t.title}
+                      </button>
+
+                      {/* Action buttons (Rename & Delete) */}
+                      <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingThreadId(t.id);
+                            setEditingTitle(t.title);
+                          }}
+                          className="size-6 text-muted-foreground hover:text-foreground"
+                          aria-label="Edit judul sesi"
+                        >
+                          <Edit2 className="size-3" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingThreadId(t.id);
+                          }}
+                          className="size-6 text-muted-foreground hover:text-destructive"
+                          aria-label="Hapus sesi"
+                        >
+                          <Trash2 className="size-3" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="border-t border-border/60 p-3 bg-muted/20 flex items-center justify-between text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <Shield className="size-3.5 text-primary" />
+            <span>HITL: {initialHitlPolicy.toUpperCase()}</span>
+          </div>
+          {allowAllForSession && (
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-amber-500/40 text-amber-600">
+              Auto-Allow
+            </Badge>
+          )}
+        </div>
+      </aside>
+
+      {/* Delete Confirmation Modal */}
+      {deletingThreadId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl">
+            <h4 className="text-sm font-semibold text-foreground">Hapus Percakapan Ini?</h4>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Semua pesan dan riwayat interaksi di dalam percakapan ini akan dihapus secara permanen.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setDeletingThreadId(null)}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleDeleteThread(deletingThreadId)}
+              >
+                Hapus
+              </Button>
             </div>
           </div>
         </div>
-        <div className="flex flex-1 flex-col overflow-y-auto p-4">
-          {messages.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center py-8">
-              <motion.div
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                className="text-center"
+      )}
+
+      {/* 2. AREA PERCAKAPAN UTAMA (Canvas & Messages) */}
+      <main className="relative flex flex-1 flex-col overflow-hidden">
+        {/* Top bar header when sidebar is collapsed */}
+        <div className="flex h-12 items-center justify-between border-b border-border/70 px-4">
+          <div className="flex items-center gap-2">
+            {!sidebarOpen && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSidebarOpen(true)}
+                className="size-8 text-muted-foreground hover:text-foreground"
+                aria-label="Buka sidebar"
               >
-                <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-terra text-white shadow-sm">
-                  <Sparkles className="size-6" />
-                </div>
-                <h3 className="mt-4 font-display text-xl font-semibold">Hai, saya {NARA}</h3>
-                <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-ink-soft">
-                  Mau buat jurnal, cek saldo, atau lihat laporan? Minta saran personal atau tulis pertanyaanmu sendiri.
-                </p>
-              </motion.div>
+                <SidebarOpen className="size-4" />
+              </Button>
+            )}
+            <h2 className="text-sm font-medium text-foreground truncate max-w-md">
+              {threads.find((t) => t.id === activeThreadId)?.title || "Percakapan Baru"}
+            </h2>
+          </div>
 
-              {!expanded ? (
-                <motion.div
-                  initial={shouldReduceMotion ? false : { opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3, delay: 0.3 }}
-                  className="mt-8 flex flex-col items-center gap-3"
-                >
-                  <button
-                    onClick={handleToggleSuggestions}
-                    disabled={suggestionsLoading}
-                    className="inline-flex items-center gap-2 rounded-full bg-terra px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-terra/90 hover:shadow-md disabled:opacity-60"
-                  >
-                    {suggestionsLoading ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" /> Memuat saran personal…
-                      </>
-                    ) : aiSuggestions ? (
-                      <>
-                        <Sparkles className="size-4" /> Lihat saran untukmu (8)
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="size-4" /> Minta saran dari {NARA} ✨
-                      </>
-                    )}
-                  </button>
-                  <p className="text-[11px] text-ink-soft">8 saran dipersonalisasi dari jurnal & saldo kamu</p>
-                </motion.div>
-              ) : (
-                <>
-                  <motion.div
-                    key="ai-grid"
-                    initial={shouldReduceMotion ? false : "hidden"}
-                    animate="show"
-                    variants={{
-                      hidden: {},
-                      show: { transition: { staggerChildren: 0.05, delayChildren: 0.08 } },
-                    }}
-                    className="mt-8 grid w-full max-w-[560px] grid-cols-1 gap-2.5 sm:grid-cols-2"
-                  >
-                    {suggestionsLoading
-                      ? Array.from({ length: 8 }).map((_, i) => (
-                          <div
-                            key={`skeleton-${i}`}
-                            className="flex animate-pulse items-center gap-3 rounded-xl border border-rule bg-paper px-3.5 py-3"
-                          >
-                            <span className="size-8 shrink-0 rounded-full bg-canvas" />
-                            <span className="flex-1 space-y-2">
-                              <span className="block h-3 w-3/4 rounded bg-canvas" />
-                              <span className="block h-2 w-1/2 rounded bg-canvas" />
-                            </span>
-                          </div>
-                        ))
-                      : (aiSuggestions ?? []).map((s, idx) => {
-                          const Icon = s.icon;
-                          return (
-                            <motion.button
-                              key={`${s.label}-${idx}`}
-                              variants={
-                                shouldReduceMotion
-                                  ? {}
-                                  : {
-                                      hidden: { opacity: 0, y: 10 },
-                                      show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } },
-                                    }
-                              }
-                              whileHover={shouldReduceMotion ? undefined : { y: -1 }}
-                              whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
-                              onClick={() => {
-                                setInput(s.prompt);
-                                requestAnimationFrame(() => inputRef.current?.focus());
-                              }}
-                              className="group flex items-center gap-3 rounded-xl border border-terra/15 bg-terra/[0.06] px-3.5 py-3 text-left shadow-sm transition-colors hover:border-terra/30 hover:bg-terra/10"
-                            >
-                              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-terra/10 text-terra transition-colors group-hover:bg-terra group-hover:text-white">
-                                <Icon className="size-4" />
-                              </span>
-                              <div className="flex-1">
-                                <span className="block text-sm leading-tight font-medium text-ink">{s.label}</span>
-                                <span className="mt-0.5 block text-[11px] leading-tight text-ink-soft">✨ untukmu</span>
-                              </div>
-                              <ArrowUpRight className="size-3.5 shrink-0 text-terra opacity-60 group-hover:opacity-100" />
-                            </motion.button>
-                          );
-                        })}
-                  </motion.div>
+          <div className="flex items-center gap-2">
+            <ModelSelector
+              value={modelPreset}
+              onValueChange={setModelPreset}
+              disabled={isStreaming}
+            />
+          </div>
+        </div>
 
-                  <motion.div
-                    initial={shouldReduceMotion ? false : { opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.25, delay: 0.2 }}
-                    className="mt-4 flex items-center gap-2"
-                  >
-                    <button
-                      onClick={handleToggleSuggestions}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-paper px-4 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:bg-canvas hover:text-ink"
-                    >
-                      Tutup
-                      <ChevronDown className="size-3.5 rotate-180" />
-                    </button>
-                    <button
-                      onClick={handleRefreshSuggestions}
-                      disabled={suggestionsLoading}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-paper px-3 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:bg-canvas hover:text-ink disabled:opacity-60"
-                    >
-                      <RefreshCw className={`size-3.5 ${suggestionsLoading ? "animate-spin" : ""}`} />
-                      Muat ulang
-                    </button>
-                  </motion.div>
-                </>
-              )}
-
-              <p className="mt-3 text-[11px] text-ink-soft">Klik saran untuk mengisi — tidak langsung terkirim, kamu bisa edit dulu.</p>
+        {/* Error Banner */}
+        {errorBanner && (
+          <div className="flex items-center justify-between bg-destructive/10 border-b border-destructive/20 px-4 py-2 text-xs text-destructive">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="size-4" />
+              <span>{errorBanner}</span>
             </div>
-          ) : null}
-          {messages.length > 0 && (
-          <div className="space-y-4">
-            {messages.map((m) => (
-              <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[78%] rounded-xl px-4 py-3 text-sm ${
-                    m.role === "user" ? "bg-terra text-white" : "bg-canvas"
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap">{m.content}</p>
-                  {m.citations && m.citations.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {m.citations.map((c, i) => (
-                        <Badge
-                          key={i}
-                          variant="outline"
-                          className={
-                            c.kind === "ifrs"
-                              ? "border-terra/30 bg-terra/10 text-terra"
-                              : "border-debit/30 bg-debit/10 text-debit"
-                          }
-                          title={c.excerpt}
-                        >
-                          {c.kind === "ifrs" ? `IFRS ${c.section ?? ""}`.trim() : `Jurnal ${c.ref.slice(0, 8)}`}
-                        </Badge>
-                      ))}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6 text-destructive"
+              onClick={() => setErrorBanner(null)}
+            >
+              <X className="size-3" />
+            </Button>
+          </div>
+        )}
+
+        {/* Conversation Feed */}
+        <Conversation autoScroll={isStreaming}>
+          <ConversationContent>
+            {messages.length === 0 && !isStreaming ? (
+              <ConversationEmptyState
+                icon={<Sparkles className="size-10 text-primary/80" />}
+                title="Ada yang bisa Nara bantu hari ini?"
+                description="Konsultasikan pembukuan, minta ringkasan laporan keuangan, atau catat transaksi langsung dari foto nota."
+              >
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 text-left mt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInput("Catat transaksi pembelian perlengkapan kantor Rp 350.000 tunai");
+                    }}
+                    className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-xs shadow-2xs transition-all hover:border-primary/50 hover:bg-accent/40"
+                  >
+                    <Receipt className="mt-0.5 size-4 text-amber-500 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-foreground">Catat Pengeluaran</div>
+                      <div className="text-[11px] text-muted-foreground">Beli ATK, bensin, atau konsumsi operasional</div>
                     </div>
-                  )}
-                  {Boolean(m.draft || m.suggestedDraft) && (
-                    <div className="mt-3 rounded-lg border border-rule bg-paper p-3 text-xs">
-                      <p className="font-medium uppercase tracking-widest text-ink-soft">Draft Jurnal · perlu review</p>
-                      <p className="mt-1 text-sm font-medium">{((m.draft ?? m.suggestedDraft) as { memo?: string }).memo ?? "Draft koreksi"}</p>
-                      <div className="mt-2 space-y-1">
-                        {(((m.draft ?? m.suggestedDraft) as { lines?: Array<{ accountCode: string; debitText: string; creditText: string; reason?: string }> }).lines ?? []).slice(0, 4).map((l, i) => (
-                          <div key={i} className="flex justify-between gap-2 font-mono">
-                            <span>{l.accountCode}</span>
-                            <span className="flex-1 truncate text-ink-soft">{l.reason ?? ""}</span>
-                            <span className={l.debitText ? "text-debit" : "text-credit"}>{l.debitText || l.creditText}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInput("Tampilkan ringkasan laporan laba rugi bulan ini");
+                      handleSendMessage("Tampilkan ringkasan laporan laba rugi bulan ini");
+                    }}
+                    className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-xs shadow-2xs transition-all hover:border-primary/50 hover:bg-accent/40"
+                  >
+                    <FileSpreadsheet className="mt-0.5 size-4 text-emerald-500 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-foreground">Laporan Laba Rugi</div>
+                      <div className="text-[11px] text-muted-foreground">Lihat pendapatan dan total beban berjalan</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInput("Berapa saldo kas dan bank saat ini?");
+                      handleSendMessage("Berapa saldo kas dan bank saat ini?");
+                    }}
+                    className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-xs shadow-2xs transition-all hover:border-primary/50 hover:bg-accent/40"
+                  >
+                    <FileCheck className="mt-0.5 size-4 text-blue-500 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-foreground">Cek Saldo Kas & Bank</div>
+                      <div className="text-[11px] text-muted-foreground">Posisi likuiditas kas & rekening bank live</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInput("Jalankan diagnosa kesehatan pembukuan dan cek temuan anomali");
+                      handleSendMessage("Jalankan diagnosa kesehatan pembukuan dan cek temuan anomali");
+                    }}
+                    className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3 text-xs shadow-2xs transition-all hover:border-primary/50 hover:bg-accent/40"
+                  >
+                    <Shield className="mt-0.5 size-4 text-purple-500 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-foreground">Diagnosa Kesehatan</div>
+                      <div className="text-[11px] text-muted-foreground">Audit anomali saldo & jurnal tidak seimbang</div>
+                    </div>
+                  </button>
+                </div>
+              </ConversationEmptyState>
+            ) : (
+              messages.map((m) => (
+                <Message key={m.id} from={m.role}>
+                  <MessageContent from={m.role}>
+                    {/* User attachments preview */}
+                    {m.role === "user" && m.attachments && m.attachments.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {m.attachments.map((att) => (
+                          <div
+                            key={att.id}
+                            className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2 py-1 text-xs text-primary-foreground"
+                          >
+                            <Paperclip className="size-3" />
+                            <span className="truncate max-w-[120px] font-medium">{att.fileName}</span>
                           </div>
                         ))}
                       </div>
-                      {m.draftId && (
-                        <Link href={`/jurnal/ai/${m.draftId}`}>
-                          <Button size="sm" className="mt-3 w-full bg-terra hover:bg-terra/90">Lihat & Posting Draft</Button>
-                        </Link>
-                      )}
-                      {!m.draftId && (
-                        <p className="mt-2 text-[11px] text-ink-soft">Draft disiapkan — buka daftar Draft AI untuk review.</p>
-                      )}
+                    )}
+
+                    {/* Reasoning Accordion (Chain of Thought) */}
+                    {m.role === "assistant" && m.reasoning && (
+                      <Reasoning defaultOpen={false}>
+                        <ReasoningTrigger>Proses Berpikir (Chain of Thought)</ReasoningTrigger>
+                        <ReasoningContent>{m.reasoning}</ReasoningContent>
+                      </Reasoning>
+                    )}
+
+                    {/* Tool Invocations Badge / Details */}
+                    {m.toolInvocations && m.toolInvocations.length > 0 && (
+                      <div className="my-1.5 flex flex-wrap gap-1.5">
+                        {m.toolInvocations.map((ti, i) => (
+                          <Badge
+                            key={i}
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] font-mono",
+                              ti.status === "approved" || ti.status === "auto"
+                                ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+                                : "border-muted-foreground/30 text-muted-foreground",
+                            )}
+                          >
+                            ✓ {ti.toolName} ({ti.status})
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Text Message Response */}
+                    <MessageResponse>{m.content}</MessageResponse>
+
+                    {/* Citations */}
+                    {m.citations && m.citations.length > 0 && (
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border/40 pt-2 text-[10px] text-muted-foreground">
+                        <span className="font-semibold">Sumber:</span>
+                        {m.citations.map((c, i) => (
+                          <span key={i} className="rounded bg-muted px-1.5 py-0.5 font-mono">
+                            [{c.kind} {c.section ?? c.ref}]
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </MessageContent>
+                </Message>
+              ))
+            )}
+
+            {/* LIVE STREAMING BUBBLE */}
+            {isStreaming && (
+              <Message from="assistant">
+                <MessageContent from="assistant">
+                  {streamingReasoning && (
+                    <Reasoning isStreaming={!streamingText}>
+                      <ReasoningTrigger>
+                        {!streamingText ? "Sedang menimbang aturan akuntansi..." : "Proses Berpikir"}
+                      </ReasoningTrigger>
+                      <ReasoningContent>{streamingReasoning}</ReasoningContent>
+                    </Reasoning>
+                  )}
+
+                  {streamingText ? (
+                    <MessageResponse>{streamingText}</MessageResponse>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Nara sedang menyusun jawaban...</span>
                     </div>
                   )}
-                </div>
-              </div>
-            ))}
-           </div>
-          )}
-        </div>
+                </MessageContent>
+              </Message>
+            )}
 
-        <div className="border-t border-rule p-3">
-          {file && (
-            <div className="mb-2 flex items-center gap-2 rounded-md bg-canvas px-3 py-2 text-xs">
-              <Paperclip className="size-3" /> {file.name}
-              <button onClick={() => { setFile(null); if (fileRef.current) fileRef.current.value = ""; }} className="ml-auto"><X className="size-3" /></button>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <label className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-rule bg-paper hover:bg-canvas">
-              <Paperclip className="size-4" />
-              <Input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-            </label>
-            <Input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              placeholder={`Tanya ${NARA}... (Ctrl+Enter kirim)`}
-              disabled={sending}
-              className="flex-1"
-            />
-            <Button onClick={send} disabled={sending || (!input.trim() && !file)} className="bg-terra hover:bg-terra/90">
-              {sending ? "..." : "Kirim"}
-            </Button>
+            {/* INTERACTIVE HITL CONFIRMATION CARD */}
+            {pendingApproval && (
+              <div className="my-3 max-w-xl mx-auto w-full">
+                <Confirmation status="pending">
+                  <ConfirmationTitle>
+                    Konfirmasi Aksi: {pendingApproval.toolName.replace(/_/g, " ").toUpperCase()}
+                  </ConfirmationTitle>
+                  <ConfirmationRequest>
+                    <p className="font-sans text-xs">{pendingApproval.explanation}</p>
+                    <div className="rounded-lg bg-background/80 p-2.5 font-mono text-[11px] leading-relaxed border border-border/60">
+                      {JSON.stringify(pendingApproval.args, null, 2)}
+                    </div>
+                  </ConfirmationRequest>
+                  <ConfirmationActions>
+                    <ConfirmationAction
+                      variant="default"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={confirmingLoading}
+                      onClick={() => handleToolDecision(true, false)}
+                    >
+                      {confirmingLoading ? <Loader2 className="size-3 animate-spin mr-1" /> : <Check className="size-3 mr-1" />}
+                      Setujui & Jalankan
+                    </ConfirmationAction>
+
+                    <ConfirmationAction
+                      variant="outline"
+                      disabled={confirmingLoading}
+                      onClick={() => handleToolDecision(true, true)}
+                    >
+                      Selalu Izinkan di Sesi Ini
+                    </ConfirmationAction>
+
+                    <ConfirmationAction
+                      variant="destructive"
+                      disabled={confirmingLoading}
+                      onClick={() => handleToolDecision(false, false)}
+                    >
+                      <X className="size-3 mr-1" />
+                      Tolak
+                    </ConfirmationAction>
+                  </ConfirmationActions>
+                </Confirmation>
+              </div>
+            )}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
+
+        {/* 3. BILAH INPUT BAWAH (Sticky Prompt Input) */}
+        <div className="border-t border-border/70 bg-card/50 p-4 backdrop-blur-xs">
+          <div className="mx-auto max-w-3xl">
+            {/* Attachment Chips Preview */}
+            <Attachments>
+              {attachments.map((att) => (
+                <AttachmentItem
+                  key={att.id}
+                  attachment={att}
+                  onRemove={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
+                />
+              ))}
+              {uploading && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Mengunggah berkas...</span>
+                </div>
+              )}
+            </Attachments>
+
+            {/* Prompt Input Component */}
+            <PromptInput onSubmit={() => handleSendMessage()}>
+              <PromptInputTextarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Tanyakan hal akuntansi, minta laporan, atau ketik transaksi..."
+                disabled={isStreaming}
+              />
+
+              <PromptInputActions>
+                <div className="flex items-center gap-1">
+                  {/* Hidden File Input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        handleFileUpload(e.target.files);
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading || isStreaming}
+                    aria-label="Lampirkan dokumen atau nota"
+                  >
+                    <Paperclip className="size-4" />
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <PromptInputSubmit
+                    isStreaming={isStreaming}
+                    onStop={handleStopStreaming}
+                    onClick={() => handleSendMessage()}
+                    disabled={!input.trim() && attachments.length === 0}
+                  />
+                </div>
+              </PromptInputActions>
+            </PromptInput>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
