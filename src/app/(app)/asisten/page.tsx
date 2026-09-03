@@ -15,6 +15,7 @@ export default async function AsistenPage() {
     <AsistenClient
       initialThreads={threads}
       initialHitlPolicy={settings.aiHitlPolicy ?? "smart"}
+      userEmail={ctx.userEmail}
     />
   );
 }

@@ -42,7 +42,7 @@ export function HitlTool({
           ) : (
             <ShieldCheck className="size-3.5 text-emerald-600" />
           )}
-          <span>{allowAll ? "Allow All" : "Smart HITL"}</span>
+          <span>{allowAll ? "Otomatis" : "Izin Transaksi"}</span>
         </button>
       </PopoverTrigger>
 
@@ -57,18 +57,18 @@ export function HitlTool({
           ) : (
             <ShieldCheck className="size-4 text-emerald-600" />
           )}
-          <span>{allowAll ? "Mode Otonom (Allow All Access)" : "Mode Terpandu (Smart HITL)"}</span>
+          <span>{allowAll ? "Mode Eksekusi Otomatis" : "Mode Izin Transaksi"}</span>
         </div>
 
         <p className="mt-1.5 text-[11px] leading-relaxed text-ink-soft">
           {allowAll
-            ? "Semua tool baik pembacaan maupun aksi mutasi transaksi dieksekusi secara langsung oleh Nara tanpa konfirmasi per aksi."
-            : "Tool membaca data berjalan otomatis. Aksi mutasi (posting jurnal, draft, ubah akun) meminta izin Anda melalui kartu konfirmasi."}
+            ? "Nara langsung memposting jurnal dan mengeksekusi transaksi secara otomatis tanpa meminta konfirmasi manual."
+            : "Aman dan terkendali. Setiap pencatatan transaksi, pembuatan jurnal, atau perubahan akun wajib Anda setujui terlebih dahulu."}
         </p>
 
         <div className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-canvas/70 px-2 py-1 text-[10px] font-medium text-ink-soft border border-rule/50">
           <Info className="size-3 text-terra shrink-0" />
-          <span>Klik tombol untuk mengubah mode izin AI.</span>
+          <span>Klik tombol untuk beralih mode.</span>
         </div>
       </PopoverContent>
     </Popover>

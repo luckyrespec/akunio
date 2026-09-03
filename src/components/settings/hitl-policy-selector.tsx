@@ -38,11 +38,11 @@ export function HitlPolicySelector({
     <div className="rounded-xl border border-rule bg-paper p-5 shadow-xs space-y-4">
       <div>
         <h3 className="font-display text-base font-semibold text-ink flex items-center gap-2">
-          <ShieldCheck className="size-4 text-primary" />
-          <span>Kebijakan Human-in-the-Loop (HITL) AI</span>
+          <ShieldCheck className="size-4 text-terra" />
+          <span>Kebijakan Persetujuan & Otomatisasi AI (Nara)</span>
         </h3>
         <p className="mt-1 text-xs text-ink-soft">
-          Atur tingkat izin otomatisasi untuk tindakan yang dieksekusi oleh Asisten AI (Nara) di seluruh aplikasi.
+          Atur tingkat izin otomatisasi untuk pencatatan transaksi yang dieksekusi oleh Asisten AI (Nara) di seluruh aplikasi.
         </p>
       </div>
 
@@ -54,16 +54,16 @@ export function HitlPolicySelector({
           className={cn(
             "flex flex-col items-start rounded-xl border p-3.5 text-left transition-all",
             selected === "smart"
-              ? "border-primary bg-primary/5 ring-1 ring-primary"
+              ? "border-terra bg-terra/5 ring-1 ring-terra"
               : "border-rule bg-card/50 hover:bg-muted/50",
           )}
         >
           <div className="flex w-full items-center justify-between">
-            <span className="font-semibold text-xs text-ink">Smart HITL</span>
+            <span className="font-semibold text-xs text-ink">Mode Izin Transaksi</span>
             <ShieldCheck className="size-4 text-emerald-600" />
           </div>
           <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">
-            (Rekomendasi) Tool baca otomatis instan. Tool mutasi/tulis wajib meminta konfirmasi inline.
+            (Rekomendasi) Pembacaan data berjalan instan. Setiap transaksi mutasi atau posting jurnal wajib Anda setujui.
           </p>
         </button>
 
@@ -74,16 +74,16 @@ export function HitlPolicySelector({
           className={cn(
             "flex flex-col items-start rounded-xl border p-3.5 text-left transition-all",
             selected === "strict"
-              ? "border-primary bg-primary/5 ring-1 ring-primary"
+              ? "border-terra bg-terra/5 ring-1 ring-terra"
               : "border-rule bg-card/50 hover:bg-muted/50",
           )}
         >
           <div className="flex w-full items-center justify-between">
-            <span className="font-semibold text-xs text-ink">Strict HITL</span>
+            <span className="font-semibold text-xs text-ink">Verifikasi Ketat</span>
             <ShieldAlert className="size-4 text-amber-600" />
           </div>
           <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">
-            Semua tindakan tanpa terkecuali memerlukan persetujuan manual pengguna sebelum dijalankan.
+            Semua tindakan pembacaan maupun penulisan memerlukan persetujuan manual pengguna sebelum dijalankan.
           </p>
         </button>
 
@@ -94,16 +94,16 @@ export function HitlPolicySelector({
           className={cn(
             "flex flex-col items-start rounded-xl border p-3.5 text-left transition-all",
             selected === "autonomous"
-              ? "border-primary bg-primary/5 ring-1 ring-primary"
+              ? "border-terra bg-terra/5 ring-1 ring-terra"
               : "border-rule bg-card/50 hover:bg-muted/50",
           )}
         >
           <div className="flex w-full items-center justify-between">
-            <span className="font-semibold text-xs text-ink">Autonomous</span>
+            <span className="font-semibold text-xs text-ink">Eksekusi Otomatis</span>
             <Zap className="size-4 text-purple-600" />
           </div>
           <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">
-            Seluruh tool langsung dieksekusi secara otonom tanpa jeda konfirmasi (mode ahli).
+            Seluruh transaksi langsung diposting secara otonom tanpa jeda konfirmasi (mode cepat).
           </p>
         </button>
       </div>
