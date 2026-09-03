@@ -8,9 +8,11 @@ import {
   FileBarChart,
   LayoutDashboard,
   Library,
+  Receipt,
   Search,
   Settings2,
   Sparkles,
+  Users,
   X,
   Zap,
 } from "lucide-react";
@@ -21,6 +23,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const STANDARD_ITEMS = [
   { href: "/dasbor", label: "Dasbor", icon: LayoutDashboard },
+  { href: "/faktur", label: "Faktur & Tagihan", icon: Receipt },
+  { href: "/kontak", label: "Kontak", icon: Users },
   { href: "/jurnal", label: "Jurnal Umum", icon: BookOpen, match: (p: string) => p === "/jurnal" || p === "/jurnal/baru" },
   { href: "/buku-besar", label: "Buku Besar", icon: Library },
   { href: "/laporan", label: "Laporan Keuangan", icon: FileBarChart },

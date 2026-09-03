@@ -1,12 +1,13 @@
 import { Db } from "@/server/db";
+import { type Queryable } from "@/server/db/repos/queryable";
 import { invoices, invoicePayments } from "@/server/db/schema/invoicing";
 import { accounts } from "@/server/db/schema/org";
 import { getInvoiceByIdRepo } from "@/server/db/repos/invoices.repo";
 import { postJournalEntry } from "@/server/db/repos/journals.repo";
 import { eq, and } from "drizzle-orm";
 
-async function getAccountByCode(db: Db, orgId: string, code: string) {
-  const [row] = await db
+async function getAccountByCode(q: Queryable, orgId: string, code: string) {
+  const [row] = await q
     .select()
     .from(accounts)
     .where(and(eq(accounts.orgId, orgId), eq(accounts.code, code)));
@@ -36,8 +37,8 @@ export async function postInvoiceToLedger(
 
     if (inv.type === "INVOICE") {
       // Penjualan (Piutang)
-      const arAccount = await getAccountByCode(tx as Db, orgId, "1200"); // Piutang Usaha
-      const revAccount = await getAccountByCode(tx as Db, orgId, "4100"); // Pendapatan Usaha
+      const arAccount = await getAccountByCode(tx, orgId, "1200"); // Piutang Usaha
+      const revAccount = await getAccountByCode(tx, orgId, "4100"); // Pendapatan Usaha
 
       // Debit: Piutang Usaha (Total)
       lines.push({
@@ -58,7 +59,7 @@ export async function postInvoiceToLedger(
 
       // Kredit: PPN Keluaran (jika ada)
       if (inv.taxMinor > 0n) {
-        const taxAccount = await getAccountByCode(tx as Db, orgId, "2200"); // PPN Keluaran
+        const taxAccount = await getAccountByCode(tx, orgId, "2200"); // PPN Keluaran
         lines.push({
           accountId: taxAccount.id,
           debitMinor: 0n,
@@ -68,8 +69,8 @@ export async function postInvoiceToLedger(
       }
     } else {
       // Pembelian (Utang)
-      const apAccount = await getAccountByCode(tx as Db, orgId, "2100"); // Utang Usaha
-      const expAccount = await getAccountByCode(tx as Db, orgId, "5100"); // Beban Pokok Penjualan
+      const apAccount = await getAccountByCode(tx, orgId, "2100"); // Utang Usaha
+      const expAccount = await getAccountByCode(tx, orgId, "5100"); // Beban Pokok Penjualan
 
       const netSubtotal = inv.subtotalMinor - inv.discountMinor;
       lines.push({
@@ -80,7 +81,7 @@ export async function postInvoiceToLedger(
       });
 
       if (inv.taxMinor > 0n) {
-        const taxAccount = await getAccountByCode(tx as Db, orgId, "1400"); // PPN Masukan
+        const taxAccount = await getAccountByCode(tx, orgId, "1400"); // PPN Masukan
         lines.push({
           accountId: taxAccount.id,
           debitMinor: inv.taxMinor,
@@ -103,7 +104,7 @@ export async function postInvoiceToLedger(
         : `Tagihan Pembelian ${inv.invoiceNumber} - ${inv.contact.name}`;
 
     const entry = await postJournalEntry(
-      tx as Db,
+      tx,
       orgId,
       actorEmail,
       {
@@ -159,7 +160,7 @@ export async function postInvoicePaymentToLedger(
 
     if (inv.type === "INVOICE") {
       // Pelunasan Piutang: Dr Kas/Bank, Cr Piutang Usaha
-      const arAccount = await getAccountByCode(tx as Db, orgId, "1200");
+      const arAccount = await getAccountByCode(tx, orgId, "1200");
 
       lines.push({
         accountId: payment.paymentAccountId,
@@ -176,7 +177,7 @@ export async function postInvoicePaymentToLedger(
       });
     } else {
       // Pembayaran Utang: Dr Utang Usaha, Cr Kas/Bank
-      const apAccount = await getAccountByCode(tx as Db, orgId, "2100");
+      const apAccount = await getAccountByCode(tx, orgId, "2100");
 
       lines.push({
         accountId: apAccount.id,
@@ -199,7 +200,7 @@ export async function postInvoicePaymentToLedger(
         : `Pembayaran Tagihan ${inv.invoiceNumber}${payment.referenceNumber ? ` (${payment.referenceNumber})` : ""}`;
 
     const entry = await postJournalEntry(
-      tx as Db,
+      tx,
       orgId,
       actorEmail,
       {
