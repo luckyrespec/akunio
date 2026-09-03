@@ -245,6 +245,27 @@ html { background-color: var(--color-canvas); }
   font-variant-numeric: tabular-nums;
 }
 
+/* Paper & Ink Matte Mini Scrollbar */
+.paper-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--color-ink-soft) 28%, transparent) transparent;
+}
+.paper-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.paper-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.paper-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-ink-soft) 25%, transparent);
+  border-radius: 9999px;
+  transition: background var(--duration-fast, 150ms) var(--ease-out-soft, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.paper-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--color-ink-soft) 55%, transparent);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

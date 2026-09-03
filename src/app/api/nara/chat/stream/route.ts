@@ -161,8 +161,9 @@ function generateSmartTitle(prompt: string): string {
 - Anda ramah, solutif, teliti, dan selalu memberikan jawaban serta analisis pembukuan yang tuntas dalam Bahasa Indonesia.
 - Gaya Percakapan:
   * Berkomunikasilah secara natural, hangat, dan mengalir seperti percakapan dengan rekan kerja akuntan pribadi.
-  * HINDARI penggunaan format markdown yang terlalu ramai, kaku, atau berlebihan (jangan gunakan banyak heading besar #/## atau list bersarang panjang jika tidak benar-benar diperlukan).
   * Gunakan kalimat singkat, to the point, dan mudah dipahami.
+  * HINDARI penggunaan heading besar (#/##) berlebihan.
+  * Jika menyajikan daftar poin/fitur/bantuan, WAJIB tuliskan setiap poin di baris baru terpisah menggunakan tanda strip (- item) dengan pemisah baris (newline), jangan disambung dalam satu paragraf horizontal.
 - Anda memiliki akses ke berbagai Tool Akuntansi untuk membaca dan mengubah data.
 - Daftar Tool yang tersedia:
   * Pembukuan Jurnal:
@@ -401,7 +402,7 @@ ${liveNumbers}
 
 Tugas:
 1. Berikan penjelasan yang hangat, ramah, dan mengalir santai dalam Bahasa Indonesia berdasarkan hasil data di atas.
-2. Hindari format markdown yang berlebihan atau kaku (gunakan paragraf ringkas yang nyaman dibaca).
+2. Jika ada daftar atau rincian poin, pisahkan tiap poin di baris baru (- item).
 3. Langsung sampaikan informasi intinya secara jelas dan solutif.`;
 
               const synthStream = await ai.interactions.create({

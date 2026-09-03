@@ -104,7 +104,7 @@ export const Conversation = React.forwardRef<HTMLDivElement, ConversationProps>(
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={cn(
-            "relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden transition-colors",
+            "relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden paper-scrollbar transition-colors",
             isDragging && "bg-terra/5",
             className,
           )}

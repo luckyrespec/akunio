@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+interface PromptInputContextValue {
+  onSubmit?: () => void;
+}
+
+const PromptInputContext = React.createContext<PromptInputContextValue>({});
+
 export interface PromptInputProps extends React.HTMLAttributes<HTMLDivElement> {
   onSubmit?: () => void;
   onDropFiles?: (files: File[]) => void;
@@ -33,6 +39,7 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
       e.preventDefault();
       e.stopPropagation();
       setIsDragging(false);
+      dragCounter.current = 0;
 
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         const filesArray = Array.from(e.dataTransfer.files);
@@ -40,31 +47,35 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
       }
     };
 
-    return (
-      <div
-        ref={ref}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={cn(
-          "relative flex flex-col w-full rounded-3xl border border-rule bg-paper p-3 md:p-3.5 shadow-sm transition-all focus-within:border-terra/70 focus-within:ring-2 focus-within:ring-terra/15",
-          isDragging && "border-dashed border-terra ring-2 ring-terra/30 bg-terra/5",
-          className,
-        )}
-        {...props}
-      >
-        {/* Drop Zone Overlay */}
-        {isDragging && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-3xl bg-paper/90 backdrop-blur-xs border-2 border-dashed border-terra animate-in fade-in-0">
-            <UploadCloud className="size-8 text-terra animate-bounce mb-1" />
-            <p className="font-display font-semibold text-xs text-ink">Lepaskan berkas di sini untuk melampirkan</p>
-            <p className="text-[10px] text-ink-soft">Mendukung gambar (PNG, JPG) dan dokumen PDF</p>
-          </div>
-        )}
+    const dragCounter = React.useRef(0);
 
-        {children}
-      </div>
+    return (
+      <PromptInputContext.Provider value={{ onSubmit }}>
+        <div
+          ref={ref}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={cn(
+            "relative flex flex-col w-full rounded-3xl border border-rule bg-paper p-3 md:p-3.5 shadow-sm transition-all focus-within:border-terra/70 focus-within:ring-2 focus-within:ring-terra/15",
+            isDragging && "border-dashed border-terra ring-2 ring-terra/30 bg-terra/5",
+            className,
+          )}
+          {...props}
+        >
+          {/* Drop Zone Overlay */}
+          {isDragging && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-3xl bg-paper/90 backdrop-blur-xs border-2 border-dashed border-terra animate-in fade-in-0">
+              <UploadCloud className="size-8 text-terra animate-bounce mb-1" />
+              <p className="font-display font-semibold text-xs text-ink">Lepaskan berkas di sini untuk melampirkan</p>
+              <p className="text-[10px] text-ink-soft">Mendukung gambar (PNG, JPG) dan dokumen PDF</p>
+            </div>
+          )}
+
+          {children}
+        </div>
+      </PromptInputContext.Provider>
     );
   },
 );
@@ -103,17 +114,21 @@ export interface PromptInputTextareaProps
 export const PromptInputTextarea = React.forwardRef<
   HTMLTextAreaElement,
   PromptInputTextareaProps
->(({ className, onSubmit, onChange, ...props }, ref) => {
+>(({ className, onSubmit: propOnSubmit, onChange, ...props }, ref) => {
   const internalRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const context = React.useContext(PromptInputContext);
+  const triggerSubmit = propOnSubmit ?? context.onSubmit;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter") {
       if (e.altKey || e.shiftKey) {
-        // Alt+Enter or Shift+Enter allows newline without sending
+        // Alt+Enter or Shift+Enter creates a new line without sending
         return;
       }
-      e.preventDefault();
-      onSubmit?.();
+      if (!e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        triggerSubmit?.();
+      }
     }
   };
 
