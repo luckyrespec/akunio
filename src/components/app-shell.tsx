@@ -6,6 +6,7 @@ import { SidebarNav } from "@/components/sidebar-nav";
 import { Topbar } from "@/components/topbar";
 import { PageTransition } from "@/components/motion";
 import { AssistantWidget } from "@/components/assistant-widget";
+import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "neraca:sidebar-collapsed";
 
@@ -43,13 +44,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Avoid flash of wrong width before localStorage read
   if (!ready) {
     return (
-      <div className="flex min-h-screen w-full bg-canvas">
+      <div className={cn("flex w-full bg-canvas", isAsisten ? "h-screen overflow-hidden" : "min-h-screen")}>
         <SidebarNav
           collapsed={false}
           mobileOpen={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
         />
-        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden">
+        <div className={cn("flex min-h-0 flex-1 flex-col", isAsisten ? "h-full overflow-hidden" : "overflow-x-hidden")}>
           <Topbar
             onToggleSidebar={toggle}
             onOpenMobile={() => setMobileMenuOpen(true)}
@@ -57,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <main
             className={
               isAsisten
-                ? "flex-1 w-full h-[calc(100vh-3.5rem)] overflow-hidden p-0 m-0 max-w-none"
+                ? "flex-1 w-full min-h-0 overflow-hidden p-0 m-0 max-w-none flex flex-col"
                 : "flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8"
             }
           >
@@ -70,14 +71,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-canvas">
+    <div className={cn("flex w-full bg-canvas", isAsisten ? "h-screen overflow-hidden" : "min-h-screen")}>
       <SidebarNav
         collapsed={collapsed}
         onToggle={toggle}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
       />
-      <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden">
+      <div className={cn("flex min-h-0 flex-1 flex-col", isAsisten ? "h-full overflow-hidden" : "overflow-x-hidden")}>
         <Topbar
           onToggleSidebar={toggle}
           onOpenMobile={() => setMobileMenuOpen(true)}
@@ -85,11 +86,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main
           className={
             isAsisten
-              ? "flex-1 w-full h-[calc(100vh-3.5rem)] overflow-hidden p-0 m-0 max-w-none"
+              ? "flex-1 w-full min-h-0 overflow-hidden p-0 m-0 max-w-none flex flex-col"
               : "flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8"
           }
         >
-          <PageTransition key={pathname}>{children}</PageTransition>
+          <PageTransition className={isAsisten ? "flex-1 min-h-0 flex flex-col size-full" : undefined} key={pathname}>
+            {children}
+          </PageTransition>
         </main>
       </div>
       {!isAsisten && <AssistantWidget />}

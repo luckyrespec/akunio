@@ -69,14 +69,15 @@ export function StaggerItem({
 }
 
 // PageTransition — route content fade + lift
-export function PageTransition({ children }: PropsWithChildren) {
+export function PageTransition({ children, className }: PropsWithChildren<{ className?: string }>) {
   const reduce = useReducedMotion();
-  if (reduce) return <>{children}</>;
+  if (reduce) return <div className={className}>{children}</div>;
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.24, ease: EASE_OUT_SOFT }}
+      className={className}
     >
       {children}
     </motion.div>

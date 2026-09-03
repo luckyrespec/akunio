@@ -15,7 +15,7 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
       <div
         ref={ref}
         className={cn(
-          "relative flex flex-col w-full rounded-2xl border border-rule bg-paper p-3 shadow-xs transition-all focus-within:border-terra/70 focus-within:ring-2 focus-within:ring-terra/15",
+          "relative flex flex-col w-full rounded-3xl border border-rule bg-paper p-3 md:p-3.5 shadow-sm transition-all focus-within:border-terra/70 focus-within:ring-2 focus-within:ring-terra/15",
           className,
         )}
         {...props}
@@ -26,6 +26,31 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
   },
 );
 PromptInput.displayName = "PromptInput";
+
+export function PromptInputHeader({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  if (React.Children.count(children) === 0) return null;
+  return (
+    <div className={cn("mb-2 flex flex-wrap items-center gap-1.5", className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export function PromptInputBody({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={cn("relative flex-1", className)} {...props}>
+      {children}
+    </div>
+  );
+}
 
 export interface PromptInputTextareaProps
   extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -48,7 +73,7 @@ export const PromptInputTextarea = React.forwardRef<
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const el = e.target;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
     onChange?.(e);
   };
 
@@ -61,7 +86,7 @@ export const PromptInputTextarea = React.forwardRef<
       onKeyDown={handleKeyDown}
       onChange={handleChange}
       className={cn(
-        "max-h-[200px] min-h-[38px] w-full resize-none border-0 bg-transparent px-1.5 py-1 text-sm leading-relaxed text-ink placeholder:text-ink-soft/60 focus:outline-none focus:ring-0",
+        "max-h-[220px] min-h-[42px] w-full resize-none border-0 bg-transparent px-1.5 py-1 text-sm leading-relaxed text-ink placeholder:text-ink-soft/60 focus:outline-none focus:ring-0",
         className,
       )}
       {...props}
@@ -70,20 +95,60 @@ export const PromptInputTextarea = React.forwardRef<
 });
 PromptInputTextarea.displayName = "PromptInputTextarea";
 
-export function PromptInputActions({
+export function PromptInputFooter({
   className,
   children,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("mt-2 flex items-center justify-between gap-2 pt-1.5 border-t border-rule/50", className)}
+      className={cn("mt-2 flex items-center justify-between gap-2 pt-2 border-t border-rule/50", className)}
       {...props}
     >
       {children}
     </div>
   );
 }
+
+export function PromptInputTools({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={cn("flex flex-wrap items-center gap-1.5", className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export interface PromptInputButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  active?: boolean;
+}
+
+export const PromptInputButton = React.forwardRef<
+  HTMLButtonElement,
+  PromptInputButtonProps
+>(({ className, active, children, ...props }, ref) => {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={cn(
+        "flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all shadow-2xs",
+        active
+          ? "border-terra/40 bg-terra/10 text-terra"
+          : "border-rule/70 bg-canvas/60 text-ink-soft hover:bg-canvas hover:text-ink",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+});
+PromptInputButton.displayName = "PromptInputButton";
 
 export interface PromptInputSubmitProps
   extends React.ComponentPropsWithoutRef<typeof Button> {
@@ -118,12 +183,12 @@ export const PromptInputSubmit = React.forwardRef<
       type="button"
       size="icon"
       className={cn(
-        "size-8 rounded-full bg-terra text-white shadow-2xs transition-transform hover:bg-terra/90 active:scale-95 disabled:opacity-40 disabled:hover:bg-terra",
+        "size-8 rounded-full bg-terra text-white shadow-2xs transition-transform hover:bg-terra/90 active:scale-95 disabled:opacity-35 disabled:hover:bg-terra",
         className,
       )}
       onClick={onClick}
       disabled={disabled}
-      aria-label="Send message"
+      aria-label="Kirim pesan"
       {...props}
     >
       <ArrowUp className="size-4" />

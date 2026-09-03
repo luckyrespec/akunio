@@ -5,7 +5,6 @@ import {
   Sparkles,
   Plus,
   Search,
-  Paperclip,
   Trash2,
   Edit2,
   Check,
@@ -18,6 +17,8 @@ import {
   FileCheck,
   Loader2,
   Shield,
+  RotateCcw,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,8 +50,11 @@ import {
 } from "@/components/ai-elements/confirmation";
 import {
   PromptInput,
+  PromptInputHeader,
+  PromptInputBody,
   PromptInputTextarea,
-  PromptInputActions,
+  PromptInputFooter,
+  PromptInputTools,
   PromptInputSubmit,
 } from "@/components/ai-elements/prompt-input";
 import {
@@ -62,6 +66,7 @@ import {
   ModelSelector,
   type ModelPreset,
 } from "@/components/ai-elements/model-selector";
+import { HitlTool } from "@/components/ai-elements/hitl-tool";
 import { cn } from "@/lib/utils";
 
 interface Thread {
@@ -118,7 +123,9 @@ export default function AsistenClient({
   const [streamingReasoning, setStreamingReasoning] = React.useState("");
   const [streamingText, setStreamingText] = React.useState("");
   const [pendingApproval, setPendingApproval] = React.useState<PendingApproval | null>(null);
-  const [allowAllForSession, setAllowAllForSession] = React.useState(false);
+  const [allowAllForSession, setAllowAllForSession] = React.useState(
+    initialHitlPolicy === "autonomous",
+  );
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null);
@@ -195,7 +202,7 @@ export default function AsistenClient({
     setInput("");
     setAttachments([]);
     setPendingApproval(null);
-    setAllowAllForSession(false);
+    setAllowAllForSession(initialHitlPolicy === "autonomous");
     setErrorBanner(null);
   };
 
@@ -443,7 +450,7 @@ export default function AsistenClient({
       {/* 1. SIDEBAR SESI PERCAKAPAN (Paper & Ink Matte Theme) */}
       <aside
         className={cn(
-          "relative flex flex-col border-r border-rule bg-paper transition-all duration-300 ease-in-out shrink-0",
+          "relative flex h-full flex-col border-r border-rule bg-paper transition-all duration-300 ease-in-out shrink-0",
           sidebarOpen ? "w-72 md:w-80" : "w-0 -translate-x-full overflow-hidden border-r-0 md:w-0",
         )}
       >
@@ -622,10 +629,10 @@ export default function AsistenClient({
       )}
 
       {/* 2. AREA PERCAKAPAN UTAMA (Canvas & Messages) */}
-      <main className="relative flex flex-1 flex-col overflow-hidden min-w-0">
-        {/* Top bar header */}
-        <div className="flex h-14 items-center justify-between border-b border-rule bg-paper/80 px-4 md:px-6 backdrop-blur-md shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
+      <main className="relative flex flex-1 min-h-0 flex-col overflow-hidden min-w-0">
+        {/* Subtle Chat Header */}
+        <div className="flex h-12 items-center justify-between border-b border-rule bg-paper/60 px-4 md:px-6 backdrop-blur-sm shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             {!sidebarOpen && (
               <Button
                 variant="ghost"
@@ -637,23 +644,30 @@ export default function AsistenClient({
                 <SidebarOpen className="size-4" />
               </Button>
             )}
-            <h2 className="font-display text-sm md:text-base font-semibold text-ink truncate max-w-lg">
+            <MessageSquare className="size-4 text-terra shrink-0" />
+            <span className="font-display text-xs md:text-sm font-semibold text-ink truncate max-w-md">
               {threads.find((t) => t.id === activeThreadId)?.title || "Percakapan Baru"}
-            </h2>
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <ModelSelector
-              value={modelPreset}
-              onValueChange={setModelPreset}
-              disabled={isStreaming}
-            />
+            {messages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleNewChat}
+                className="h-7 text-[11px] gap-1 text-ink-soft hover:text-ink hover:bg-canvas rounded-lg"
+              >
+                <RotateCcw className="size-3" />
+                <span>Mulai Baru</span>
+              </Button>
+            )}
           </div>
         </div>
 
         {/* Error Banner */}
         {errorBanner && (
-          <div className="flex items-center justify-between bg-destructive/10 border-b border-destructive/20 px-4 py-2 text-xs text-destructive">
+          <div className="flex items-center justify-between bg-destructive/10 border-b border-destructive/20 px-4 py-2 text-xs text-destructive shrink-0">
             <div className="flex items-center gap-2">
               <AlertCircle className="size-4 shrink-0" />
               <span>{errorBanner}</span>
@@ -759,7 +773,6 @@ export default function AsistenClient({
                             key={att.id}
                             className="flex items-center gap-1.5 rounded-lg bg-white/20 px-2.5 py-1 text-xs text-white"
                           >
-                            <Paperclip className="size-3" />
                             <span className="truncate max-w-[140px] font-medium">{att.fileName}</span>
                           </div>
                         ))}
@@ -888,37 +901,44 @@ export default function AsistenClient({
         </Conversation>
 
         {/* 3. BILAH INPUT BAWAH (Sticky Prompt Input - Full Width Container) */}
-        <div className="border-t border-rule bg-paper/80 p-4 md:p-6 backdrop-blur-md shrink-0">
+        <div className="border-t border-rule bg-paper/80 p-3 md:p-5 backdrop-blur-md shrink-0">
           <div className="mx-auto max-w-4xl lg:max-w-5xl">
-            {/* Attachment Chips Preview */}
-            <Attachments>
-              {attachments.map((att) => (
-                <AttachmentItem
-                  key={att.id}
-                  attachment={att}
-                  onRemove={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
-                />
-              ))}
+            {/* Prompt Input Component (Header, Body, Footer with Tools) */}
+            <PromptInput onSubmit={() => handleSendMessage()}>
+              {/* Attachment Chips inside Prompt Input Header */}
+              {attachments.length > 0 && (
+                <PromptInputHeader>
+                  <Attachments>
+                    {attachments.map((att) => (
+                      <AttachmentItem
+                        key={att.id}
+                        attachment={att}
+                        onRemove={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
+                      />
+                    ))}
+                  </Attachments>
+                </PromptInputHeader>
+              )}
+
               {uploading && (
-                <div className="flex items-center gap-1.5 rounded-xl border border-rule bg-canvas px-3 py-1.5 text-xs text-ink-soft">
+                <div className="flex items-center gap-1.5 rounded-xl border border-rule bg-canvas px-3 py-1 text-xs text-ink-soft mb-2">
                   <Loader2 className="size-3.5 animate-spin text-terra" />
                   <span>Mengunggah berkas...</span>
                 </div>
               )}
-            </Attachments>
 
-            {/* Prompt Input Component */}
-            <PromptInput onSubmit={() => handleSendMessage()}>
-              <PromptInputTextarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Tanyakan hal akuntansi, minta laporan, atau ketik transaksi..."
-                disabled={isStreaming}
-              />
+              <PromptInputBody>
+                <PromptInputTextarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Tanyakan hal akuntansi, minta laporan, atau ketik transaksi..."
+                  disabled={isStreaming}
+                />
+              </PromptInputBody>
 
-              <PromptInputActions>
-                <div className="flex items-center gap-1.5">
-                  {/* Hidden File Input */}
+              <PromptInputFooter>
+                <PromptInputTools>
+                  {/* 1. Tombol (+) untuk lampirkan dokumen / gambar */}
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -926,33 +946,45 @@ export default function AsistenClient({
                     accept="image/*,application/pdf"
                     className="hidden"
                     onChange={(e) => {
-                      if (e.target.files) {
-                        handleFileUpload(e.target.files);
-                      }
+                      if (e.target.files) handleFileUpload(e.target.files);
                     }}
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-8 rounded-full text-ink-soft hover:bg-canvas hover:text-ink transition-colors"
+                    className="size-8 rounded-full border border-rule/70 bg-canvas/60 text-ink-soft hover:text-ink hover:bg-canvas transition-colors"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading || isStreaming}
-                    aria-label="Lampirkan dokumen atau nota"
+                    title="Lampirkan nota atau faktur (PDF / Gambar)"
+                    aria-label="Lampirkan dokumen"
                   >
-                    <Paperclip className="size-4" />
+                    <Plus className="size-4" />
                   </Button>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <PromptInputSubmit
-                    isStreaming={isStreaming}
-                    onStop={handleStopStreaming}
-                    onClick={() => handleSendMessage()}
-                    disabled={!input.trim() && attachments.length === 0}
+                  {/* 2. Tool Human-in-the-Loop pengganti search dengan hover explanation & click toggle */}
+                  <HitlTool
+                    allowAll={allowAllForSession}
+                    onToggle={() => setAllowAllForSession((v) => !v)}
+                    disabled={isStreaming}
                   />
-                </div>
-              </PromptInputActions>
+
+                  {/* 3. Model Chooser menyatu di dalam prompt box */}
+                  <ModelSelector
+                    value={modelPreset}
+                    onValueChange={setModelPreset}
+                    disabled={isStreaming}
+                  />
+                </PromptInputTools>
+
+                {/* 4. Tombol Submit / Stop */}
+                <PromptInputSubmit
+                  isStreaming={isStreaming}
+                  onStop={handleStopStreaming}
+                  onClick={() => handleSendMessage()}
+                  disabled={!input.trim() && attachments.length === 0}
+                />
+              </PromptInputFooter>
             </PromptInput>
           </div>
         </div>
