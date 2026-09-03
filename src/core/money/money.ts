@@ -39,6 +39,11 @@ export class Money {
     return this.minor < b.minor ? -1 : this.minor > b.minor ? 1 : 0;
   }
 
+  static formatIdr(v: bigint | string | Money): string {
+    if (v instanceof Money) return v.formatIdr();
+    return Money.fromMinor(v).formatIdr();
+  }
+
   formatIdr(): string {
     const neg = this.minor < 0n;
     const abs = neg ? -this.minor : this.minor;
