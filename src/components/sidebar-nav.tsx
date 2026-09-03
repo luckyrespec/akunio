@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ArrowLeftRight,
   BadgeCheck,
   BookOpen,
   FileBarChart,
@@ -24,6 +25,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const STANDARD_ITEMS = [
   { href: "/dasbor", label: "Dasbor", icon: LayoutDashboard },
   { href: "/faktur", label: "Faktur & Tagihan", icon: Receipt },
+  { href: "/rekonsiliasi", label: "Rekonsiliasi Bank", icon: ArrowLeftRight },
   { href: "/kontak", label: "Kontak", icon: Users },
   { href: "/jurnal", label: "Jurnal Umum", icon: BookOpen, match: (p: string) => p === "/jurnal" || p === "/jurnal/baru" },
   { href: "/buku-besar", label: "Buku Besar", icon: Library },
