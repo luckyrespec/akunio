@@ -7,6 +7,7 @@ import {
   timestamp,
   index,
   customType,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { organizations } from "./org";
 
@@ -78,7 +79,10 @@ export const chatThreads = pgTable(
       .notNull()
       .references(() => organizations.id),
     title: text("title").notNull(),
+    modelPreset: text("model_preset").notNull().default("fast"),
+    pinned: boolean("pinned").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("chat_threads_org_idx").on(t.orgId)],
 );
@@ -92,6 +96,9 @@ export const chatMessages = pgTable(
       .references(() => chatThreads.id, { onDelete: "cascade" }),
     role: text("role", { enum: ["user", "assistant"] }).notNull(),
     content: text("content").notNull(),
+    reasoning: text("reasoning"),
+    attachments: jsonb("attachments"),
+    toolInvocations: jsonb("tool_invocations"),
     citations: jsonb("citations"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

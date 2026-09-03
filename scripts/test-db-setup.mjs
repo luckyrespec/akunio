@@ -12,16 +12,18 @@ function loadEnv() {
 
 loadEnv();
 
-const ADMIN_URL = process.env.DATABASE_URL;
+const ADMIN_URL = process.env.TEST_DATABASE_URL
+  ? process.env.TEST_DATABASE_URL.replace(/\/[^/?]+(\?|$)/, "/postgres$1")
+  : process.env.DATABASE_URL;
 const TEST_DB = process.env.TEST_DB_NAME ?? "ledger_test";
 
 if (!ADMIN_URL) {
-  console.error("DATABASE_URL is required in .env");
+  console.error("DATABASE_URL or TEST_DATABASE_URL is required in .env");
   process.exit(1);
 }
 
 // Derive the test URL from the admin URL.
-const testUrl = ADMIN_URL.replace(/\/[^/?]+(\?|$)/, `/${TEST_DB}$1`);
+const testUrl = process.env.TEST_DATABASE_URL ?? ADMIN_URL.replace(/\/[^/?]+(\?|$)/, `/${TEST_DB}$1`);
 
 // 1. Create the test database if missing (connect to the admin DB first).
 const adminDb = ADMIN_URL.replace(/\/[^/?]+(\?|$)/, "/postgres$1");
