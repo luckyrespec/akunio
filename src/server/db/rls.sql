@@ -9,7 +9,7 @@ BEGIN
   FOREACH t IN ARRAY ARRAY['memberships','accounts','fiscal_periods',
                            'journal_entries','journal_lines','journal_seq_counters','audit_log',
                            'documents','ai_drafts',
-                           'tenant_chunks','chat_threads','ai_findings','ai_proposals',
+                            'tenant_chunks','chat_threads','onboarding_messages','org_profiles','ai_findings','ai_proposals',
                            'contacts','invoices','bank_reconciliations',
                            'fixed_assets','asset_depreciation_lines','asset_disposals']
   LOOP
