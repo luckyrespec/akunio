@@ -39,6 +39,7 @@ export const SAFE_TOOLS = new Set<string>([
   "get_financial_kpis",
   "get_daily_briefing",
   "drilldown_account_details",
+  "batch_analyze_documents",
   "list_periods",
   "check_accounting_health",
 ]);
@@ -126,6 +127,22 @@ export const ALL_NARA_TOOLS = [
         comparePeriod: { type: "string", description: "Periode komparasi YYYY-MM (contoh: '2026-07')" },
       },
       required: ["accountCode", "period"],
+    },
+  },
+  {
+    type: "function",
+    name: "batch_analyze_documents",
+    description: "Analisis banyak dokumen struk sekaligus dan kelompokkan menjadi transaksi siap posting vs perlu review.",
+    parameters: {
+      type: "object",
+      properties: {
+        documentIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Daftar ID dokumen di sistem",
+        },
+      },
+      required: ["documentIds"],
     },
   },
   {
@@ -400,6 +417,13 @@ export async function executeNaraTool(
         const period = String(args.period);
         const comparePeriod = args.comparePeriod ? String(args.comparePeriod) : undefined;
         const res = await drilldownAccountDetails(orgId, accountCode, period, comparePeriod);
+        return { success: true, data: res };
+      }
+
+      case "batch_analyze_documents": {
+        const { batchAnalyzeDocuments } = await import("@/server/ai/batch-documents");
+        const docIds = Array.isArray(args.documentIds) ? (args.documentIds as string[]) : [];
+        const res = await batchAnalyzeDocuments(orgId, docIds);
         return { success: true, data: res };
       }
 
