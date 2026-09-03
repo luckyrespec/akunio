@@ -1,11 +1,14 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import { memberships, organizations } from "@/server/db/schema/org";
-import { seedOrgData } from "./seed-org";
+import { upsertProfile } from "@/server/db/repos/onboarding.repo";
 
 /**
  * Ensures the user owns exactly one workspace: organization + OWNER membership
- * + seeded chart of accounts and fiscal periods.
+ * + an IN_PROGRESS onboarding profile.
+ *
+ * COA and fiscal periods are NOT seeded here anymore — they are provisioned
+ * atomically when onboarding completes (see src/server/onboarding/engine.ts).
  *
  * Called from two places:
  * - better-auth signup hook (new user)
@@ -18,11 +21,15 @@ export async function ensureUserWorkspace(
   displayName: string,
 ): Promise<void> {
   const [existing] = await db
-    .select({ id: memberships.id })
+    .select({ id: memberships.id, orgId: memberships.orgId })
     .from(memberships)
     .where(eq(memberships.userId, userId))
     .limit(1);
-  if (existing) return;
+  if (existing) {
+    // Self-heal for pre-onboarding workspaces (also backfills the profile).
+    await upsertProfile(db, existing.orgId, {});
+    return;
+  }
 
   await db.transaction(async (tx) => {
     // Serialize concurrent first-requests for the same user.
@@ -44,6 +51,6 @@ export async function ensureUserWorkspace(
       userId,
       role: "OWNER",
     });
-    await seedOrgData(org.id, 1, tx);
+    await upsertProfile(tx, org.id, {});
   });
 }

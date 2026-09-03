@@ -15,15 +15,18 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("atomic bootstrap", () => {
   });
 
   it("failed signup leaves no orphan user and no partial org; same email retries cleanly", async () => {
-    // Force a mid-hook failure through the real pipeline: duplicate account
-    // codes violate accounts_org_code_uq during seeding, inside the hook's
-    // transaction.
+    // Force a mid-hook failure through the real pipeline: fail the onboarding
+    // profile insert at the end of the hook's transaction.
     vi.resetModules();
-    vi.doMock("@/core/accounts/coa-template", () => ({
-      COA_TEMPLATE: [
-        { code: "1000", name: "ASET A", type: "ASET", normal: "D" },
-        { code: "1000", name: "ASET B", type: "ASET", normal: "D" },
-      ],
+    vi.doMock("@/server/db/repos/onboarding.repo", () => ({
+      getProfile: async () => null,
+      upsertProfile: async () => {
+        throw new Error("boom-profile");
+      },
+      addOnboardingMessage: async () => {
+        throw new Error("boom-profile");
+      },
+      listOnboardingMessages: async () => [],
     }));
     const { auth: brokenAuth } = await import("@/server/auth/auth-server");
 
@@ -51,8 +54,8 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("atomic bootstrap", () => {
     );
     expect(m.rows[0].n).toBe(0);
 
-    // retry with the SAME email succeeds end-to-end
-    vi.doUnmock("@/core/accounts/coa-template");
+    // retry with the SAME email succeeds end-to-end (empty org + profile)
+    vi.doUnmock("@/server/db/repos/onboarding.repo");
     vi.resetModules();
     const { auth: fixedAuth } = await import("@/server/auth/auth-server");
     const res = await fixedAuth.api.signUpEmail({
@@ -66,15 +69,21 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("atomic bootstrap", () => {
     );
     expect(orgRow.rowCount).toBe(1);
     const orgId = orgRow.rows[0].org_id;
+    // Deferred provisioning: no COA or periods at signup.
     const accs = await admin.query<{ n: number }>(
       "SELECT count(*)::int AS n FROM accounts WHERE org_id=$1",
       [orgId],
     );
-    expect(accs.rows[0].n).toBeGreaterThanOrEqual(31);
+    expect(accs.rows[0].n).toBe(0);
     const periods = await admin.query<{ n: number }>(
       "SELECT count(*)::int AS n FROM fiscal_periods WHERE org_id=$1",
       [orgId],
     );
-    expect(periods.rows[0].n).toBe(12);
+    expect(periods.rows[0].n).toBe(0);
+    const prof = await admin.query<{ status: string }>(
+      "SELECT status FROM org_profiles WHERE org_id=$1",
+      [orgId],
+    );
+    expect(prof.rows[0]?.status).toBe("IN_PROGRESS");
   }, 30000);
 });

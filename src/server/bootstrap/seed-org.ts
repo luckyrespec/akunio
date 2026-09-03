@@ -4,6 +4,7 @@ import type { PgDatabase } from "drizzle-orm/pg-core";
 import type { NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
 import { db } from "@/server/db";
 import { accounts, fiscalPeriods } from "@/server/db/schema/org";
+import type { AccountDef } from "@/core/accounts/types";
 import { COA_TEMPLATE } from "@/core/accounts/coa-template";
 
 type Executor = PgDatabase<
@@ -14,20 +15,13 @@ type Executor = PgDatabase<
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
-export async function seedOrgData(
+export async function seedOrgAccounts(
   orgId: string,
-  fiscalYearStartMonth = 1,
+  defs: readonly AccountDef[],
   exec: Executor = db,
 ): Promise<void> {
-  const existing = await exec
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(eq(accounts.orgId, orgId))
-    .limit(1);
-  if (existing.length > 0) return;
-
   await exec.insert(accounts).values(
-    COA_TEMPLATE.map((d) => ({
+    defs.map((d) => ({
       orgId,
       code: d.code,
       name: d.name,
@@ -39,7 +33,13 @@ export async function seedOrgData(
       contra: d.contra ?? false,
     })),
   );
+}
 
+export async function seedFiscalPeriods(
+  orgId: string,
+  fiscalYearStartMonth = 1,
+  exec: Executor = db,
+): Promise<void> {
   const startOffset = fiscalYearStartMonth - 1;
   const baseYear = new Date().getFullYear();
   const rows = Array.from({ length: 12 }, (_, i) => {
@@ -57,4 +57,20 @@ export async function seedOrgData(
     };
   });
   await exec.insert(fiscalPeriods).values(rows);
+}
+
+export async function seedOrgData(
+  orgId: string,
+  fiscalYearStartMonth = 1,
+  exec: Executor = db,
+): Promise<void> {
+  const existing = await exec
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(eq(accounts.orgId, orgId))
+    .limit(1);
+  if (existing.length > 0) return;
+
+  await seedOrgAccounts(orgId, COA_TEMPLATE, exec);
+  await seedFiscalPeriods(orgId, fiscalYearStartMonth, exec);
 }
