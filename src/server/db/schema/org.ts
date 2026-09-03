@@ -1,6 +1,6 @@
 import {
   pgTable, uuid, text, integer, boolean, char, varchar, date,
-  timestamp, uniqueIndex,
+  timestamp, uniqueIndex, jsonb,
 } from "drizzle-orm/pg-core";
 
 export const organizations = pgTable("organizations", {
@@ -8,6 +8,7 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull(),
   fiscalYearStartMonth: integer("fiscal_year_start_month").notNull().default(1),
   baseCurrency: text("base_currency").notNull().default("IDR"),
+  settings: jsonb("settings"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

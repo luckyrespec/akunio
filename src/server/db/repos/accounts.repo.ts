@@ -27,13 +27,15 @@ export async function setAccountArchived(
   return row;
 }
 
+export type AccountType = "ASET" | "LIABILITAS" | "EKUITAS" | "PENDAPATAN" | "BEBAN";
+
 export async function createAccount(
   q: Queryable,
   input: {
     orgId: string;
     code: string;
     name: string;
-    type: "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE";
+    type: AccountType | "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE";
     normal: "D" | "K";
     parentCode?: string;
     contra?: boolean;
@@ -41,11 +43,25 @@ export async function createAccount(
     isBank?: boolean;
   },
 ): Promise<AccountRow> {
+  const TYPE_MAP: Record<string, AccountType> = {
+    ASSET: "ASET",
+    LIABILITY: "LIABILITAS",
+    EQUITY: "EKUITAS",
+    REVENUE: "PENDAPATAN",
+    EXPENSE: "BEBAN",
+    ASET: "ASET",
+    LIABILITAS: "LIABILITAS",
+    EKUITAS: "EKUITAS",
+    PENDAPATAN: "PENDAPATAN",
+    BEBAN: "BEBAN",
+  };
+  const resolvedType = TYPE_MAP[input.type] ?? "BEBAN";
+
   const [row] = await q.insert(accounts).values({
     orgId: input.orgId,
     code: input.code,
     name: input.name,
-    type: input.type,
+    type: resolvedType,
     normal: input.normal,
     parentCode: input.parentCode ?? null,
     contra: input.contra ?? false,

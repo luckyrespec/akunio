@@ -435,7 +435,7 @@ export async function executeNaraTool(
 
         let totalDebit = 0n;
         let totalCredit = 0n;
-        const lines = [];
+        const lines: Array<{ accountId: string; debitMinor: bigint; creditMinor: bigint; memo?: string }> = [];
 
         for (const l of rawLines) {
           const acc = codeMap.get(l.accountCode);
@@ -466,7 +466,7 @@ export async function executeNaraTool(
             memo,
             dateISO,
             lines,
-            source: "AI_AGENT",
+            source: "AI",
           });
           await appendAudit(tx, {
             orgId,
@@ -510,7 +510,7 @@ export async function executeNaraTool(
               memo: `Reversal dari ${target.number}: ${reason}`,
               dateISO,
               lines: reversedLines,
-              source: "AI_AGENT",
+              source: "AI",
             },
             { reversalOfId: target.id },
           );

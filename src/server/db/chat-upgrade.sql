@@ -5,3 +5,5 @@ ALTER TABLE chat_threads ADD COLUMN IF NOT EXISTS updated_at timestamp with time
 ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS reasoning text;
 ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachments jsonb;
 ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS tool_invocations jsonb;
+
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS settings jsonb;
