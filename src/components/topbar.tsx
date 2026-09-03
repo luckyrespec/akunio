@@ -25,7 +25,13 @@ function breadcrumb(pathname: string) {
   return segs.map((s) => LABELS[s] ?? s).join(" / ");
 }
 
-export function Topbar({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
+export function Topbar({
+  onToggleSidebar,
+  onOpenMobile,
+}: {
+  onToggleSidebar?: () => void;
+  onOpenMobile?: () => void;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -44,23 +50,31 @@ export function Topbar({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
 
   return (
     <>
-      <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-rule bg-canvas/80 px-(--gutter) backdrop-blur-sm lg:px-(--gutter-lg)">
+      <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-rule bg-canvas/80 px-4 sm:px-6 backdrop-blur-sm lg:px-8">
+        {onOpenMobile && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 lg:hidden text-ink hover:bg-paper"
+            onClick={onOpenMobile}
+            aria-label="Buka menu navigasi"
+          >
+            <PanelLeft className="size-5" />
+          </Button>
+        )}
         {onToggleSidebar && (
-          <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={onToggleSidebar} aria-label="Toggle sidebar">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden shrink-0 lg:inline-flex text-ink-soft hover:text-ink hover:bg-paper"
+            onClick={onToggleSidebar}
+            aria-label="Toggle sidebar"
+          >
             <PanelLeft className="size-4" />
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="hidden shrink-0 lg:inline-flex"
-          onClick={onToggleSidebar}
-          aria-label="Toggle sidebar"
-        >
-          <PanelLeft className="size-4" />
-        </Button>
 
-        <p className="hidden truncate text-xs font-medium uppercase tracking-widest text-ink-soft sm:block">{crumb}</p>
+        <p className="truncate text-xs font-semibold uppercase tracking-wider text-ink-soft">{crumb}</p>
 
         <div className="ml-auto flex items-center gap-2">
           <button

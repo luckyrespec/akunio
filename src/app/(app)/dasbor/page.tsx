@@ -47,49 +47,76 @@ export default async function DasborPage() {
   const ytd = incomeStatement(aggregateFromLines(data.ytdLines, metas));
 
   return (
-    <section>
-      <PageHeader title="Dasbor" eyebrow="Ringkasan keuangan" />
+    <section className="space-y-8">
+      <PageHeader
+        title="Dasbor"
+        eyebrow={`Ringkasan keuangan tahun berjalan (${year})`}
+        actions={
+          <div className="flex items-center gap-2">
+            <Link href="/jurnal/baru" className="inline-flex items-center justify-center rounded-lg bg-terra px-3.5 py-2 text-xs font-medium text-white shadow-xs hover:bg-terra/90 transition-colors">
+              + Tulis Jurnal
+            </Link>
+            <Link href="/asisten" className="inline-flex items-center justify-center rounded-lg border border-rule bg-paper px-3.5 py-2 text-xs font-medium text-ink shadow-xs hover:bg-canvas transition-colors">
+              Asisten AI
+            </Link>
+          </div>
+        }
+      />
 
-      <Stagger className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-6">
-        <StaggerItem className="md:col-span-2">
+      <Stagger className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StaggerItem>
           <GlowCard>
-            <Card className="border-0 bg-transparent shadow-none">
+            <Card className="border border-rule bg-paper shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-[11px] font-medium uppercase tracking-widest text-ink-soft">Periode Berjalan</CardTitle>
+                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                  Periode Berjalan
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="font-display text-xl tracking-tight">{data.period?.name ?? "—"}</p>
-                <Badge variant="outline" className="mt-2 border-rule bg-canvas text-ink-soft">{data.period?.status ?? "-"}</Badge>
+              <CardContent className="pt-1">
+                <p className="font-display text-2xl font-semibold tracking-tight text-ink">
+                  {data.period?.name ?? "—"}
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Badge variant="outline" className="border-rule bg-canvas text-xs text-ink-soft">
+                    Status: {data.period?.status ?? "OPEN"}
+                  </Badge>
+                </div>
               </CardContent>
             </Card>
           </GlowCard>
         </StaggerItem>
-        <StaggerItem className="md:col-span-2">
+
+        <StaggerItem>
           <GlowCard>
-            <Card className="border-0 bg-transparent shadow-none">
+            <Card className="border border-rule bg-paper shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-[11px] font-medium uppercase tracking-widest text-ink-soft">Saldo Kas &amp; Bank</CardTitle>
+                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                  Saldo Kas &amp; Bank
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="font-display text-xl tracking-tight tnum">
+              <CardContent className="pt-1">
+                <p className="font-display text-2xl font-semibold tracking-tight text-ink tnum">
                   <AnimatedNumber minor={cashMinor} />
                 </p>
-                <p className="mt-1 text-xs text-ink-soft">Kumulatif sampai hari ini</p>
+                <p className="mt-2 text-xs text-ink-soft">Posisi kas kumulatif sampai hari ini</p>
               </CardContent>
             </Card>
           </GlowCard>
         </StaggerItem>
-        <StaggerItem className="md:col-span-2">
+
+        <StaggerItem className="sm:col-span-2 lg:col-span-1">
           <GlowCard>
-            <Card className="border-0 bg-transparent shadow-none">
+            <Card className="border border-rule bg-paper shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-[11px] font-medium uppercase tracking-widest text-ink-soft">Laba Tahun Ini</CardTitle>
+                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                  Laba Bersih Tahun Berjalan
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="font-display text-xl tracking-tight tnum">
+              <CardContent className="pt-1">
+                <p className="font-display text-2xl font-semibold tracking-tight text-ink tnum">
                   <AnimatedNumber minor={ytd.netIncomeMinor} />
                 </p>
-                <p className="mt-1 text-xs text-ink-soft">Januari sampai {year}</p>
+                <p className="mt-2 text-xs text-ink-soft">Kumulatif Jan – Des {year}</p>
               </CardContent>
             </Card>
           </GlowCard>
@@ -97,27 +124,34 @@ export default async function DasborPage() {
       </Stagger>
 
       <Reveal delay={0.18}>
-        {data.findings.length > 0 ? (
-          <div className="matte-card rounded-xl border border-rule bg-paper p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium uppercase tracking-widest text-ink-soft">Temuan terbaru</p>
-              <Link href="/temuan" className="text-xs text-terra underline">Lihat semua</Link>
-            </div>
-            <div className="mt-3 space-y-2">
-              {data.findings.map((f) => (
-                <div key={f.id} className="flex items-center justify-between rounded-lg bg-canvas px-3 py-2 text-sm">
-                  <span>{f.type}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${f.severity==="HIGH" ? "bg-terra/10 text-terra" : f.severity==="MEDIUM" ? "bg-amber-50 text-amber-700" : "text-ink-soft"}`}>{f.severity}</span>
-                </div>
-              ))}
-            </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold text-ink">Status Pembukuan &amp; Temuan</h2>
+            <Link href="/temuan" className="text-xs font-medium text-terra hover:underline">
+              Lihat semua temuan →
+            </Link>
           </div>
-        ) : (
-          <div className="flex items-center gap-3 rounded-xl border border-rule bg-canvas px-4 py-3.5 text-sm text-ink-soft">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-paper text-ink">✓</span>
-            <span>Tidak ada temuan — pembukuan rapi.</span>
-          </div>
-        )}
+
+          {data.findings.length > 0 ? (
+            <div className="rounded-xl border border-rule bg-paper p-5 shadow-xs">
+              <div className="space-y-2.5">
+                {data.findings.map((f) => (
+                  <div key={f.id} className="flex items-center justify-between rounded-lg border border-rule/50 bg-canvas/60 px-4 py-3 text-sm">
+                    <span className="font-medium text-ink">{f.type}</span>
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${f.severity==="HIGH" ? "bg-terra/10 text-terra border border-terra/20" : f.severity==="MEDIUM" ? "bg-amber-500/10 text-amber-600 border border-amber-500/20" : "bg-muted text-ink-soft"}`}>
+                      {f.severity}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 rounded-xl border border-rule bg-paper p-5 text-sm text-ink-soft shadow-xs">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 font-bold">✓</span>
+              <span>Tidak ada anomali atau temuan — pembukuan Anda rapi dan seimbang.</span>
+            </div>
+          )}
+        </div>
       </Reveal>
     </section>
   );

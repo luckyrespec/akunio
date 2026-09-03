@@ -79,7 +79,12 @@ export default async function ReviewPage({
       <ReviewClient
         draftId={data.draft.id}
         draft={reviewDraft}
-        accounts={leaves.map((a) => ({ id: a.id, label: `${a.code} · ${a.name}` }))}
+        accounts={leaves.map((a) => ({
+          id: a.id,
+          code: a.code,
+          name: a.name,
+          label: `${a.code} · ${a.name}`,
+        }))}
         documentMeta={doc ? { mime: doc.mime, storageKey: doc.storageKey } : null}
       />
     </section>

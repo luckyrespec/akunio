@@ -1,14 +1,6 @@
 "use client";
 
-import { useRef } from "react";
-import {
-  motion,
-  useAnimationFrame,
-  useMotionTemplate,
-  useMotionValue,
-  useReducedMotion,
-  useTransform,
-} from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 
 export function MovingBorder({
@@ -25,21 +17,6 @@ export function MovingBorder({
   borderRadius?: string;
 }) {
   const reduce = useReducedMotion();
-  const pathRef = useRef<SVGRectElement>(null);
-  const progress = useMotionValue(0);
-
-  useAnimationFrame((time) => {
-    if (reduce || !active) return;
-    const length = pathRef.current?.getTotalLength();
-    if (length) {
-      const pxPerMs = length / duration;
-      progress.set((time * pxPerMs) % length);
-    }
-  });
-
-  const x = useTransform(progress, (val) => pathRef.current?.getPointAtLength(val).x ?? 0);
-  const y = useTransform(progress, (val) => pathRef.current?.getPointAtLength(val).y ?? 0);
-  const transform = useMotionTemplate`translateX(${x}px) translateY(${y}px)`;
 
   if (!active) {
     return (
@@ -52,35 +29,24 @@ export function MovingBorder({
   }
 
   return (
-    <div className={cn("relative", className)} style={{ borderRadius }}>
-      <svg
-        aria-hidden
-        className="pointer-events-none absolute inset-0 size-full"
-        style={{ borderRadius }}
-      >
-        <rect
-          ref={pathRef}
-          fill="none"
-          stroke="var(--color-terra)"
-          strokeOpacity={reduce ? 0.35 : 0.5}
-          strokeWidth={1.5}
-          width="100%"
-          height="100%"
-          rx={borderRadius}
-        />
-      </svg>
+    <div className={cn("relative overflow-hidden p-[1px]", className)} style={{ borderRadius }}>
       {!reduce && (
         <motion.div
           aria-hidden
-          className="pointer-events-none absolute size-[88px] rounded-full opacity-60"
+          className="pointer-events-none absolute inset-[-100%]"
           style={{
-            transform,
             background:
-              "radial-gradient(circle, color-mix(in oklab, var(--color-terra) 45%, transparent), transparent 65%)",
+              "conic-gradient(from 0deg at 50% 50%, transparent 0deg, var(--color-terra) 180deg, transparent 360deg)",
+          }}
+          animate={{ rotate: 360 }}
+          transition={{
+            duration: duration / 1000,
+            repeat: Infinity,
+            ease: "linear",
           }}
         />
       )}
-      <div className="relative" style={{ borderRadius }}>
+      <div className="relative rounded-[inherit] bg-paper" style={{ borderRadius }}>
         {children}
       </div>
     </div>

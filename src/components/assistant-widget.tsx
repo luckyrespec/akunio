@@ -16,7 +16,7 @@ interface Message {
   draftId?: string;
 }
 
-const ASSISTANT_NAME = process.env.NEXT_PUBLIC_ASSISTANT_NAME ?? "Nara";
+const ASSISTANT_NAME = "Asisten AI";
 
 export function AssistantWidget() {
   const [open, setOpen] = useState(false);
@@ -91,8 +91,8 @@ export function AssistantWidget() {
 
           <div className="flex-1 overflow-y-auto p-3">
             {messages.length === 0 && (
-              <p className="py-8 text-center text-xs text-ink-soft">
-                Hai, saya {ASSISTANT_NAME}! Tanya “berapa saldo kas?” atau “buatkan jurnal bayar sewa 2jt via bank” — saya eksekusi via tool tapi tetap minta review Anda.
+              <p className="py-8 text-center text-xs text-ink-soft leading-relaxed">
+                Tanyakan seputar akun, saldo kas, atau minta buatkan draft jurnal transaksi otomatis.
               </p>
             )}
             <div className="space-y-3">

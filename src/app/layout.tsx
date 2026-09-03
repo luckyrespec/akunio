@@ -18,8 +18,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id" suppressHydrationWarning className={`${display.variable} ${body.variable}`}>
-      <body className="min-h-screen bg-canvas text-ink font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <body suppressHydrationWarning className="min-h-screen bg-canvas text-ink font-sans antialiased">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange enableColorScheme={false}>
           {children}
         </ThemeProvider>
       </body>

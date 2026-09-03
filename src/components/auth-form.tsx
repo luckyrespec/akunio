@@ -24,28 +24,35 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
     setBusy(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
-    const email = String(fd.get("email"));
+    const email = String(fd.get("email")).trim();
     const password = String(fd.get("password"));
 
-    const res =
-      mode === "daftar"
-        ? await authClient.signUp.email({
-            email,
-            password,
-            name: String(fd.get("name")),
-          })
-        : await authClient.signIn.email({ email, password });
-
-    setBusy(false);
-    if (res.error) {
-      setError(
+    try {
+      const res =
         mode === "daftar"
-          ? "Pendaftaran gagal — periksa kembali data Anda."
-          : "Email atau kata sandi salah.",
-      );
-      return;
+          ? await authClient.signUp.email({
+              email,
+              password,
+              name: String(fd.get("name") || "Organisasi Baru").trim(),
+            })
+          : await authClient.signIn.email({ email, password });
+
+      setBusy(false);
+      if (res.error) {
+        setError(
+          res.error.message ||
+            (mode === "daftar"
+              ? "Pendaftaran gagal — periksa kembali data Anda atau coba email lain."
+              : "Email atau kata sandi salah. Silakan periksa kembali.")
+        );
+        return;
+      }
+      // Use hard navigation to ensure session cookies are fully sent to Server Components
+      window.location.href = "/dasbor";
+    } catch (err: any) {
+      setBusy(false);
+      setError(err?.message || "Terjadi kesalahan jaringan. Silakan coba lagi.");
     }
-    router.push("/dasbor");
   }
 
   return (

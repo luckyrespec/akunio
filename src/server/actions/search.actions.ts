@@ -12,7 +12,7 @@ export interface GlobalSearchResult {
 const PAGES = [
   { href: "/dasbor", label: "Dasbor" },
   { href: "/jurnal", label: "Jurnal Umum" },
-  { href: "/asisten", label: "Nara" },
+  { href: "/asisten", label: "Asisten AI" },
   { href: "/buku-besar", label: "Buku Besar" },
   { href: "/laporan", label: "Laporan" },
   { href: "/laporan/laba-rugi", label: "Laporan Laba Rugi" },

@@ -26,6 +26,18 @@ export async function bootstrapNewUser(
 }
 
 export const auth = betterAuth({
+  secret: process.env.BETTER_AUTH_SECRET || "neraca-auth-secret-key-default",
+  baseURL: process.env.BETTER_AUTH_URL,
+  trustedOrigins: [
+    "http://localhost:3000",
+    "https://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://127.0.0.1:3000",
+    "https://threadsle.zap-clipper.my.id",
+    "http://threadsle.zap-clipper.my.id",
+    "https://*.zap-clipper.my.id",
+    "http://*.zap-clipper.my.id",
+  ],
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: { user, session, account, verification },
