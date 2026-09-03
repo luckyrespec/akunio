@@ -3,6 +3,7 @@ import { journalToolDefs, journalHandlers } from "./tools/journal.tools";
 import { reportsToolDefs, reportsHandlers } from "./tools/reports.tools";
 import { invoicingToolDefs, invoicingHandlers } from "./tools/invoicing.tools";
 import { reconciliationToolDefs, reconciliationHandlers } from "./tools/reconciliation.tools";
+import { assetsAndClosingToolDefs, assetsAndClosingHandlers } from "./tools/assets-closing.tools";
 import type { ToolHandler } from "./tools/types";
 
 export const SAFE_TOOLS = new Set<string>([
@@ -18,6 +19,8 @@ export const SAFE_TOOLS = new Set<string>([
   "get_bank_reconciliation_status",
   "list_periods",
   "check_accounting_health",
+  "recommend_asset_depreciation",
+  "check_period_closing_readiness",
 ]);
 
 export const MUTATING_TOOLS = new Set<string>([
@@ -33,6 +36,8 @@ export const MUTATING_TOOLS = new Set<string>([
   "record_invoice_payment",
   "post_invoice_to_journal",
   "auto_match_bank_reconciliation",
+  "run_monthly_depreciation",
+  "close_fiscal_period",
 ]);
 
 export const ALL_NARA_TOOLS = [
@@ -41,6 +46,7 @@ export const ALL_NARA_TOOLS = [
   ...reportsToolDefs,
   ...invoicingToolDefs,
   ...reconciliationToolDefs,
+  ...assetsAndClosingToolDefs,
 ] as never[];
 
 const toolHandlers: Record<string, ToolHandler> = {
@@ -49,6 +55,7 @@ const toolHandlers: Record<string, ToolHandler> = {
   ...reportsHandlers,
   ...invoicingHandlers,
   ...reconciliationHandlers,
+  ...assetsAndClosingHandlers,
 };
 
 export async function executeNaraTool(
