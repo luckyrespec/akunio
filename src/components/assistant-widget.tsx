@@ -61,6 +61,20 @@ import {
   AttachmentItem,
   type Attachment,
 } from "@/components/ai-elements/attachments";
+import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
+import {
+  Queue,
+  QueueSection,
+  QueueSectionLabel,
+  QueueSectionContent,
+  QueueList,
+  QueueItem,
+  QueueItemIndicator,
+  QueueItemAttachment,
+  QueueItemContent,
+  QueueItemDescription,
+  QueueItemActions,
+} from "@/components/ai-elements/queue";
 import { HitlTool } from "@/components/ai-elements/hitl-tool";
 import { getActivePageContext, type PageContext } from "@/lib/assistant-context";
 import { cn } from "@/lib/utils";
@@ -71,12 +85,26 @@ interface ThreadSummary {
   updatedAt?: string | Date;
 }
 
+export interface BatchItemData {
+  id: string;
+  fileName: string;
+  vendor: string;
+  date: string;
+  total: string;
+  confidence: number;
+  status: "ready" | "needs_review";
+  category: string;
+  itemsDetected?: string[];
+}
+
 interface MessageItem {
   id: string;
   role: "user" | "assistant";
   content: string;
   reasoning?: string | null;
   attachments?: Attachment[] | null;
+  suggestions?: string[] | null;
+  batchQueue?: BatchItemData[] | null;
   toolInvocations?: Array<{
     callId?: string;
     toolName: string;
@@ -107,6 +135,8 @@ export function AssistantWidget() {
   const [isStreaming, setIsStreaming] = React.useState(false);
   const [streamingReasoning, setStreamingReasoning] = React.useState("");
   const [streamingText, setStreamingText] = React.useState("");
+  const [streamingSuggestions, setStreamingSuggestions] = React.useState<string[]>([]);
+  const [streamingQueue, setStreamingQueue] = React.useState<BatchItemData[] | null>(null);
   const [allowAllForSession, setAllowAllForSession] = React.useState(false);
   const [pendingApproval, setPendingApproval] = React.useState<PendingApproval | null>(null);
   const [confirmingLoading, setConfirmingLoading] = React.useState(false);
@@ -180,6 +210,19 @@ export function AssistantWidget() {
     }
     loadThread();
   }, [activeThreadId, open]);
+
+  // Proactive Daily Briefing on first daily open
+  React.useEffect(() => {
+    if (!open) return;
+    try {
+      const todayISO = new Date().toISOString().slice(0, 10);
+      const lastBriefing = localStorage.getItem("neraca:last_briefing_date");
+      if (lastBriefing !== todayISO && messages.length === 0 && !isStreaming) {
+        localStorage.setItem("neraca:last_briefing_date", todayISO);
+        handleSendMessage("☀️ Berikan ringkasan briefing keuangan hari ini.");
+      }
+    } catch {}
+  }, [open, messages.length, isStreaming]);
 
   const pendingFilesRef = React.useRef<Map<string, File>>(new Map());
 
@@ -361,6 +404,10 @@ export function AssistantWidget() {
               setStreamingReasoning((prev) => prev + data.delta);
             } else if (data.type === "text" && data.delta) {
               setStreamingText((prev) => prev + data.delta);
+            } else if (data.type === "suggestions" && Array.isArray(data.suggestions)) {
+              setStreamingSuggestions(data.suggestions);
+            } else if (data.type === "queue_update" && Array.isArray(data.items)) {
+              setStreamingQueue(data.items);
             } else if (data.type === "tool_approval_request") {
               setPendingApproval({
                 callId: data.callId,
@@ -378,6 +425,8 @@ export function AssistantWidget() {
                   role: "assistant",
                   content: streamingText,
                   reasoning: streamingReasoning || undefined,
+                  suggestions: streamingSuggestions.length > 0 ? streamingSuggestions : undefined,
+                  batchQueue: streamingQueue || undefined,
                   citations: data.citations,
                 },
               ]);
@@ -393,6 +442,8 @@ export function AssistantWidget() {
       setIsStreaming(false);
       setStreamingReasoning("");
       setStreamingText("");
+      setStreamingSuggestions([]);
+      setStreamingQueue(null);
     }
   };
 
@@ -619,6 +670,29 @@ export function AssistantWidget() {
                     <span className="text-[10px] text-ink-soft">Ketik rincian atau lampirkan foto struk</span>
                   </button>
                 </div>
+
+                <div className="flex flex-col gap-1.5 mt-3 text-left w-full">
+                  <span className="text-[11px] font-medium text-ink/70">Saran Cepat untuk {pageContext.label}:</span>
+                  <Suggestions className="justify-start">
+                    {(pageContext.pathname.includes("/jurnal")
+                      ? ["Buat jurnal bensin 150rb", "Tampilkan draft belum diposting", "Cari jurnal bulan ini"]
+                      : pageContext.pathname.includes("/laporan")
+                      ? ["Laporan Laba Rugi bulan ini", "Kenapa laba naik?", "Drill-down beban operasional", "Export laporan PDF"]
+                      : pageContext.pathname.includes("/buku-besar")
+                      ? ["Periksa mutasi kas", "Cari transaksi > 1 juta", "Cek saldo normal akun"]
+                      : ["☀️ Briefing Hari Ini", "Cek kesehatan pembukuan", "Lihat ringkasan kas & bank"]
+                    ).map((s) => (
+                      <Suggestion
+                        key={s}
+                        suggestion={s}
+                        onClick={(val) => {
+                          setInput(val);
+                          handleSendMessage(val);
+                        }}
+                      />
+                    ))}
+                  </Suggestions>
+                </div>
               </ConversationEmptyState>
             ) : (
               messages.map((m) => (
@@ -658,6 +732,49 @@ export function AssistantWidget() {
 
                     {/* Content */}
                     <MessageResponse>{m.content}</MessageResponse>
+
+                    {/* Batch Document Queue Display */}
+                    {m.batchQueue && m.batchQueue.length > 0 && (
+                      <Queue className="my-2 border border-ink/15">
+                        <QueueSection defaultOpen={true}>
+                          <QueueSectionLabel
+                            label="Antrean Dokumen Terproses"
+                            count={m.batchQueue.length}
+                          />
+                          <QueueSectionContent>
+                            <QueueList>
+                              {m.batchQueue.map((item) => (
+                                <QueueItem key={item.id}>
+                                  <QueueItemIndicator completed={item.status === "ready"} />
+                                  <QueueItemContent>
+                                    <div className="font-semibold text-xs">{item.vendor}</div>
+                                    <QueueItemDescription>
+                                      {item.date} • {item.total} ({item.category})
+                                    </QueueItemDescription>
+                                  </QueueItemContent>
+                                </QueueItem>
+                              ))}
+                            </QueueList>
+                          </QueueSectionContent>
+                        </QueueSection>
+                      </Queue>
+                    )}
+
+                    {/* Dynamic Suggestions Chips */}
+                    {m.suggestions && m.suggestions.length > 0 && (
+                      <Suggestions className="pt-2">
+                        {m.suggestions.map((s) => (
+                          <Suggestion
+                            key={s}
+                            suggestion={s}
+                            onClick={(val) => {
+                              setInput(val);
+                              handleSendMessage(val);
+                            }}
+                          />
+                        ))}
+                      </Suggestions>
+                    )}
                   </MessageContent>
                 </Message>
               ))
@@ -683,6 +800,42 @@ export function AssistantWidget() {
                       <Loader2 className="size-3.5 animate-spin text-terra" />
                       <span>Nara sedang menyusun jawaban...</span>
                     </div>
+                  )}
+
+                  {streamingQueue && streamingQueue.length > 0 && (
+                    <Queue className="my-2 border border-ink/15">
+                      <QueueSection defaultOpen={true}>
+                        <QueueSectionLabel label="Antrean Dokumen Terproses" count={streamingQueue.length} />
+                        <QueueSectionContent>
+                          <QueueList>
+                            {streamingQueue.map((item) => (
+                              <QueueItem key={item.id}>
+                                <QueueItemIndicator completed={item.status === "ready"} />
+                                <QueueItemContent>
+                                  <div className="font-semibold text-xs">{item.vendor}</div>
+                                  <QueueItemDescription>{item.date} • {item.total}</QueueItemDescription>
+                                </QueueItemContent>
+                              </QueueItem>
+                            ))}
+                          </QueueList>
+                        </QueueSectionContent>
+                      </QueueSection>
+                    </Queue>
+                  )}
+
+                  {streamingSuggestions.length > 0 && (
+                    <Suggestions className="pt-2">
+                      {streamingSuggestions.map((s) => (
+                        <Suggestion
+                          key={s}
+                          suggestion={s}
+                          onClick={(val) => {
+                            setInput(val);
+                            handleSendMessage(val);
+                          }}
+                        />
+                      ))}
+                    </Suggestions>
                   )}
                 </MessageContent>
               </Message>

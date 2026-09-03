@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Check, Clock, ChevronDown } from "lucide-react";
 
 export interface QueueProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export function Queue({ className, children, ...props }: QueueProps) {
@@ -24,7 +24,7 @@ export function Queue({ className, children, ...props }: QueueProps) {
 
 export interface QueueSectionProps extends React.HTMLAttributes<HTMLDivElement> {
   defaultOpen?: boolean;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export function QueueSection({

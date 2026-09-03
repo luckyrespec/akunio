@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/server/auth/session";
+import { requireContext } from "@/server/auth/guard";
 import { getDailyBriefingData } from "@/server/reports/briefing";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session?.orgId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const briefing = await getDailyBriefingData(session.orgId);
+    const ctx = await requireContext();
+    const briefing = await getDailyBriefingData(ctx.orgId);
     return NextResponse.json({ success: true, briefing });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

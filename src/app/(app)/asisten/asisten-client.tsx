@@ -89,6 +89,20 @@ import {
   ModelSelector,
   type ModelPreset,
 } from "@/components/ai-elements/model-selector";
+import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
+import {
+  Queue,
+  QueueSection,
+  QueueSectionLabel,
+  QueueSectionContent,
+  QueueList,
+  QueueItem,
+  QueueItemIndicator,
+  QueueItemAttachment,
+  QueueItemContent,
+  QueueItemDescription,
+} from "@/components/ai-elements/queue";
+import type { BatchItemData } from "@/components/assistant-widget";
 import { HitlTool } from "@/components/ai-elements/hitl-tool";
 import { cn } from "@/lib/utils";
 
@@ -107,6 +121,8 @@ interface MessageItem {
   content: string;
   reasoning?: string | null;
   attachments?: Attachment[] | null;
+  suggestions?: string[] | null;
+  batchQueue?: BatchItemData[] | null;
   toolInvocations?: Array<{
     callId?: string;
     toolName: string;
@@ -158,6 +174,8 @@ export default function AsistenClient({
   const [isStreaming, setIsStreaming] = React.useState(false);
   const [streamingReasoning, setStreamingReasoning] = React.useState("");
   const [streamingText, setStreamingText] = React.useState("");
+  const [streamingSuggestions, setStreamingSuggestions] = React.useState<string[]>([]);
+  const [streamingQueue, setStreamingQueue] = React.useState<BatchItemData[] | null>(null);
   const [pendingApproval, setPendingApproval] = React.useState<PendingApproval | null>(null);
   const [allowAllForSession, setAllowAllForSession] = React.useState(
     initialHitlPolicy === "autonomous",
@@ -528,6 +546,10 @@ export default function AsistenClient({
               setStreamingReasoning((prev) => prev + data.delta);
             } else if (data.type === "text" && data.delta) {
               setStreamingText((prev) => prev + data.delta);
+            } else if (data.type === "suggestions" && Array.isArray(data.suggestions)) {
+              setStreamingSuggestions(data.suggestions);
+            } else if (data.type === "queue_update" && Array.isArray(data.items)) {
+              setStreamingQueue(data.items);
             } else if (data.type === "tool_approval_request") {
               setPendingApproval({
                 callId: data.callId,
@@ -545,6 +567,8 @@ export default function AsistenClient({
                   role: "assistant",
                   content: streamingText,
                   reasoning: streamingReasoning || undefined,
+                  suggestions: streamingSuggestions.length > 0 ? streamingSuggestions : undefined,
+                  batchQueue: streamingQueue || undefined,
                   citations: data.citations,
                   createdAt: new Date().toISOString(),
                 },
@@ -564,6 +588,8 @@ export default function AsistenClient({
       setIsStreaming(false);
       setStreamingReasoning("");
       setStreamingText("");
+      setStreamingSuggestions([]);
+      setStreamingQueue(null);
     }
   };
 
@@ -1397,6 +1423,49 @@ export default function AsistenClient({
                       {/* Text Message Response */}
                       <MessageResponse>{m.content}</MessageResponse>
 
+                      {/* Batch Document Queue Display */}
+                      {m.batchQueue && m.batchQueue.length > 0 && (
+                        <Queue className="my-2 border border-ink/15">
+                          <QueueSection defaultOpen={true}>
+                            <QueueSectionLabel
+                              label="Antrean Dokumen Terproses"
+                              count={m.batchQueue.length}
+                            />
+                            <QueueSectionContent>
+                              <QueueList>
+                                {m.batchQueue.map((item) => (
+                                  <QueueItem key={item.id}>
+                                    <QueueItemIndicator completed={item.status === "ready"} />
+                                    <QueueItemContent>
+                                      <div className="font-semibold text-xs">{item.vendor}</div>
+                                      <QueueItemDescription>
+                                        {item.date} • {item.total} ({item.category})
+                                      </QueueItemDescription>
+                                    </QueueItemContent>
+                                  </QueueItem>
+                                ))}
+                              </QueueList>
+                            </QueueSectionContent>
+                          </QueueSection>
+                        </Queue>
+                      )}
+
+                      {/* Dynamic Suggestions Chips */}
+                      {m.suggestions && m.suggestions.length > 0 && (
+                        <Suggestions className="pt-2">
+                          {m.suggestions.map((s) => (
+                            <Suggestion
+                              key={s}
+                              suggestion={s}
+                              onClick={(val) => {
+                                setInput(val);
+                                handleSendMessage(val);
+                              }}
+                            />
+                          ))}
+                        </Suggestions>
+                      )}
+
                       {/* Citations */}
                       {m.citations && m.citations.length > 0 && (
                         <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-rule/60 pt-2.5 text-[10px] text-ink-soft">
@@ -1433,6 +1502,42 @@ export default function AsistenClient({
                         <Loader2 className="size-3.5 animate-spin text-terra" />
                         <span>Nara sedang menyusun jawaban...</span>
                       </div>
+                    )}
+
+                    {streamingQueue && streamingQueue.length > 0 && (
+                      <Queue className="my-2 border border-ink/15">
+                        <QueueSection defaultOpen={true}>
+                          <QueueSectionLabel label="Antrean Dokumen Terproses" count={streamingQueue.length} />
+                          <QueueSectionContent>
+                            <QueueList>
+                              {streamingQueue.map((item) => (
+                                <QueueItem key={item.id}>
+                                  <QueueItemIndicator completed={item.status === "ready"} />
+                                  <QueueItemContent>
+                                    <div className="font-semibold text-xs">{item.vendor}</div>
+                                    <QueueItemDescription>{item.date} • {item.total}</QueueItemDescription>
+                                  </QueueItemContent>
+                                </QueueItem>
+                              ))}
+                            </QueueList>
+                          </QueueSectionContent>
+                        </QueueSection>
+                      </Queue>
+                    )}
+
+                    {streamingSuggestions.length > 0 && (
+                      <Suggestions className="pt-2">
+                        {streamingSuggestions.map((s) => (
+                          <Suggestion
+                            key={s}
+                            suggestion={s}
+                            onClick={(val) => {
+                              setInput(val);
+                              handleSendMessage(val);
+                            }}
+                          />
+                        ))}
+                      </Suggestions>
                     )}
                   </MessageContent>
                 </Message>
