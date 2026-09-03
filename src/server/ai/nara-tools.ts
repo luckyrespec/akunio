@@ -38,6 +38,7 @@ export const SAFE_TOOLS = new Set<string>([
   "get_report",
   "get_financial_kpis",
   "get_daily_briefing",
+  "drilldown_account_details",
   "list_periods",
   "check_accounting_health",
 ]);
@@ -112,6 +113,20 @@ export const ALL_NARA_TOOLS = [
     name: "get_daily_briefing",
     description: "Ambil ringkasan briefing keuangan harian: saldo kas/bank live, pending draft review, piutang tempo, dan dokumen belum dicatat.",
     parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    type: "function",
+    name: "drilldown_account_details",
+    description: "Analisis rincian mutasi transaksi suatu akun untuk mengidentifikasi penyebab kenaikan beban atau anomali.",
+    parameters: {
+      type: "object",
+      properties: {
+        accountCode: { type: "string", description: "Kode akun COA (contoh: '5-2020')" },
+        period: { type: "string", description: "Periode target YYYY-MM (contoh: '2026-08')" },
+        comparePeriod: { type: "string", description: "Periode komparasi YYYY-MM (contoh: '2026-07')" },
+      },
+      required: ["accountCode", "period"],
+    },
   },
   {
     type: "function",
@@ -377,6 +392,15 @@ export async function executeNaraTool(
         const { getDailyBriefingData } = await import("@/server/reports/briefing");
         const briefing = await getDailyBriefingData(orgId);
         return { success: true, data: briefing };
+      }
+
+      case "drilldown_account_details": {
+        const { drilldownAccountDetails } = await import("@/server/reports/drilldown");
+        const accountCode = String(args.accountCode);
+        const period = String(args.period);
+        const comparePeriod = args.comparePeriod ? String(args.comparePeriod) : undefined;
+        const res = await drilldownAccountDetails(orgId, accountCode, period, comparePeriod);
+        return { success: true, data: res };
       }
 
       case "list_periods": {
