@@ -1,10 +1,18 @@
 "use server";
+
 import { revalidatePath } from "next/cache";
+import { and, eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
 import { db } from "@/server/db";
+import { accounts } from "@/server/db/schema/org";
 import { appendAudit } from "@/server/db/repos/audit.repo";
-import { getAccountById, setAccountArchived } from "@/server/db/repos/accounts.repo";
+import {
+  createAccount,
+  getAccountById,
+  setAccountArchived,
+  type AccountType,
+} from "@/server/db/repos/accounts.repo";
 
 export async function archiveAccountAction(accountId: string, archive: boolean) {
   try {
@@ -14,9 +22,11 @@ export async function archiveAccountAction(accountId: string, archive: boolean) 
       if (!existing) throw new Error("AKUN_TIDAK_DITEMUKAN");
       const row = await setAccountArchived(tx, ctx.orgId, accountId, archive ? new Date() : null);
       await appendAudit(tx, {
-        orgId: ctx.orgId, actor: ctx.userEmail,
+        orgId: ctx.orgId,
+        actor: ctx.userEmail,
         action: archive ? "ACCOUNT_ARCHIVE" : "ACCOUNT_RESTORE",
-        subjectType: "account", subjectId: accountId,
+        subjectType: "account",
+        subjectId: accountId,
         data: { code: row.code },
       });
     });
@@ -25,5 +35,98 @@ export async function archiveAccountAction(accountId: string, archive: boolean) 
   } catch (e) {
     if (isRedirectError(e)) throw e;
     return { ok: false as const, error: e instanceof Error ? e.message : "GAGAL" };
+  }
+}
+
+export interface CreateAccountInput {
+  code: string;
+  name: string;
+  type: AccountType;
+  normal: "D" | "K";
+  parentCode?: string;
+  isCash?: boolean;
+  isBank?: boolean;
+  contra?: boolean;
+}
+
+export async function createAccountAction(input: CreateAccountInput) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+
+    const cleanCode = input.code.trim();
+    const cleanName = input.name.trim();
+
+    if (!cleanCode) {
+      return { ok: false as const, error: "Kode akun wajib diisi." };
+    }
+    if (!cleanName) {
+      return { ok: false as const, error: "Nama akun wajib diisi." };
+    }
+    if (!input.type) {
+      return { ok: false as const, error: "Kategori akun wajib dipilih." };
+    }
+    if (!input.normal || (input.normal !== "D" && input.normal !== "K")) {
+      return { ok: false as const, error: "Saldo normal akun harus Debit (D) atau Kredit (K)." };
+    }
+
+    const row = await db.transaction(async (tx) => {
+      // Check for code uniqueness within the organization
+      const [existing] = await tx
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.code, cleanCode)))
+        .limit(1);
+
+      if (existing) {
+        throw new Error(`Kode akun "${cleanCode}" sudah digunakan.`);
+      }
+
+      // If parentCode is provided, verify it exists
+      if (input.parentCode?.trim()) {
+        const [parent] = await tx
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.code, input.parentCode.trim())))
+          .limit(1);
+
+        if (!parent) {
+          throw new Error(`Akun induk dengan kode "${input.parentCode}" tidak ditemukan.`);
+        }
+      }
+
+      const created = await createAccount(tx, {
+        orgId: ctx.orgId,
+        code: cleanCode,
+        name: cleanName,
+        type: input.type,
+        normal: input.normal,
+        parentCode: input.parentCode?.trim() || undefined,
+        isCash: Boolean(input.isCash),
+        isBank: Boolean(input.isBank),
+        contra: Boolean(input.contra),
+      });
+
+      await appendAudit(tx, {
+        orgId: ctx.orgId,
+        actor: ctx.userEmail,
+        action: "ACCOUNT_CREATE",
+        subjectType: "account",
+        subjectId: created.id,
+        data: {
+          code: created.code,
+          name: created.name,
+          type: created.type,
+          parentCode: created.parentCode,
+        },
+      });
+
+      return created;
+    });
+
+    revalidatePath("/pengaturan");
+    return { ok: true as const, account: row };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    return { ok: false as const, error: e instanceof Error ? e.message : "Gagal menambahkan akun." };
   }
 }
