@@ -18,6 +18,31 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const googleEnabled = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "1";
+
+  function verificationUrl(email: string): string {
+    return `/verifikasi?email=${encodeURIComponent(email)}`;
+  }
+
+  async function onGoogle() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/onboarding",
+      });
+      setBusy(false);
+      if (res.error) {
+        setError("Login Google gagal — coba lagi sebentar.");
+        return;
+      }
+      if (res.data?.url) window.location.href = res.data.url;
+    } catch {
+      setBusy(false);
+      setError("Terjadi kesalahan jaringan. Silakan coba lagi.");
+    }
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -28,23 +53,38 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
     const password = String(fd.get("password"));
 
     try {
-      const res =
-        mode === "daftar"
-          ? await authClient.signUp.email({
-              email,
-              password,
-              name: String(fd.get("name") || "Organisasi Baru").trim(),
-            })
-          : await authClient.signIn.email({ email, password });
+      if (mode === "daftar") {
+        const res = await authClient.signUp.email({
+          email,
+          password,
+          name: String(fd.get("name") || "Pengguna Baru").trim(),
+        });
+        setBusy(false);
+        if (res.error) {
+          setError(
+            res.error.message ||
+              "Pendaftaran gagal — periksa kembali data Anda atau coba email lain."
+          );
+          return;
+        }
+        // requireEmailVerification: signup succeeds with token === null
+        // (no session) until the user verifies their email.
+        const token = (res.data as unknown as { token?: string | null } | null)?.token;
+        // Use hard navigation to ensure session cookies are fully sent to Server Components
+        window.location.href = token ? "/dasbor" : verificationUrl(email);
+        return;
+      }
 
+      const res = await authClient.signIn.email({ email, password });
       setBusy(false);
       if (res.error) {
-        setError(
-          res.error.message ||
-            (mode === "daftar"
-              ? "Pendaftaran gagal — periksa kembali data Anda atau coba email lain."
-              : "Email atau kata sandi salah. Silakan periksa kembali.")
-        );
+        const code = (res.error as { code?: string }).code ?? "";
+        const msg = res.error.message ?? "";
+        if (code === "EMAIL_NOT_VERIFIED" || /verif/i.test(code + msg)) {
+          window.location.href = verificationUrl(email);
+          return;
+        }
+        setError(msg || "Email atau kata sandi salah. Silakan periksa kembali.");
         return;
       }
       // Use hard navigation to ensure session cookies are fully sent to Server Components
@@ -67,7 +107,7 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
             </CardTitle>
             <CardDescription>
               {mode === "daftar"
-                ? "Organisasi, bagan akun, dan periode dibuat otomatis."
+                ? "Verifikasi email, lalu kenalan dengan Nara untuk menyiapkan pembukuan usaha Anda."
                 : "Lanjutkan mengelola pembukuan Anda."}
             </CardDescription>
           </CardHeader>
@@ -75,8 +115,8 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
             <form onSubmit={onSubmit} className="space-y-4">
               {mode === "daftar" && (
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nama Organisasi</Label>
-                  <Input id="name" name="name" required placeholder="Koperasi Maju" />
+                  <Label htmlFor="name">Nama lengkap</Label>
+                  <Input id="name" name="name" required placeholder="Budi Santoso" />
                 </div>
               )}
               <div className="space-y-2">
@@ -91,6 +131,24 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
               <Button type="submit" disabled={busy} className="w-full bg-terra hover:bg-terra/90">
                 {busy ? "Memproses..." : mode === "daftar" ? "Daftar" : "Masuk"}
               </Button>
+              {googleEnabled && (
+                <>
+                  <div className="flex items-center gap-3 text-xs text-ink-soft">
+                    <span className="h-px flex-1 bg-rule" />
+                    atau
+                    <span className="h-px flex-1 bg-rule" />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={onGoogle}
+                    className="w-full border-rule bg-paper"
+                  >
+                    Lanjut dengan Google
+                  </Button>
+                </>
+              )}
               <p className="text-center text-sm text-ink-soft">
                 {mode === "daftar" ? (
                   <>Sudah punya akun? <Link className="text-terra underline" href="/masuk">Masuk</Link></>

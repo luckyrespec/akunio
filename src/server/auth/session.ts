@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { memberships } from "@/server/db/schema/org";
+import { user } from "@/server/db/schema/auth";
 import { ensureUserWorkspace } from "@/server/bootstrap/ensure-workspace";
 import { auth } from "./auth-server";
 
@@ -10,8 +11,18 @@ export type Role = "OWNER" | "ACCOUNTANT" | "VIEWER";
 export interface AppContext {
   userId: string;
   userEmail: string;
+  emailVerified: boolean;
   orgId: string;
   role: Role;
+}
+
+export async function isEmailVerified(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ emailVerified: user.emailVerified })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  return row?.emailVerified ?? false;
 }
 
 export async function getActiveContext(): Promise<AppContext | null> {
@@ -39,6 +50,7 @@ export async function getActiveContext(): Promise<AppContext | null> {
   return {
     userId: s.user.id,
     userEmail: s.user.email,
+    emailVerified: s.user.emailVerified ?? false,
     orgId: m.orgId,
     role: m.role,
   };

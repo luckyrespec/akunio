@@ -25,24 +25,76 @@ export async function bootstrapNewUser(
   }
 }
 
-export const auth = betterAuth({
-  secret: process.env.BETTER_AUTH_SECRET || "neraca-auth-secret-key-default",
-  baseURL: process.env.BETTER_AUTH_URL,
-  trustedOrigins: [
+function requiredSecret(): string {
+  const s = process.env.BETTER_AUTH_SECRET;
+  if (!s && process.env.NODE_ENV === "production") {
+    throw new Error("BETTER_AUTH_SECRET wajib diisi di production.");
+  }
+  return s || "neraca-dev-secret-only";
+}
+
+function trustedOrigins(): string[] {
+  const extra = (process.env.TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [
     "http://localhost:3000",
-    "https://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://127.0.0.1:3000",
-    "https://threadsle.zap-clipper.my.id",
-    "http://threadsle.zap-clipper.my.id",
-    "https://*.zap-clipper.my.id",
-    "http://*.zap-clipper.my.id",
-  ],
+    ...extra,
+  ];
+}
+
+function googleProvider() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return {};
+  return { google: { clientId, clientSecret } };
+}
+
+export const auth = betterAuth({
+  secret: requiredSecret(),
+  baseURL: process.env.BETTER_AUTH_URL,
+  trustedOrigins: trustedOrigins(),
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: { user, session, account, verification },
   }),
-  emailAndPassword: { enabled: true },
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: 8,
+    requireEmailVerification: true,
+    sendResetPassword: async ({ user, url }) => {
+      const { sendAuthEmail } = await import("./email");
+      await sendAuthEmail("reset-password", user, url);
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true,
+    expiresIn: 3600,
+    sendVerificationEmail: async ({ user, url }) => {
+      const { sendAuthEmail } = await import("./email");
+      await sendAuthEmail("verification", user, url);
+    },
+  },
+  socialProviders: {
+    ...googleProvider(),
+  },
+  session: {
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
+  },
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 20,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 10 },
+      "/sign-up/email": { window: 60, max: 10 },
+    },
+  },
   databaseHooks: {
     user: {
       create: {
