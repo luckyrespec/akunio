@@ -72,6 +72,14 @@ import {
   ConfirmationAction,
 } from "@/components/ai-elements/confirmation";
 import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+  type ToolState,
+} from "@/components/ai-elements/tool";
+import {
   PromptInput,
   PromptInputHeader,
   PromptInputBody,
@@ -127,7 +135,7 @@ interface MessageItem {
     callId?: string;
     toolName: string;
     status: string;
-    args?: Record<string, unknown>;
+    args?: unknown;
     result?: unknown;
     error?: string;
   }> | null;
@@ -175,6 +183,15 @@ export default function AsistenClient({
   const [streamingReasoning, setStreamingReasoning] = React.useState("");
   const [streamingText, setStreamingText] = React.useState("");
   const [streamingSuggestions, setStreamingSuggestions] = React.useState<string[]>([]);
+  const [streamingTools, setStreamingTools] = React.useState<
+    Array<{
+      toolName: string;
+      status: "running" | "completed" | "error" | "awaiting-approval";
+      args?: unknown;
+      result?: unknown;
+      error?: string;
+    }>
+  >([]);
   const [streamingQueue, setStreamingQueue] = React.useState<BatchItemData[] | null>(null);
   const [pendingApproval, setPendingApproval] = React.useState<PendingApproval | null>(null);
   const [allowAllForSession, setAllowAllForSession] = React.useState(
@@ -513,6 +530,13 @@ export default function AsistenClient({
       let accumulatedReasoning = "";
       let accumulatedSuggestions: string[] = [];
       let accumulatedQueue: any[] = [];
+      const accumulatedTools: Array<{
+        toolName: string;
+        status: "running" | "completed" | "error" | "awaiting-approval";
+        args?: unknown;
+        result?: unknown;
+        error?: string;
+      }> = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -552,19 +576,39 @@ export default function AsistenClient({
             } else if (data.type === "text" && data.delta) {
               accumulatedText += data.delta;
               setStreamingText((prev) => prev + data.delta);
-            } else if (data.type === "suggestions" && Array.isArray(data.suggestions)) {
-              accumulatedSuggestions = data.suggestions;
-              setStreamingSuggestions(data.suggestions);
-            } else if (data.type === "queue_update" && Array.isArray(data.items)) {
-              accumulatedQueue = data.items;
-              setStreamingQueue(data.items);
+            } else if (data.type === "tool_call") {
+              accumulatedTools.push({
+                toolName: data.tool,
+                status: "running",
+                args: data.args,
+              });
+              setStreamingTools([...accumulatedTools]);
+            } else if (data.type === "tool_result") {
+              const t = accumulatedTools.find((x) => x.toolName === data.tool && x.status === "running");
+              if (t) {
+                t.status = "completed";
+                t.result = data.result;
+              }
+              setStreamingTools([...accumulatedTools]);
             } else if (data.type === "tool_approval_request") {
+              accumulatedTools.push({
+                toolName: data.toolName,
+                status: "awaiting-approval",
+                args: data.args,
+              });
+              setStreamingTools([...accumulatedTools]);
               setPendingApproval({
                 callId: data.callId,
                 toolName: data.toolName,
                 args: data.args,
                 explanation: data.explanation,
               });
+            } else if (data.type === "suggestions" && Array.isArray(data.suggestions)) {
+              accumulatedSuggestions = data.suggestions;
+              setStreamingSuggestions(data.suggestions);
+            } else if (data.type === "queue_update" && Array.isArray(data.items)) {
+              accumulatedQueue = data.items;
+              setStreamingQueue(data.items);
             } else if (data.type === "error") {
               setErrorBanner(data.message);
             } else if (data.type === "done") {
@@ -575,6 +619,7 @@ export default function AsistenClient({
                   role: "assistant",
                   content: accumulatedText,
                   reasoning: accumulatedReasoning || undefined,
+                  toolInvocations: accumulatedTools.length > 0 ? accumulatedTools : undefined,
                   suggestions: accumulatedSuggestions.length > 0 ? accumulatedSuggestions : undefined,
                   batchQueue: accumulatedQueue.length > 0 ? accumulatedQueue : undefined,
                   citations: data.citations,
@@ -596,6 +641,7 @@ export default function AsistenClient({
       setIsStreaming(false);
       setStreamingReasoning("");
       setStreamingText("");
+      setStreamingTools([]);
       setStreamingSuggestions([]);
       setStreamingQueue(null);
     }
@@ -1408,28 +1454,59 @@ export default function AsistenClient({
                         </Reasoning>
                       )}
 
-                      {/* Tool Invocations Badge / Details */}
-                      {m.toolInvocations && m.toolInvocations.length > 0 && (
-                        <div className="my-2 flex flex-wrap gap-1.5">
-                          {m.toolInvocations.map((ti, i) => (
-                            <Badge
-                              key={i}
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] font-mono rounded-md px-2 py-0.5",
-                                ti.status === "approved" || ti.status === "auto"
-                                ? "border-emerald-600/30 text-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/30"
-                                : "border-rule text-ink-soft bg-canvas/60",
-                              )}
-                            >
-                              ✓ {ti.toolName} ({ti.status})
-                            </Badge>
-                          ))}
+                      {/* User Message: pure crisp white text */}
+                      {m.role === "user" ? (
+                        <div className="whitespace-pre-wrap leading-relaxed text-white font-sans text-sm">
+                          {m.content}
                         </div>
-                      )}
+                      ) : (
+                        <>
+                          {/* Tool Invocations rendered using AI Elements Tool component */}
+                          {m.toolInvocations && m.toolInvocations.length > 0 && (
+                            <div className="space-y-2 mb-3">
+                              {m.toolInvocations.map((ti, i) => {
+                                const toolState: ToolState =
+                                  ti.status === "approved" || ti.status === "completed" || ti.status === "auto"
+                                    ? "completed"
+                                    : ti.status === "pending_approval" || ti.status === "awaiting-approval"
+                                    ? "awaiting-approval"
+                                    : ti.status === "failed" || ti.status === "error"
+                                    ? "error"
+                                    : "completed";
 
-                      {/* Text Message Response */}
-                      <MessageResponse>{m.content}</MessageResponse>
+                                return (
+                                  <Tool
+                                    key={i}
+                                    defaultOpen={ti.status === "failed"}
+                                    state={toolState}
+                                  >
+                                    <ToolHeader
+                                      title={ti.toolName}
+                                      type={`tool-${ti.toolName}`}
+                                      state={toolState}
+                                    />
+                                    <ToolContent>
+                                      {ti.args && typeof ti.args === "object" && Object.keys(ti.args as object).length > 0 ? (
+                                        <ToolInput input={ti.args} />
+                                      ) : null}
+                                      {ti.result ? (
+                                        <ToolOutput output={ti.result as React.ReactNode} />
+                                      ) : (ti as unknown as Record<string, unknown>).error ? (
+                                        <ToolOutput
+                                          errorText={String((ti as unknown as Record<string, unknown>).error)}
+                                        />
+                                      ) : null}
+                                    </ToolContent>
+                                  </Tool>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Normal assistant text response */}
+                          {m.content && <MessageResponse>{m.content}</MessageResponse>}
+                        </>
+                      )}
 
                       {/* Batch Document Queue Display */}
                       {m.batchQueue && m.batchQueue.length > 0 && (
@@ -1494,6 +1571,35 @@ export default function AsistenClient({
               {isStreaming && (
                 <Message from="assistant">
                   <MessageContent from="assistant">
+                    {/* Live streaming tools */}
+                    {streamingTools.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        {streamingTools.map((st, i) => (
+                          <Tool
+                            key={i}
+                            defaultOpen={st.status === "awaiting-approval"}
+                            state={st.status}
+                          >
+                            <ToolHeader
+                              title={st.toolName}
+                              type={`tool-${st.toolName}`}
+                              state={st.status}
+                            />
+                            <ToolContent>
+                              {st.args && typeof st.args === "object" && Object.keys(st.args as object).length > 0 ? (
+                                <ToolInput input={st.args} />
+                              ) : null}
+                              {st.result ? (
+                                <ToolOutput output={st.result as React.ReactNode} />
+                              ) : st.error ? (
+                                <ToolOutput errorText={st.error} />
+                              ) : null}
+                            </ToolContent>
+                          </Tool>
+                        ))}
+                      </div>
+                    )}
+
                     {streamingText ? (
                       <MessageResponse>
                         {streamingText}

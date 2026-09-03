@@ -368,11 +368,11 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                   });
 
                   if (!fullText) {
-                    let pendingMsg = `Saya telah menyiapkan tindakan **${toolName}**. Silakan periksa rinciannya di kartu bawah dan klik **Setujui & Jalankan**.`;
+                    let pendingMsg = `Berikut rincian tindakan yang perlu Anda konfirmasi:`;
                     if (toolName === "post_journal" || toolName === "create_journal_draft") {
-                      pendingMsg = `Saya sudah siapkan rincian pencatatan jurnalnya. Silakan periksa tabel debit-kredit pada kartu di bawah ya, lalu klik **Setujui & Jalankan** untuk mencatatnya ke pembukuan.`;
+                      pendingMsg = `Berikut draf jurnal untuk pencatatan transaksi Anda:`;
                     } else if (toolName === "create_invoice") {
-                      pendingMsg = `Saya sudah siapkan draf faktur tersebut. Silakan tinjau rinciannya di kartu bawah dan klik **Setujui & Jalankan**.`;
+                      pendingMsg = `Berikut draf faktur yang telah saya siapkan:`;
                     }
                     fullText = pendingMsg;
                     send({ type: "text", delta: pendingMsg });
