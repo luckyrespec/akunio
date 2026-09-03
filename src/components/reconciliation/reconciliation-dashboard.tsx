@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Money } from "@/core/money/money";
 import { CreateSessionDialog, type BankAccountOption } from "./create-session-dialog";
+import { PageHeader } from "@/components/page-header";
 
 export interface ReconciliationSessionRow {
   id: string;
@@ -38,22 +39,19 @@ export function ReconciliationDashboard({
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-semibold text-ink">Rekonsiliasi Bank</h1>
-          <p className="text-xs text-ink-soft mt-1">
-            Unggah rekening koran bank dan cocokkan mutasi kas/bank secara otomatis dengan AI.
-          </p>
-        </div>
-
-        <Button
-          onClick={() => setDialogOpen(true)}
-          className="bg-terra hover:bg-terra/90 text-white text-xs h-9"
-        >
-          <Plus className="size-4 mr-1.5" />
-          Mulai Rekonsiliasi Baru
-        </Button>
-      </div>
+      <PageHeader
+        title="Rekonsiliasi Bank"
+        eyebrow="Unggah rekening koran bank dan cocokkan mutasi kas/bank secara otomatis dengan AI."
+        actions={
+          <Button
+            onClick={() => setDialogOpen(true)}
+            className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs"
+          >
+            <Plus className="size-4 mr-1.5" />
+            Mulai Rekonsiliasi Baru
+          </Button>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

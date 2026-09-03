@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreateAssetDialog } from "./create-asset-dialog";
 import { RunDepreciationDialog } from "./run-depreciation-dialog";
 import { Money } from "@/core/money/money";
+import { PageHeader } from "@/components/page-header";
 
 interface AccountOption {
   id: string;
@@ -61,36 +62,30 @@ export function AsetClient({
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-serif font-bold text-ink tracking-tight flex items-center gap-2.5">
-            <Building2 className="size-6 text-terra" />
-            Daftar Aset Tetap
-          </h1>
-          <p className="text-sm text-ink-soft">
-            Pencatatan inventaris aset, penyusutan otomatis, dan pelaporan nilai buku (SAK EMKM).
-          </p>
-        </div>
+      <PageHeader
+        title="Daftar Aset Tetap"
+        eyebrow="Pencatatan inventaris aset, penyusutan otomatis, dan pelaporan nilai buku (SAK EMKM)."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setRunDepDialogOpen(true)}
+              className="border-terra/40 text-terra hover:bg-terra/10 transition-colors text-xs h-9 rounded-xl"
+            >
+              <Play className="size-4 mr-1.5" />
+              Jalankan Penyusutan
+            </Button>
 
-        <div className="flex items-center gap-2.5">
-          <Button
-            variant="outline"
-            onClick={() => setRunDepDialogOpen(true)}
-            className="border-terra/40 text-terra hover:bg-terra/10 transition-colors"
-          >
-            <Play className="size-4 mr-1.5" />
-            Jalankan Penyusutan
-          </Button>
-
-          <Button
-            onClick={() => setCreateDialogOpen(true)}
-            className="bg-terra text-white hover:bg-terra/90 transition-colors"
-          >
-            <Plus className="size-4 mr-1.5" />
-            Tambah Aset
-          </Button>
-        </div>
-      </div>
+            <Button
+              onClick={() => setCreateDialogOpen(true)}
+              className="bg-terra text-white hover:bg-terra/90 transition-colors text-xs h-9 rounded-xl shadow-2xs"
+            >
+              <Plus className="size-4 mr-1.5" />
+              Tambah Aset
+            </Button>
+          </div>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

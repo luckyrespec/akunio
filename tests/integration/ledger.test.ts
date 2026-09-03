@@ -97,4 +97,24 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("ledger drilldown", () => {
   it("throws AKUN_TIDAK_DITEMUKAN for unknown account", async () => {
     await expect(getLedgerFor(crypto.randomUUID())).rejects.toThrow("AKUN_TIDAK_DITEMUKAN");
   });
+
+  it("lists accounts with aggregated balances correctly", async () => {
+    const { listAccountsWithBalances } = await import("@/server/db/repos/ledger.repo");
+    const { db } = await import("@/server/db");
+    const accountsWithBal = await db.transaction((tx) => listAccountsWithBalances(tx as never, orgId));
+
+    expect(accountsWithBal.length).toBeGreaterThan(0);
+    const kasAcc = accountsWithBal.find((a) => a.code === "1110");
+    expect(kasAcc).toBeDefined();
+    expect(kasAcc?.debitMinor).toBe(2_000_000n);
+    expect(kasAcc?.creditMinor).toBe(500_000n);
+    expect(kasAcc?.balanceMinor).toBe(1_500_000n);
+    expect(kasAcc?.transactionCount).toBe(2);
+
+    const utangAcc = accountsWithBal.find((a) => a.code === "2100");
+    expect(utangAcc).toBeDefined();
+    expect(utangAcc?.debitMinor).toBe(500_000n);
+    expect(utangAcc?.balanceMinor).toBe(-500_000n);
+    expect(utangAcc?.transactionCount).toBe(1);
+  });
 });

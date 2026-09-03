@@ -199,7 +199,7 @@ export function SidebarNav({
       {/* Desktop Sidebar (lg and above) */}
       <aside
         className={cn(
-          "hidden lg:flex shrink-0 flex-col justify-between overflow-hidden border-r border-rule bg-paper py-6 transition-[width,padding] duration-[240ms]",
+          "hidden lg:flex shrink-0 flex-col justify-between overflow-hidden border-r border-rule bg-paper py-6 h-screen sticky top-0 transition-[width,padding] duration-[240ms]",
           collapsed ? "w-[4.25rem] px-2.5" : "w-64 px-4 pr-5",
         )}
         style={{ transitionTimingFunction: "var(--ease-out-soft, cubic-bezier(0.22,1,0.36,1))" }}

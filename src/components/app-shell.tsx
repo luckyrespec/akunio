@@ -40,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const isAsisten = pathname.startsWith("/asisten");
+  const isPengaturan = pathname.startsWith("/pengaturan");
 
   // Avoid flash of wrong width before localStorage read
   if (!ready) {
@@ -59,7 +60,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className={
               isAsisten
                 ? "flex-1 w-full min-h-0 overflow-hidden p-0 m-0 max-w-none flex flex-col"
-                : "flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8"
+                : isPengaturan
+                ? "flex-1 w-full min-h-0 p-0 m-0 max-w-none flex flex-col"
+                : "flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-7"
             }
           >
             {children}
@@ -87,10 +90,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className={
             isAsisten
               ? "flex-1 w-full min-h-0 overflow-hidden p-0 m-0 max-w-none flex flex-col"
-              : "flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8"
+              : isPengaturan
+              ? "flex-1 w-full min-h-0 p-0 m-0 max-w-none flex flex-col"
+              : "flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-7"
           }
         >
-          <PageTransition className={isAsisten ? "flex-1 min-h-0 flex flex-col size-full" : undefined} key={pathname}>
+          <PageTransition className={isAsisten || isPengaturan ? "flex-1 min-h-0 flex flex-col size-full" : undefined} key={pathname}>
             {children}
           </PageTransition>
         </main>

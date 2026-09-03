@@ -11,6 +11,8 @@ import { Money } from "@/core/money/money";
 import { useRouter } from "next/navigation";
 import { formatWhatsAppReminder } from "@/core/invoicing/whatsapp";
 
+import { PageHeader } from "@/components/page-header";
+
 interface InvoiceDashboardProps {
   invoices: InvoiceRow[];
   contacts: ContactOption[];
@@ -99,33 +101,30 @@ export function InvoiceDashboard({
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-semibold text-ink">Faktur & Tagihan</h1>
-          <p className="text-xs text-ink-soft mt-1">
-            Kelola piutang penjualan, utang tagihan pembelian, dan arus jatuh tempo bisnis Anda.
-          </p>
-        </div>
+      <PageHeader
+        title="Faktur & Tagihan"
+        eyebrow="Kelola piutang penjualan, utang tagihan pembelian, dan arus jatuh tempo bisnis Anda."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => handleOpenCreate("INVOICE")}
+              className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs"
+            >
+              <Plus className="size-4 mr-1.5" />
+              Buat Faktur Penjualan
+            </Button>
 
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={() => handleOpenCreate("INVOICE")}
-            className="bg-terra hover:bg-terra/90 text-white text-xs h-9"
-          >
-            <Plus className="size-4 mr-1.5" />
-            Buat Faktur Penjualan
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={() => handleOpenCreate("BILL")}
-            className="border-rule text-ink hover:bg-canvas text-xs h-9"
-          >
-            <Plus className="size-4 mr-1.5" />
-            Catat Tagihan Vendor
-          </Button>
-        </div>
-      </div>
+            <Button
+              variant="outline"
+              onClick={() => handleOpenCreate("BILL")}
+              className="border-rule text-ink hover:bg-canvas text-xs h-9 rounded-xl"
+            >
+              <Plus className="size-4 mr-1.5" />
+              Catat Tagihan Vendor
+            </Button>
+          </div>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

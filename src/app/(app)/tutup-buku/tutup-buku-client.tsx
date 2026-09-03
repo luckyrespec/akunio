@@ -30,6 +30,7 @@ import {
 import { postMonthlyDepreciationAction } from "@/server/actions/assets.actions";
 import type { PreClosingChecklistResult } from "@/core/periods/closing-checklist";
 import { Money } from "@/core/money/money";
+import { PageHeader } from "@/components/page-header";
 
 interface AccountOption {
   id: string;
@@ -174,33 +175,26 @@ export function TutupBukuClient({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-serif font-bold text-ink tracking-tight flex items-center gap-2.5">
-            <CalendarCheck className="size-6 text-terra" />
-            Tutup Buku Akuntansi (Period Closing)
-          </h1>
-          <p className="text-sm text-ink-soft">
-            Panduan sistematis verifikasi pra-penutupan, penguncian periode transaksi, dan jurnal penutup akhir tahun.
-          </p>
-        </div>
-
-        {/* Period Selector */}
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-ink-soft">Pilih Periode:</span>
-          <select
-            value={selectedPeriodName}
-            onChange={(e) => setSelectedPeriodName(e.target.value)}
-            className="rounded-lg border border-rule bg-paper px-3 py-2 text-xs font-mono font-semibold text-ink shadow-xs"
-          >
-            {periods.map((p) => (
-              <option key={p.id} value={p.name}>
-                {p.name} — {p.status === "OPEN" ? "Terbuka" : p.status === "CLOSED" ? "Terkunci (Closed)" : "Locked"}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <PageHeader
+        title="Tutup Buku Akuntansi"
+        eyebrow="Panduan sistematis verifikasi pra-penutupan, penguncian periode transaksi, dan jurnal penutup akhir tahun."
+        actions={
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-medium text-ink-soft">Pilih Periode:</span>
+            <select
+              value={selectedPeriodName}
+              onChange={(e) => setSelectedPeriodName(e.target.value)}
+              className="rounded-xl border border-rule bg-paper px-3 py-2 text-xs font-mono font-semibold text-ink shadow-2xs focus:outline-none focus:ring-1 focus:ring-terra"
+            >
+              {periods.map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name} — {p.status === "OPEN" ? "Terbuka" : p.status === "CLOSED" ? "Terkunci (Closed)" : "Locked"}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+      />
 
       {/* Action Notification */}
       {actionError && (

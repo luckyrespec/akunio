@@ -13,6 +13,104 @@ import {
   setAccountArchived,
   type AccountType,
 } from "@/server/db/repos/accounts.repo";
+import { updateAccount } from "@/server/db/repos/accounts.repo";
+import { journalLines } from "@/server/db/schema/journal";
+
+export async function editAccountNameAction(accountId: string, newName: string) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const cleanName = newName.trim();
+    if (!cleanName) {
+      return { ok: false as const, error: "Nama akun tidak boleh kosong." };
+    }
+
+    await db.transaction(async (tx) => {
+      const existing = await getAccountById(tx, ctx.orgId, accountId);
+      if (!existing) throw new Error("AKUN_TIDAK_DITEMUKAN");
+
+      const row = await updateAccount(tx, ctx.orgId, accountId, { name: cleanName });
+      await appendAudit(tx, {
+        orgId: ctx.orgId,
+        actor: ctx.userEmail,
+        action: "ACCOUNT_UPDATE",
+        subjectType: "account",
+        subjectId: accountId,
+        data: { code: row.code, oldName: existing.name, newName: row.name },
+      });
+    });
+
+    revalidatePath("/pengaturan");
+    return { ok: true as const };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    return { ok: false as const, error: e instanceof Error ? e.message : "Gagal memperbarui nama akun." };
+  }
+}
+
+export async function deleteAccountAction(accountId: string) {
+  try {
+    const ctx = await requireContext(["OWNER"]);
+
+    const result = await db.transaction(async (tx) => {
+      const existing = await getAccountById(tx, ctx.orgId, accountId);
+      if (!existing) throw new Error("AKUN_TIDAK_DITEMUKAN");
+
+      // 1. Cek apakah ada akun anak yang berinduk pada akun ini
+      const [childAccount] = await tx
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.parentCode, existing.code)))
+        .limit(1);
+
+      if (childAccount) {
+        return {
+          ok: false as const,
+          error: "Akun induk tidak dapat dihapus karena masih memiliki sub-akun di bawahnya.",
+        };
+      }
+
+      // 2. Cek apakah ada catatan transaksi/mutasi pada buku besar
+      const [usedInJournal] = await tx
+        .select({ id: journalLines.id })
+        .from(journalLines)
+        .where(and(eq(journalLines.orgId, ctx.orgId), eq(journalLines.accountId, accountId)))
+        .limit(1);
+
+      if (usedInJournal) {
+        return {
+          ok: false as const,
+          error: "Akun tidak dapat dihapus karena sudah memiliki riwayat mutasi/saldo di buku besar.",
+        };
+      }
+
+      // Hapus akun
+      await tx
+        .delete(accounts)
+        .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.id, accountId)));
+
+      await appendAudit(tx, {
+        orgId: ctx.orgId,
+        actor: ctx.userEmail,
+        action: "ACCOUNT_DELETE",
+        subjectType: "account",
+        subjectId: accountId,
+        data: { code: existing.code, name: existing.name },
+      });
+
+      return { ok: true as const };
+    });
+
+    if (!result.ok) {
+      return result;
+    }
+
+    revalidatePath("/pengaturan");
+    return { ok: true as const };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    return { ok: false as const, error: e instanceof Error ? e.message : "Gagal menghapus akun." };
+  }
+}
 
 export async function archiveAccountAction(accountId: string, archive: boolean) {
   try {

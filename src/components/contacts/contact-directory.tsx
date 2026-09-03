@@ -9,6 +9,7 @@ import { CreateContactDialog, type ContactFormData } from "./create-contact-dial
 import { type ContactType } from "@/server/db/schema/invoicing";
 import { normalizeIndonesianPhone } from "@/core/invoicing/whatsapp";
 import { useRouter } from "next/navigation";
+import { PageHeader } from "@/components/page-header";
 
 export interface ContactRow {
   id: string;
@@ -58,25 +59,22 @@ export function ContactDirectory({ initialContacts }: ContactDirectoryProps) {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-semibold text-ink">Buku Direktori Kontak</h1>
-          <p className="text-xs text-ink-soft mt-1">
-            Kelola data pelanggan, vendor, dan termin penagihan bisnis Anda.
-          </p>
-        </div>
-
-        <Button
-          onClick={() => {
-            setEditingContact(null);
-            setDialogOpen(true);
-          }}
-          className="bg-terra hover:bg-terra/90 text-white text-xs h-9"
-        >
-          <Plus className="size-4 mr-1.5" />
-          Tambah Kontak Baru
-        </Button>
-      </div>
+      <PageHeader
+        title="Buku Direktori Kontak"
+        eyebrow="Kelola data pelanggan, vendor, dan termin penagihan bisnis Anda."
+        actions={
+          <Button
+            onClick={() => {
+              setEditingContact(null);
+              setDialogOpen(true);
+            }}
+            className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs"
+          >
+            <Plus className="size-4 mr-1.5" />
+            Tambah Kontak Baru
+          </Button>
+        }
+      />
 
       {/* Filter & Search Bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

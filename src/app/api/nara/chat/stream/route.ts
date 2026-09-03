@@ -163,6 +163,7 @@ function generateSmartTitle(prompt: string): string {
   * Berkomunikasilah secara natural, hangat, dan mengalir seperti percakapan dengan rekan kerja akuntan pribadi.
   * Gunakan kalimat singkat, to the point, dan mudah dipahami.
   * HINDARI penggunaan heading besar (#/##) berlebihan.
+  * Jangan gunakan tanda bintang tunggal (*kata*) secara berlebihan untuk kata biasa seperti kata benda atau kata kerja (misalnya jangan menulis *flat*, *draft*, dll dengan bintang). Tulis saja kata tersebut secara wajar, atau gunakan **teks tebal** hanya untuk judul poin utama.
   * Jika menyajikan daftar poin/fitur/bantuan, WAJIB tuliskan setiap poin di baris baru terpisah menggunakan tanda strip (- item) dengan pemisah baris (newline), jangan disambung dalam satu paragraf horizontal.
 - Anda memiliki akses ke berbagai Tool Akuntansi untuk membaca dan mengubah data.
 - Daftar Tool yang tersedia:
@@ -402,8 +403,9 @@ ${liveNumbers}
 
 Tugas:
 1. Berikan penjelasan yang hangat, ramah, dan mengalir santai dalam Bahasa Indonesia berdasarkan hasil data di atas.
-2. Jika ada daftar atau rincian poin, pisahkan tiap poin di baris baru (- item).
-3. Langsung sampaikan informasi intinya secara jelas dan solutif.`;
+2. Hindari memberi tanda bintang tunggal (*kata*) pada kata biasa. Tuliskan secara wajar atau gunakan **teks tebal** hanya untuk judul poin utama.
+3. Jika ada daftar atau rincian poin, pisahkan tiap poin di baris baru (- item).
+4. Langsung sampaikan informasi intinya secara jelas dan solutif.`;
 
               const synthStream = await ai.interactions.create({
                 model: selectedModel,

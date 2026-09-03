@@ -21,6 +21,9 @@ import { PeriodActions } from "@/components/settings/period-actions";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+import { PeriodDialog, DeletePeriodButton } from "@/components/settings/period-dialog";
+import { Bot, Edit2 } from "lucide-react";
+
 interface PeriodItem {
   id: string;
   name: string;
@@ -58,10 +61,16 @@ const TABS = [
     icon: Layers,
   },
   {
-    id: "kebijakan",
-    label: "Kebijakan & Periode",
-    description: "Otorisasi transaksi AI & tutup buku",
-    icon: ShieldCheck,
+    id: "periode",
+    label: "Periode Fiskal",
+    description: "Kelola tahun buku & tutup periode",
+    icon: Calendar,
+  },
+  {
+    id: "agent",
+    label: "Kebijakan Agent AI",
+    description: "Otorisasi transaksi & otomasi Nara",
+    icon: Bot,
   },
   {
     id: "anggota",
@@ -103,27 +112,27 @@ export function SettingsClient({
   const canEdit = userRole !== "VIEWER";
 
   return (
-    <div className="flex flex-col lg:flex-row items-start gap-6 lg:gap-8 min-h-[600px]">
-      {/* 1. SIDEMENU PENGATURAN */}
-      <aside className="w-full lg:w-72 shrink-0 space-y-4">
-        {/* Info Box Organisasi */}
-        <div className="rounded-2xl border border-rule bg-paper p-4 shadow-2xs">
+    <div className="flex flex-col lg:flex-row h-full w-full min-h-[calc(100vh-3.5rem)] bg-canvas">
+      {/* 1. SIDEMENU PENGATURAN (MENEMPEL / DOCKED PERSIS SEPERTI ASISTEN) */}
+      <aside className="w-full lg:w-64 xl:w-72 shrink-0 border-b lg:border-b-0 lg:border-r border-rule bg-paper flex flex-col">
+        {/* Info Header Organisasi */}
+        <div className="p-4 border-b border-rule shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-terra/10 border border-terra/25 text-terra">
-              <Building2 className="size-5" />
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-terra/10 border border-terra/25 text-terra">
+              <Building2 className="size-4.5" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-display text-sm font-bold text-ink truncate" title={organization.name}>
                 {organization.name}
               </h3>
-              <p className="text-[11px] text-ink-soft">Ruang Kerja Akuntansi</p>
+              <p className="text-[11px] text-ink-soft">Pengaturan Ruang Kerja</p>
             </div>
           </div>
         </div>
 
         {/* Sidemenu Nav Items */}
-        <nav className="rounded-2xl border border-rule bg-paper p-2 shadow-2xs space-y-1">
-          <div className="px-3 py-1.5 text-[11px] font-semibold text-ink-soft uppercase tracking-wider">
+        <nav className="p-2 space-y-1 flex-1 overflow-y-auto">
+          <div className="px-3 py-2 text-[10px] font-semibold text-ink-soft uppercase tracking-wider">
             Menu Pengaturan
           </div>
 
@@ -131,50 +140,25 @@ export function SettingsClient({
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
 
-            let badgeText = "";
-            if (tab.id === "coa") badgeText = `${accounts.length}`;
-            if (tab.id === "kebijakan") badgeText = `${openPeriodsCount} Aktif`;
-            if (tab.id === "anggota") badgeText = `${members.length}`;
-
             return (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => handleSelectTab(tab.id)}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs transition-all text-left group",
+                  "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs transition-all text-left group",
                   isActive
-                    ? "bg-terra/10 text-terra font-semibold border border-terra/30 shadow-2xs"
-                    : "text-ink hover:bg-canvas text-ink-soft hover:text-ink border border-transparent",
+                    ? "bg-terra/10 text-terra font-semibold border border-terra/25 shadow-2xs"
+                    : "text-ink-soft hover:bg-canvas hover:text-ink border border-transparent",
                 )}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Icon
-                    className={cn(
-                      "size-4 shrink-0 transition-colors",
-                      isActive ? "text-terra" : "text-ink-soft group-hover:text-ink",
-                    )}
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate leading-tight">{tab.label}</p>
-                    <p className={cn("text-[10px] truncate mt-0.5", isActive ? "text-terra/80" : "text-ink-soft")}>
-                      {tab.description}
-                    </p>
-                  </div>
-                </div>
-
-                {badgeText && (
-                  <span
-                    className={cn(
-                      "ml-2 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-mono border",
-                      isActive
-                        ? "bg-paper text-terra border-terra/30 font-bold"
-                        : "bg-canvas text-ink-soft border-rule",
-                    )}
-                  >
-                    {badgeText}
-                  </span>
-                )}
+                <Icon
+                  className={cn(
+                    "size-4 shrink-0 transition-colors",
+                    isActive ? "text-terra" : "text-ink-soft group-hover:text-ink",
+                  )}
+                />
+                <span className="truncate font-medium">{tab.label}</span>
               </button>
             );
           })}
@@ -182,86 +166,140 @@ export function SettingsClient({
       </aside>
 
       {/* 2. KONTEN DETAIL PENGATURAN */}
-      <main className="flex-1 w-full min-w-0">
+      <main className="flex-1 w-full min-w-0 p-5 sm:p-6 lg:p-8 overflow-y-auto max-w-[1400px]">
         {/* TAB 1: BAGAN AKUN (COA) */}
         {activeTab === "coa" && (
           <CoaManager accounts={accounts} userRole={userRole} />
         )}
 
-        {/* TAB 2: KEBIJAKAN & PERIODE */}
-        {activeTab === "kebijakan" && (
-          <div className="space-y-8 animate-in fade-in-50 duration-200">
-            {/* Bagian Kebijakan Persetujuan AI */}
-            <div className="space-y-3">
-              <div>
-                <h2 className="font-display text-base font-bold text-ink">
-                  Kebijakan Persetujuan Transaksi AI (Human-in-The-Loop)
-                </h2>
-                <p className="mt-0.5 text-xs text-ink-soft">
-                  Tentukan tingkat otonomi Nara AI saat membuat dan memposting jurnal transaksi.
-                </p>
-              </div>
-
-              <HitlPolicySelector currentPolicy={organization.aiHitlPolicy ?? "smart"} />
-            </div>
-
-            {/* Bagian Periode Akuntansi */}
-            <div className="space-y-4 pt-4 border-t border-rule">
+        {/* TAB 2: PERIODE FISKAL (CRUD LENGKAP & ICON ACTIONS) */}
+        {activeTab === "periode" && (
+          <div className="space-y-6 animate-in fade-in-50 duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="font-display text-base font-bold text-ink">Periode Fiskal Akuntansi</h2>
                 <p className="mt-0.5 text-xs text-ink-soft">
-                  Periode yang ditutup (Closed) atau dikunci (Locked) menolak pencatatan transaksi jurnal baru demi integritas audit.
+                  Kelola tahun buku transaksi, tambahkan periode penyesuaian (13/14), dan kunci periode yang telah ditutup.
                 </p>
               </div>
 
-              {/* Tabel Periode */}
-              <div className="overflow-hidden rounded-2xl border border-rule bg-paper shadow-2xs">
+              {canEdit && (
+                <div className="shrink-0">
+                  <PeriodDialog mode="create" />
+                </div>
+              )}
+            </div>
+
+            {/* Tabel Periode */}
+            <div className="overflow-hidden rounded-2xl border border-rule bg-paper shadow-2xs">
+              <div className="overflow-x-auto">
                 <table className="w-full text-xs text-left">
                   <thead>
                     <tr className="border-b border-rule bg-canvas/70 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
                       <th className="px-4 py-3">Nama Periode</th>
                       <th className="px-4 py-3">Rentang Tanggal</th>
                       <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-center">Aksi Otoritas</th>
+                      <th className="px-4 py-3 text-center">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-rule/60">
-                    {periods.map((p) => (
-                      <tr key={p.id} className="hover:bg-canvas/30 transition-colors">
-                        <td className="px-4 py-3 font-semibold text-ink flex items-center gap-2">
-                          <Calendar className="size-3.5 text-terra" />
-                          <span>{p.name}</span>
-                        </td>
-                        <td className="px-4 py-3 text-ink-soft">
-                          {p.startsOn} s/d {p.endsOn}
-                        </td>
-                        <td className="px-4 py-3">
-                          {p.status === "OPEN" ? (
-                            <Badge className="border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] gap-1">
-                              <Unlock className="size-2.5" />
-                              <span>Terbuka (Open)</span>
-                            </Badge>
-                          ) : p.status === "CLOSED" ? (
-                            <Badge variant="secondary" className="border-rule text-ink-soft text-[10px] gap-1">
-                              <Lock className="size-2.5" />
-                              <span>Ditutup (Closed)</span>
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="border-rule text-ink-soft text-[10px] gap-1">
-                              <Lock className="size-2.5" />
-                              <span>Terkunci (Locked)</span>
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {canEdit && <PeriodActions periodId={p.id} status={p.status} />}
+                    {periods.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-8 text-center text-ink-soft">
+                          <Calendar className="size-8 mx-auto mb-2 text-ink-soft/40" />
+                          <p className="font-semibold text-ink">Belum ada periode fiskal</p>
+                          <p className="text-[11px] mt-0.5">Klik tombol &ldquo;Tambah Periode&rdquo; untuk mendaftarkan periode baru.</p>
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      periods.map((p) => (
+                        <tr key={p.id} className="hover:bg-canvas/30 transition-colors group">
+                          <td className="px-4 py-3 font-semibold text-ink">
+                            <div className="flex items-center gap-2">
+                              <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-terra/10 text-terra border border-terra/20">
+                                <Calendar className="size-3.5" />
+                              </div>
+                              <span className="font-mono font-bold text-xs">{p.name}</span>
+                              {parseInt(p.name.slice(5), 10) > 12 && (
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10">
+                                  {parseInt(p.name.slice(5), 10) === 13 ? "Periode Penyesuaian" : "Periode Audit"}
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-[11px] text-ink-soft">
+                            {p.startsOn} <span className="text-rule">•</span> {p.endsOn}
+                          </td>
+                          <td className="px-4 py-3">
+                            {p.status === "OPEN" ? (
+                              <Badge className="border border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[10px] gap-1 font-semibold">
+                                <Unlock className="size-2.5" />
+                                <span>Terbuka (Open)</span>
+                              </Badge>
+                            ) : p.status === "CLOSED" ? (
+                              <Badge variant="secondary" className="border border-rule text-ink-soft text-[10px] gap-1">
+                                <Lock className="size-2.5" />
+                                <span>Ditutup (Closed)</span>
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="border border-rule text-ink-soft text-[10px] gap-1">
+                                <Lock className="size-2.5" />
+                                <span>Terkunci (Locked)</span>
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {canEdit && (
+                              <div className="flex items-center justify-center gap-1.5">
+                                {/* Close / Reopen Icon Action */}
+                                <PeriodActions periodId={p.id} status={p.status} />
+
+                                {/* Edit Dialog Icon */}
+                                <PeriodDialog
+                                  mode="edit"
+                                  period={p}
+                                  trigger={
+                                    <button
+                                      type="button"
+                                      title="Edit Periode"
+                                      className="flex size-7 items-center justify-center rounded-lg border border-rule/80 text-ink-soft hover:text-ink hover:bg-canvas transition-colors"
+                                    >
+                                      <Edit2 className="size-3" />
+                                    </button>
+                                  }
+                                />
+
+                                {/* Delete Dialog Icon */}
+                                <DeletePeriodButton periodId={p.id} periodName={p.name} />
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB 3: KEBIJAKAN AGENT AI */}
+        {activeTab === "agent" && (
+          <div className="space-y-6 animate-in fade-in-50 duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-base font-bold text-ink flex items-center gap-2">
+                  <Bot className="size-5 text-terra" />
+                  <span>Kebijakan Otorisasi Nara AI (Human-in-The-Loop)</span>
+                </h2>
+                <p className="mt-0.5 text-xs text-ink-soft">
+                  Atur tingkat otonomi dan batas verifikasi sebelum Nara AI membuat draf atau memposting jurnal ke buku besar.
+                </p>
+              </div>
+            </div>
+
+            <HitlPolicySelector currentPolicy={organization.aiHitlPolicy ?? "smart"} />
           </div>
         )}
 

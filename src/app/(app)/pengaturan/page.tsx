@@ -27,45 +27,38 @@ export default async function PengaturanPage() {
   });
 
   return (
-    <section className="space-y-6">
-      <PageHeader
-        title="Pengaturan"
-        eyebrow="Bagan akun, kebijakan persetujuan transaksi AI, periode fiskal & tim"
-      />
-
-      <SettingsClient
-        organization={{
-          id: org?.id ?? ctx.orgId,
-          name: org?.name ?? "Organisasi Saya",
-          baseCurrency: org?.baseCurrency ?? "IDR",
-          fiscalYearStartMonth: org?.fiscalYearStartMonth ?? 1,
-          aiHitlPolicy: orgSettings.aiHitlPolicy,
-        }}
-        accounts={data.accounts.map((a) => ({
-          id: a.id,
-          code: a.code,
-          name: a.name,
-          type: a.type,
-          normal: a.normal,
-          parentCode: a.parentCode,
-          isCash: a.isCash,
-          isBank: a.isBank,
-          contra: a.contra,
-          archivedAt: a.archivedAt,
-        }))}
-        periods={data.periods.map((p) => ({
-          id: p.id,
-          name: p.name,
-          startsOn: p.startsOn,
-          endsOn: p.endsOn,
-          status: p.status as "OPEN" | "CLOSED" | "LOCKED",
-        }))}
-        members={data.members.map((m) => ({
-          email: m.email,
-          role: m.role as "OWNER" | "ACCOUNTANT" | "VIEWER",
-        }))}
-        userRole={ctx.role}
-      />
-    </section>
+    <SettingsClient
+      organization={{
+        id: org?.id ?? ctx.orgId,
+        name: org?.name ?? "Organisasi Saya",
+        baseCurrency: org?.baseCurrency ?? "IDR",
+        fiscalYearStartMonth: org?.fiscalYearStartMonth ?? 1,
+        aiHitlPolicy: orgSettings.aiHitlPolicy,
+      }}
+      accounts={data.accounts.map((a) => ({
+        id: a.id,
+        code: a.code,
+        name: a.name,
+        type: a.type,
+        normal: a.normal,
+        parentCode: a.parentCode,
+        isCash: a.isCash,
+        isBank: a.isBank,
+        contra: a.contra,
+        archivedAt: a.archivedAt,
+      }))}
+      periods={data.periods.map((p) => ({
+        id: p.id,
+        name: p.name,
+        startsOn: p.startsOn,
+        endsOn: p.endsOn,
+        status: p.status as "OPEN" | "CLOSED" | "LOCKED",
+      }))}
+      members={data.members.map((m) => ({
+        email: m.email,
+        role: m.role as "OWNER" | "ACCOUNTANT" | "VIEWER",
+      }))}
+      userRole={ctx.role}
+    />
   );
 }

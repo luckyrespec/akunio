@@ -34,3 +34,49 @@ export async function setPeriodStatus(
   if (!row) throw new Error("PERIODE_TIDAK_DITEMUKAN");
   return row;
 }
+
+export async function createPeriod(
+  q: Queryable,
+  orgId: string,
+  data: { name: string; startsOn: string; endsOn: string; status?: "OPEN" | "CLOSED" | "LOCKED" },
+): Promise<Period> {
+  const [row] = await q
+    .insert(fiscalPeriods)
+    .values({
+      orgId,
+      name: data.name,
+      startsOn: data.startsOn,
+      endsOn: data.endsOn,
+      status: data.status ?? "OPEN",
+    })
+    .returning();
+  return row;
+}
+
+export async function updatePeriod(
+  q: Queryable,
+  orgId: string,
+  periodId: string,
+  data: { name?: string; startsOn?: string; endsOn?: string; status?: "OPEN" | "CLOSED" | "LOCKED" },
+): Promise<Period> {
+  const [row] = await q
+    .update(fiscalPeriods)
+    .set(data)
+    .where(and(eq(fiscalPeriods.orgId, orgId), eq(fiscalPeriods.id, periodId)))
+    .returning();
+  if (!row) throw new Error("PERIODE_TIDAK_DITEMUKAN");
+  return row;
+}
+
+export async function deletePeriod(
+  q: Queryable,
+  orgId: string,
+  periodId: string,
+): Promise<Period> {
+  const [row] = await q
+    .delete(fiscalPeriods)
+    .where(and(eq(fiscalPeriods.orgId, orgId), eq(fiscalPeriods.id, periodId)))
+    .returning();
+  if (!row) throw new Error("PERIODE_TIDAK_DITEMUKAN");
+  return row;
+}
