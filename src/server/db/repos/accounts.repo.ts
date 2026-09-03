@@ -27,6 +27,51 @@ export async function setAccountArchived(
   return row;
 }
 
+export async function createAccount(
+  q: Queryable,
+  input: {
+    orgId: string;
+    code: string;
+    name: string;
+    type: "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE";
+    normal: "D" | "K";
+    parentCode?: string;
+    contra?: boolean;
+    isCash?: boolean;
+    isBank?: boolean;
+  },
+): Promise<AccountRow> {
+  const [row] = await q.insert(accounts).values({
+    orgId: input.orgId,
+    code: input.code,
+    name: input.name,
+    type: input.type,
+    normal: input.normal,
+    parentCode: input.parentCode ?? null,
+    contra: input.contra ?? false,
+    isCash: input.isCash ?? false,
+    isBank: input.isBank ?? false,
+  }).returning();
+  return row;
+}
+
+export async function updateAccount(
+  q: Queryable,
+  orgId: string,
+  id: string,
+  patch: { name?: string; parentCode?: string | null },
+): Promise<AccountRow> {
+  const [row] = await q.update(accounts)
+    .set({
+      ...(patch.name ? { name: patch.name } : {}),
+      ...(patch.parentCode !== undefined ? { parentCode: patch.parentCode } : {}),
+    })
+    .where(and(eq(accounts.orgId, orgId), eq(accounts.id, id)))
+    .returning();
+  if (!row) throw new Error("AKUN_TIDAK_DITEMUKAN");
+  return row;
+}
+
 export function postingMetaMap(
   rows: AccountRow[],
 ): Map<string, { archivedAt: Date | null; hasChildren: boolean }> {
