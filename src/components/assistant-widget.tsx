@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -180,10 +181,21 @@ export function AssistantWidget() {
     loadThread();
   }, [activeThreadId, open]);
 
-  // Handle file upload
+  // Handle file upload with instant local preview
   const handleFileUpload = async (files: FileList | File[]) => {
     const validFiles = Array.from(files);
     if (validFiles.length === 0) return;
+
+    // Instant client-side preview for 0ms perceived latency
+    const instantPreviews: Attachment[] = validFiles.map((f) => ({
+      id: `temp-${Date.now()}-${Math.random()}`,
+      fileName: f.name,
+      mime: f.type,
+      sizeBytes: f.size,
+      previewUrl: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
+      status: "uploading",
+    }));
+    setAttachments((prev) => [...prev, ...instantPreviews]);
 
     setUploading(true);
     setErrorBanner(null);
@@ -195,10 +207,22 @@ export function AssistantWidget() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal mengunggah.");
       if (Array.isArray(data.files)) {
-        setAttachments((prev) => [...prev, ...data.files]);
+        setAttachments((prev) => {
+          const nonTemp = prev.filter((p) => !p.id.startsWith("temp-"));
+          const confirmed = data.files.map((cf: Attachment) => {
+            const match = prev.find((p) => p.fileName === cf.fileName);
+            return {
+              ...cf,
+              previewUrl: match?.previewUrl || cf.url,
+              status: "done" as const,
+            };
+          });
+          return [...nonTemp, ...confirmed];
+        });
       }
     } catch (e) {
       setErrorBanner(e instanceof Error ? e.message : "Gagal mengunggah berkas.");
+      setAttachments((prev) => prev.filter((p) => !p.id.startsWith("temp-")));
     } finally {
       setUploading(false);
     }
@@ -561,18 +585,13 @@ export function AssistantWidget() {
               messages.map((m) => (
                 <Message key={m.id} from={m.role}>
                   <MessageContent from={m.role}>
-                    {/* User attachments preview */}
-                    {m.role === "user" && m.attachments && m.attachments.length > 0 && (
-                      <div className="mb-2 flex flex-wrap gap-1">
+                    {/* User attachments in rich Grid display */}
+                    {m.attachments && m.attachments.length > 0 && (
+                      <Attachments variant="grid" className="mb-2.5">
                         {m.attachments.map((att) => (
-                          <div
-                            key={att.id}
-                            className="flex items-center gap-1 rounded bg-white/20 px-2 py-0.5 text-[11px] text-white"
-                          >
-                            <span className="truncate max-w-[120px] font-medium">{att.fileName}</span>
-                          </div>
+                          <AttachmentItem key={att.id} attachment={att} variant="grid" />
                         ))}
-                      </div>
+                      </Attachments>
                     )}
 
                     {/* Reasoning Accordion */}
@@ -673,15 +692,19 @@ export function AssistantWidget() {
 
         {/* Panel Footer: PromptInput (ai-elements) */}
         <div className="border-t border-rule bg-paper p-3 shrink-0">
-          <PromptInput onSubmit={() => handleSendMessage()}>
+          <PromptInput
+            onSubmit={() => handleSendMessage()}
+            onDropFiles={(files) => handleFileUpload(files)}
+          >
             {/* Attachment preview chips */}
             {attachments.length > 0 && (
               <PromptInputHeader>
-                <Attachments>
+                <Attachments variant="inline">
                   {attachments.map((att) => (
                     <AttachmentItem
                       key={att.id}
                       attachment={att}
+                      variant="inline"
                       onRemove={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
                     />
                   ))}
@@ -718,18 +741,22 @@ export function AssistantWidget() {
                     if (e.target.files) handleFileUpload(e.target.files);
                   }}
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 rounded-full border border-rule/70 bg-canvas/60 text-ink-soft hover:text-ink hover:bg-canvas"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading || isStreaming}
-                  title="Lampirkan nota atau faktur (PDF/Gambar)"
-                  aria-label="Lampirkan berkas"
-                >
-                  <Plus className="size-3.5" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 rounded-full border border-rule/70 bg-canvas/60 text-ink-soft hover:text-ink hover:bg-canvas"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading || isStreaming}
+                      aria-label="Lampirkan berkas"
+                    >
+                      <Plus className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Lampirkan berkas (Gambar, PDF)</TooltipContent>
+                </Tooltip>
 
                 {/* Friendly HITL Tool */}
                 <HitlTool

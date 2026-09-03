@@ -35,6 +35,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -225,10 +230,23 @@ export default function AsistenClient({
     }
   }, [currentView, fetchLibraryFiles]);
 
-  // Handle file uploads to /api/nara/upload
+  // Handle file uploads to /api/nara/upload with instant local preview
   const handleFileUpload = async (files: FileList | File[], forChat = true) => {
     const validFiles = Array.from(files);
     if (validFiles.length === 0) return;
+
+    if (forChat) {
+      // Instant client-side preview for 0ms perceived latency
+      const instantPreviews: Attachment[] = validFiles.map((f) => ({
+        id: `temp-${Date.now()}-${Math.random()}`,
+        fileName: f.name,
+        mime: f.type,
+        sizeBytes: f.size,
+        previewUrl: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
+        status: "uploading",
+      }));
+      setAttachments((prev) => [...prev, ...instantPreviews]);
+    }
 
     setUploading(true);
     setErrorBanner(null);
@@ -249,7 +267,18 @@ export default function AsistenClient({
       }
 
       if (forChat && Array.isArray(data.files)) {
-        setAttachments((prev) => [...prev, ...data.files]);
+        setAttachments((prev) => {
+          const nonTemp = prev.filter((p) => !p.id.startsWith("temp-"));
+          const confirmed = data.files.map((cf: Attachment) => {
+            const match = prev.find((p) => p.fileName === cf.fileName);
+            return {
+              ...cf,
+              previewUrl: match?.previewUrl || cf.url,
+              status: "done" as const,
+            };
+          });
+          return [...nonTemp, ...confirmed];
+        });
       } else {
         // Refresh library files if uploaded from library view
         fetchLibraryFiles();
@@ -257,6 +286,9 @@ export default function AsistenClient({
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Gagal mengunggah berkas.";
       setErrorBanner(msg);
+      if (forChat) {
+        setAttachments((prev) => prev.filter((p) => !p.id.startsWith("temp-")));
+      }
     } finally {
       setUploading(false);
     }
@@ -1273,18 +1305,13 @@ export default function AsistenClient({
                 messages.map((m) => (
                   <Message key={m.id} from={m.role}>
                     <MessageContent from={m.role}>
-                      {/* User attachments preview */}
-                      {m.role === "user" && m.attachments && m.attachments.length > 0 && (
-                        <div className="mb-2.5 flex flex-wrap gap-1.5">
+                      {/* User attachments in rich Grid display */}
+                      {m.attachments && m.attachments.length > 0 && (
+                        <Attachments variant="grid" className="mb-3">
                           {m.attachments.map((att) => (
-                            <div
-                              key={att.id}
-                              className="flex items-center gap-1.5 rounded-lg bg-white/20 px-2.5 py-1 text-xs text-white"
-                            >
-                              <span className="truncate max-w-[140px] font-medium">{att.fileName}</span>
-                            </div>
+                            <AttachmentItem key={att.id} attachment={att} variant="grid" />
                           ))}
-                        </div>
+                        </Attachments>
                       )}
 
                       {/* Reasoning Accordion (Chain of Thought) */}
@@ -1411,15 +1438,19 @@ export default function AsistenClient({
           {/* 3. BILAH INPUT BAWAH */}
           <div className="border-t border-rule bg-paper/80 p-3 md:p-5 backdrop-blur-md shrink-0">
             <div className="mx-auto max-w-4xl lg:max-w-5xl">
-              <PromptInput onSubmit={() => handleSendMessage()}>
+              <PromptInput
+                onSubmit={() => handleSendMessage()}
+                onDropFiles={(files) => handleFileUpload(files, true)}
+              >
                 {/* Attachment Chips inside Prompt Input Header */}
                 {attachments.length > 0 && (
                   <PromptInputHeader>
-                    <Attachments>
+                    <Attachments variant="inline">
                       {attachments.map((att) => (
                         <AttachmentItem
                           key={att.id}
                           attachment={att}
+                          variant="inline"
                           onRemove={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
                         />
                       ))}
@@ -1445,7 +1476,7 @@ export default function AsistenClient({
 
                 <PromptInputFooter>
                   <PromptInputTools>
-                    {/* Tombol (+) untuk lampirkan berkas */}
+                    {/* Tombol (+) untuk lampirkan berkas dengan Tooltip */}
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -1456,18 +1487,22 @@ export default function AsistenClient({
                         if (e.target.files) handleFileUpload(e.target.files, true);
                       }}
                     />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-full border border-rule/70 bg-canvas/60 text-ink-soft hover:text-ink hover:bg-canvas transition-colors"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading || isStreaming}
-                      title="Lampirkan nota atau faktur (PDF / Gambar)"
-                      aria-label="Lampirkan dokumen"
-                    >
-                      <Plus className="size-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-full border border-rule/70 bg-canvas/60 text-ink-soft hover:text-ink hover:bg-canvas transition-colors"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploading || isStreaming}
+                          aria-label="Lampirkan dokumen"
+                        >
+                          <Plus className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Lampirkan berkas (Gambar, PDF)</TooltipContent>
+                    </Tooltip>
 
                     {/* Tool Izin Transaksi (Friendly HITL Switcher) */}
                     <HitlTool
@@ -1477,14 +1512,21 @@ export default function AsistenClient({
                     />
 
                     {/* Model Chooser */}
-                    <ModelSelector
-                      value={modelPreset}
-                      onValueChange={setModelPreset}
-                      disabled={isStreaming}
-                    />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <ModelSelector
+                            value={modelPreset}
+                            onValueChange={setModelPreset}
+                            disabled={isStreaming}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Pilih Model AI (Nara Kilat / Nara Analis)</TooltipContent>
+                    </Tooltip>
                   </PromptInputTools>
 
-                  {/* Tombol Submit dengan icon Enter */}
+                  {/* Tombol Submit dengan icon Enter & Tooltip bawaan */}
                   <PromptInputSubmit
                     isStreaming={isStreaming}
                     onStop={handleStopStreaming}

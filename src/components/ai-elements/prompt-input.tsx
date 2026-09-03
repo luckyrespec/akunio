@@ -1,25 +1,68 @@
 "use client";
 
 import * as React from "react";
-import { CornerDownLeft, Square } from "lucide-react";
+import { CornerDownLeft, Square, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export interface PromptInputProps extends React.HTMLAttributes<HTMLDivElement> {
   onSubmit?: () => void;
+  onDropFiles?: (files: File[]) => void;
 }
 
 export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
-  ({ className, onSubmit, children, ...props }, ref) => {
+  ({ className, onSubmit, onDropFiles, children, ...props }, ref) => {
+    const [isDragging, setIsDragging] = React.useState(false);
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isDragging) setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Only set to false if leaving the root container
+      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+      setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const filesArray = Array.from(e.dataTransfer.files);
+        onDropFiles?.(filesArray);
+      }
+    };
+
     return (
       <div
         ref={ref}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={cn(
           "relative flex flex-col w-full rounded-3xl border border-rule bg-paper p-3 md:p-3.5 shadow-sm transition-all focus-within:border-terra/70 focus-within:ring-2 focus-within:ring-terra/15",
+          isDragging && "border-dashed border-terra ring-2 ring-terra/30 bg-terra/5",
           className,
         )}
         {...props}
       >
+        {/* Drop Zone Overlay */}
+        {isDragging && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-3xl bg-paper/90 backdrop-blur-xs border-2 border-dashed border-terra animate-in fade-in-0">
+            <UploadCloud className="size-8 text-terra animate-bounce mb-1" />
+            <p className="font-display font-semibold text-xs text-ink">Lepaskan berkas di sini untuk melampirkan</p>
+            <p className="text-[10px] text-ink-soft">Mendukung gambar (PNG, JPG) dan dokumen PDF</p>
+          </div>
+        )}
+
         {children}
       </div>
     );
@@ -129,13 +172,14 @@ export function PromptInputTools({
 export interface PromptInputButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
+  tooltip?: string;
 }
 
 export const PromptInputButton = React.forwardRef<
   HTMLButtonElement,
   PromptInputButtonProps
->(({ className, active, children, ...props }, ref) => {
-  return (
+>(({ className, active, tooltip, children, ...props }, ref) => {
+  const button = (
     <button
       ref={ref}
       type="button"
@@ -151,37 +195,43 @@ export const PromptInputButton = React.forwardRef<
       {children}
     </button>
   );
+
+  if (!tooltip) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="top">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
 });
 PromptInputButton.displayName = "PromptInputButton";
 
 export interface PromptInputSubmitProps
   extends React.ComponentPropsWithoutRef<typeof Button> {
   isStreaming?: boolean;
+  tooltip?: string;
   onStop?: () => void;
 }
 
 export const PromptInputSubmit = React.forwardRef<
   HTMLButtonElement,
   PromptInputSubmitProps
->(({ className, isStreaming = false, onStop, onClick, disabled, ...props }, ref) => {
-  if (isStreaming) {
-    return (
-      <Button
-        ref={ref}
-        type="button"
-        size="icon"
-        variant="destructive"
-        className={cn("size-8 rounded-full shadow-2xs transition-transform active:scale-95", className)}
-        onClick={onStop}
-        aria-label="Stop response"
-        {...props}
-      >
-        <Square className="size-3.5 fill-current" />
-      </Button>
-    );
-  }
-
-  return (
+>(({ className, isStreaming = false, tooltip, onStop, onClick, disabled, ...props }, ref) => {
+  const content = isStreaming ? (
+    <Button
+      ref={ref}
+      type="button"
+      size="icon"
+      variant="destructive"
+      className={cn("size-8 rounded-full shadow-2xs transition-transform active:scale-95", className)}
+      onClick={onStop}
+      aria-label="Hentikan jawaban"
+      {...props}
+    >
+      <Square className="size-3.5 fill-current" />
+    </Button>
+  ) : (
     <Button
       ref={ref}
       type="button"
@@ -192,12 +242,22 @@ export const PromptInputSubmit = React.forwardRef<
       )}
       onClick={onClick}
       disabled={disabled}
-      aria-label="Kirim pesan (Enter)"
-      title="Kirim (Enter, Alt+Enter untuk baris baru)"
+      aria-label="Kirim pesan"
       {...props}
     >
       <CornerDownLeft className="size-4" />
     </Button>
+  );
+
+  const defaultTooltip = isStreaming
+    ? "Hentikan respon"
+    : "Kirim pesan (Enter, Alt+Enter untuk baris baru)";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{content}</TooltipTrigger>
+      <TooltipContent side="top">{tooltip || defaultTooltip}</TooltipContent>
+    </Tooltip>
   );
 });
 PromptInputSubmit.displayName = "PromptInputSubmit";
