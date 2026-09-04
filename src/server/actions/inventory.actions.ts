@@ -59,17 +59,19 @@ export async function createItemAction(payload: {
       ? Money.parseIdr(payload.standardSellingPriceText).minor
       : 0n;
 
-    const item = await createInventoryItem(db, ctx.orgId, {
-      code: payload.code,
-      name: payload.name,
-      barcode: payload.barcode,
-      unit: payload.unit,
-      category: payload.category,
-      minStockAlert: payload.minStockAlert,
-      standardSellingPriceMinor,
-      initialQty: payload.initialQty,
-      initialCostMinor,
-    });
+    const item = await withOrg(ctx.orgId, async (tx) =>
+      createInventoryItem(tx, ctx.orgId, {
+        code: payload.code,
+        name: payload.name,
+        barcode: payload.barcode,
+        unit: payload.unit,
+        category: payload.category,
+        minStockAlert: payload.minStockAlert,
+        standardSellingPriceMinor,
+        initialQty: payload.initialQty,
+        initialCostMinor,
+      }),
+    );
 
     revalidatePath("/persediaan");
     return { ok: true, item };
@@ -143,9 +145,6 @@ export async function createBatchItemsAction(items: Array<{
           errors.push({ index: idx, code, message });
         }
       }
-      if (results.length === 0 && errors.length > 0) {
-        throw new Error(errors[0].message);
-      }
       return { results, skipped, errors };
     });
 
@@ -174,7 +173,9 @@ export async function createStockOpnameAction(payload: {
 }) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const opname = await createStockOpname(db, ctx.orgId, payload);
+    const opname = await withOrg(ctx.orgId, async (tx) =>
+      createStockOpname(tx, ctx.orgId, payload),
+    );
     revalidatePath("/persediaan/opname");
     return { ok: true, opnameId: opname.id };
   } catch (err: unknown) {
@@ -226,14 +227,16 @@ export async function updateInventorySettingsAction(payload: {
 }) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const updated = await upsertInventorySettings(db, ctx.orgId, {
-      valuationMethod: payload.valuationMethod,
-      recordingMethod: payload.recordingMethod,
-      inventoryAccountId: payload.inventoryAccountId || undefined,
-      cogsAccountId: payload.cogsAccountId || undefined,
-      adjustmentLossAccountId: payload.adjustmentLossAccountId || undefined,
-      adjustmentGainAccountId: payload.adjustmentGainAccountId || undefined,
-    });
+    const updated = await withOrg(ctx.orgId, async (tx) =>
+      upsertInventorySettings(tx, ctx.orgId, {
+        valuationMethod: payload.valuationMethod,
+        recordingMethod: payload.recordingMethod,
+        inventoryAccountId: payload.inventoryAccountId || undefined,
+        cogsAccountId: payload.cogsAccountId || undefined,
+        adjustmentLossAccountId: payload.adjustmentLossAccountId || undefined,
+        adjustmentGainAccountId: payload.adjustmentGainAccountId || undefined,
+      }),
+    );
     revalidatePath("/pengaturan");
     revalidatePath("/persediaan");
     return { ok: true, settings: updated };

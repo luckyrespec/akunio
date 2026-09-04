@@ -149,14 +149,92 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("inventory opname -> adjustme
     ).rejects.toThrow(/SUDAH_SELESAI|SUDAH_DIPOSTING|BELUM_SIAP/);
   });
 
-  it("RLS: org lain tidak melihat opname", async () => {
-    const other = (await makeOrg("PT Lain")).orgId;
-    const r = await admin.query(`SELECT count(*)::int AS n FROM stock_opnames WHERE org_id=$1`, [other]);
-    expect(r.rows[0].n).toBe(0);
-    // Isolasi via app_user diuji di inventory-schema bila ada; minimal pastikan tabel ter-RLS
-    const pol = await admin.query(
-      `SELECT policyname FROM pg_policies WHERE tablename='stock_opnames'`,
+  it("surplus menambah stok dan memakai akun pendapatan", async () => {
+    const inv = await import("@/server/db/repos/inventory.repo");
+    const { db } = await import("@/server/db");
+
+    const item = await db.transaction((tx) =>
+      inv.createInventoryItem(tx as never, orgId, {
+        code: "BRG-002",
+        name: "Pulpen Gel",
+        unit: "Pcs",
+        initialQty: 5,
+        initialCostMinor: 10_000_00n,
+      }),
     );
-    expect(pol.rows.length).toBeGreaterThan(0);
+
+    const opname = await db.transaction((tx) =>
+      inv.createStockOpname(tx as never, orgId, {
+        opnameDate: `${year}-06-17`,
+        items: [{ itemId: item.id, physicalQty: 7 }],
+      }),
+    );
+    expect(opname.number).toMatch(/^OPN-/);
+    expect(opname.totalDifferenceValueMinor).toBe(20_000_00n);
+
+    const draft = await db.transaction((tx) =>
+      inv.generateAdjustmentJournalDraft(tx as never, orgId, opname.id),
+    );
+    expect(draft.journalEntryId).toBeTruthy();
+
+    const posted = await db.transaction((tx) =>
+      inv.postOpnameAdjustment(tx as never, orgId, opname.id, "tester@test.id"),
+    );
+    const after = await db.transaction((tx) =>
+      inv.getInventoryItem(tx as never, orgId, item.id),
+    );
+    expect(Number(after!.currentQty)).toBe(7);
+    expect(after!.totalCostMinor).toBe(70_000_00n);
+    expect(posted.opname.status).toBe("COMPLETED");
+  });
+
+  it("nol selisih langsung selesai tanpa jurnal", async () => {
+    const inv = await import("@/server/db/repos/inventory.repo");
+    const { db } = await import("@/server/db");
+
+    const item = await db.transaction((tx) =>
+      inv.createInventoryItem(tx as never, orgId, {
+        code: "BRG-003",
+        name: "Penghapus",
+        unit: "Pcs",
+        initialQty: 3,
+        initialCostMinor: 5_000_00n,
+      }),
+    );
+
+    const zeroOpname = await db.transaction((tx) =>
+      inv.createStockOpname(tx as never, orgId, {
+        opnameDate: `${year}-06-18`,
+        items: [{ itemId: item.id, physicalQty: 3 }],
+      }),
+    );
+
+    const res = await db.transaction((tx) =>
+      inv.generateAdjustmentJournalDraft(tx as never, orgId, zeroOpname.id),
+    );
+    expect(res.journalEntryId).toBeNull();
+  });
+
+  it("RLS: app_user org lain tidak melihat opname", async () => {
+    const other = (await makeOrg("PT Lain")).orgId;
+    const appUrl = process.env.APP_DATABASE_URL!;
+    const { Pool: AppPool } = await import("pg");
+    const pool = new AppPool({ connectionString: appUrl });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      // Org sendiri (ada opname dari test sebelumnya) terlihat
+      await client.query(`SELECT set_config('app.current_org', $1, false)`, [orgId]);
+      const seenOwn = await client.query(`SELECT count(*)::int AS n FROM stock_opnames`);
+      expect(seenOwn.rows[0].n).toBeGreaterThan(0);
+      // Org lain tidak melihat apa pun
+      await client.query(`SELECT set_config('app.current_org', $1, false)`, [other]);
+      const seenOther = await client.query(`SELECT count(*)::int AS n FROM stock_opnames`);
+      expect(seenOther.rows[0].n).toBe(0);
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+      await pool.end();
+    }
   });
 });

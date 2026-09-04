@@ -9,8 +9,8 @@ import {
   stockOpnameItems,
 } from "../schema/inventory";
 import { accounts } from "../schema/org";
-import { journalEntries } from "../schema/journal";
-import { createDraftJournalEntry } from "./journals.repo";
+import { journalEntries, journalLines } from "../schema/journal";
+import { createDraftJournalEntry, toMinor } from "./journals.repo";
 import { findPeriodByDate } from "./periods.repo";
 import { calculateStockDifference } from "@/core/inventory/valuation";
 
@@ -190,7 +190,12 @@ export async function createStockOpname(
   const [countRow] = await q
     .select({ count: sql<number>`count(*)::int` })
     .from(stockOpnames)
-    .where(eq(stockOpnames.orgId, orgId));
+    .where(
+      and(
+        eq(stockOpnames.orgId, orgId),
+        sql`left(${stockOpnames.number}, 8) = ${`OPN-${year}`}`,
+      ),
+    );
   const seq = (countRow?.count ?? 0) + 1;
   const number = `OPN-${year}-${String(seq).padStart(4, "0")}`;
 
@@ -279,7 +284,7 @@ export async function getStockOpnameWithItems(q: Queryable, orgId: string, opnam
 
 type ResolvedAccounts = {
   inventoryAccountId: string;
-  lossAccountId: string;
+  lossAccountId: string | null;
   gainAccountId: string | null;
 };
 
@@ -291,7 +296,7 @@ type ResolvedAccounts = {
 async function resolveAdjustmentAccounts(
   q: Queryable,
   orgId: string,
-  direction: "DEFISIT" | "SURPLUS" | "SEIMBANG",
+  direction: "DEFISIT" | "SURPLUS",
 ): Promise<ResolvedAccounts> {
   const settings = await getInventorySettings(q, orgId);
   const allAccounts = await q.select().from(accounts).where(eq(accounts.orgId, orgId));
@@ -319,7 +324,7 @@ async function resolveAdjustmentAccounts(
   }
   return {
     inventoryAccountId: inventoryId as string,
-    lossAccountId: (lossId as string | null) ?? "",
+    lossAccountId: lossId,
     gainAccountId: gainId,
   };
 }
@@ -334,6 +339,10 @@ export async function generateAdjustmentJournalDraft(
   orgId: string,
   opnameId: string,
 ) {
+  // Kunci per opname agar dua pemanggilan bersamaan tidak mencetak dua draf
+  // (cek journalEntryId di bawah tidak atomik tanpa lock).
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`opname-draft:${opnameId}`}))`);
+
   const opnameData = await getStockOpnameWithItems(q, orgId, opnameId);
   if (!opnameData) throw new Error("OPNAME_TIDAK_DITEMUKAN");
   if (opnameData.journalEntryId) throw new Error("DRAF_JURNAL_SUDAH_DIBUAT");
@@ -359,7 +368,7 @@ export async function generateAdjustmentJournalDraft(
   const lines = isDeficit
     ? [
         {
-          accountId: resolved.lossAccountId,
+          accountId: (resolved.lossAccountId as string),
           debitMinor: absValue,
           creditMinor: 0n,
           memo: `Beban Selisih Stok Opname ${opnameData.number}`,
@@ -443,7 +452,23 @@ export async function postOpnameAdjustment(
   if (entry.status === "POSTED") throw new Error("JURNAL_SUDAH_DIPOSTING");
   if (entry.status !== "DRAFT") throw new Error(`STATUS_JURNAL_TIDAK_VALID: ${entry.status}`);
 
+  // Defense-in-depth: pastikan total draf masih cocok dengan selisih opname
+  // sebelum dikunci POSTED (tidak ada jalur edit draf, tapi murah dicek).
+  const draftLines = await q
+    .select({ debit: journalLines.debit, credit: journalLines.credit })
+    .from(journalLines)
+    .where(eq(journalLines.entryId, entry.id));
+  const draftDebit = draftLines.reduce((a, l) => a + toMinor(l.debit), 0n);
+  const draftCredit = draftLines.reduce((a, l) => a + toMinor(l.credit), 0n);
+  const expectedAbs = opnameData.totalDifferenceValueMinor < 0n
+    ? -opnameData.totalDifferenceValueMinor
+    : opnameData.totalDifferenceValueMinor;
+  if (draftDebit !== expectedAbs || draftCredit !== expectedAbs) {
+    throw new Error("DRAF_JURNAL_TIDAK_SESUAI_SELSISIH: total draf berubah, buat ulang draf penyesuaian");
+  }
+
   // Terapkan stok per item ke kuantitas fisik hasil opname.
+  let layerShortfall = "";
   for (const line of opnameData.items) {
     const item = await getInventoryItem(q, orgId, line.itemId);
     if (!item) throw new Error(`ITEM_TIDAK_DITEMUKAN: ${line.itemId}`);
@@ -518,8 +543,11 @@ export async function postOpnameAdjustment(
           .where(eq(inventoryLayers.id, layer.id));
         toDeduct -= take;
       }
-      // Jika layer tidak cukup (data lama tidak konsisten), habiskan yang ada
-      // tanpa membuat qty negatif — selisih nilai tetap dijurnal.
+      if (toDeduct > 1e-9) {
+        // Layer tidak mencakup seluruh defisit (inkonsistensi data lama):
+        // catat shortfall di catatan opname agar terlihat, tanpa membuat qty negatif.
+        layerShortfall = `${layerShortfall}${layerShortfall ? "; " : ""}${item.code} kurang layer ${toDeduct}`;
+      }
     }
   }
 
@@ -536,7 +564,13 @@ export async function postOpnameAdjustment(
   }
 
   const [completed] = await q.update(stockOpnames)
-    .set({ status: "COMPLETED", updatedAt: new Date() })
+    .set({
+      status: "COMPLETED",
+      notes: layerShortfall
+        ? `${opnameData.notes ?? ""}${opnameData.notes ? "\n" : ""}[Layer tidak penuh: ${layerShortfall}]`
+        : opnameData.notes,
+      updatedAt: new Date(),
+    })
     .where(eq(stockOpnames.id, opnameId))
     .returning();
 
