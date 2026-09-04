@@ -80,6 +80,59 @@ export async function createItemAction(payload: {
   }
 }
 
+export async function createBatchItemsAction(items: Array<{
+  code: string;
+  name: string;
+  barcode?: string;
+  unit?: string;
+  category?: string;
+  minStockAlert?: string;
+  standardSellingPriceText?: string;
+  initialQty?: number;
+  initialCostText?: string;
+}>) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    if (!items || items.length === 0) {
+      return { ok: false, error: "Daftar barang tidak boleh kosong" };
+    }
+
+    const created = await db.transaction(async (tx) => {
+      const results = [];
+      for (const payload of items) {
+        if (!payload.code.trim() || !payload.name.trim()) continue;
+
+        const initialCostMinor = payload.initialCostText
+          ? Money.parseIdr(payload.initialCostText).minor
+          : 0n;
+        const standardSellingPriceMinor = payload.standardSellingPriceText
+          ? Money.parseIdr(payload.standardSellingPriceText).minor
+          : 0n;
+
+        const item = await createInventoryItem(tx, ctx.orgId, {
+          code: payload.code,
+          name: payload.name,
+          barcode: payload.barcode,
+          unit: payload.unit,
+          category: payload.category,
+          minStockAlert: payload.minStockAlert,
+          standardSellingPriceMinor,
+          initialQty: payload.initialQty,
+          initialCostMinor,
+        });
+        results.push(item);
+      }
+      return results;
+    });
+
+    revalidatePath("/persediaan");
+    return { ok: true, count: created.length };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Gagal menyimpan batch barang" };
+  }
+}
+
+
 export async function createStockOpnameAction(payload: {
   opnameDate: string;
   notes?: string;

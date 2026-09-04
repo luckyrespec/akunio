@@ -12,8 +12,15 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Plus,
+  ChevronDown,
+  FileSpreadsheet,
 } from "lucide-react";
-import { CreateItemDialog } from "./_components/item-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Money } from "@/core/money/money";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -76,7 +83,52 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
                 )}
               </Button>
             </Link>
-            <CreateItemDialog />
+            {/* Split Button: Tambah Barang Satuan & Batch Input */}
+            <div className="inline-flex rounded-xl shadow-xs">
+              <Link href="/persediaan/baru">
+                <Button className="h-9 rounded-l-xl rounded-r-none bg-terra text-white hover:bg-terra/90 active:scale-[0.98] text-xs font-medium px-3.5 shadow-none transition-all">
+                  <Plus className="size-4 mr-1.5" />
+                  Tambah Barang
+                </Button>
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    className="h-9 px-2 rounded-l-none rounded-r-xl border-l border-white/20 bg-terra text-white hover:bg-terra/90 shadow-none transition-colors"
+                    aria-label="Pilihan Tambah Barang"
+                  >
+                    <ChevronDown className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 rounded-xl border-rule bg-paper p-1.5 shadow-md">
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas">
+                    <Link href="/persediaan/baru" className="flex items-center gap-2.5 py-2">
+                      <div className="flex size-6 items-center justify-center rounded-md bg-canvas border border-rule/60 text-ink">
+                        <Plus className="size-3.5 text-terra" />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-ink">Tambah Barang Satuan</div>
+                        <div className="text-[10px] text-ink-soft">Formulir lengkap 1 barang</div>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas">
+                    <Link href="/persediaan/baru/batch" className="flex items-center gap-2.5 py-2">
+                      <div className="flex size-6 items-center justify-center rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                        <FileSpreadsheet className="size-3.5" />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-ink flex items-center gap-1.5">
+                          Input Cepat Batch
+                          <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-600 font-bold">EXCEL</span>
+                        </div>
+                        <div className="text-[10px] text-ink-soft">Grid spreadsheet multi-barang</div>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         }
       />
