@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,11 +16,17 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   AlertCircle,
+  Package,
+  Layers,
+  Coins,
+  ShieldCheck,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
-import { Reveal } from "@/components/motion";
+import { Reveal, Stagger, StaggerItem, AnimatedNumber } from "@/components/motion";
+import { Money } from "@/core/money/money";
 import { createBatchItemsAction } from "@/server/actions/inventory.actions";
 
 interface BatchRow {
@@ -113,7 +119,46 @@ export function BatchItemClient() {
     setRows((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const validRowsCount = rows.filter((r) => r.code.trim() && r.name.trim()).length;
+  const validRows = useMemo(
+    () => rows.filter((r) => r.code.trim() && r.name.trim()),
+    [rows]
+  );
+  const validRowsCount = validRows.length;
+
+  // Real-time batch KPI metrics
+  const totalEstimatedCostMinor = useMemo(() => {
+    let total = BigInt(0);
+    for (const r of validRows) {
+      if (r.initialQty > 0 && r.initialCostText.trim()) {
+        try {
+          const unitCost = Money.parseIdr(r.initialCostText).minor;
+          total += unitCost * BigInt(r.initialQty);
+        } catch {
+          // ignore parsing error
+        }
+      }
+    }
+    return total;
+  }, [validRows]);
+
+  const totalEstimatedSellingMinor = useMemo(() => {
+    let total = BigInt(0);
+    for (const r of validRows) {
+      if (r.initialQty > 0 && r.standardSellingPriceText.trim()) {
+        try {
+          const unitPrice = Money.parseIdr(r.standardSellingPriceText).minor;
+          total += unitPrice * BigInt(r.initialQty);
+        } catch {
+          // ignore parsing error
+        }
+      }
+    }
+    return total;
+  }, [validRows]);
+
+  const uniqueCategoriesCount = useMemo(() => {
+    return new Set(validRows.map((r) => r.category.trim()).filter(Boolean)).size;
+  }, [validRows]);
 
   // 1. Download Template CSV / Excel
   const handleDownloadTemplate = () => {
@@ -205,7 +250,6 @@ export function BatchItemClient() {
           return;
         }
 
-        // Baris 0 adalah Header
         const dataLines = lines.slice(1);
         const importedRows: BatchRow[] = [];
 
@@ -222,7 +266,6 @@ export function BatchItemClient() {
           const standardSellingPriceText = (cols[6] || "").replace(/[^0-9]/g, "");
           const minStockAlert = (cols[7] || "").replace(/[^0-9]/g, "") || "5";
 
-          // Hanya masukkan jika minimal kode atau nama tidak kosong sama sekali
           if (code || name) {
             importedRows.push({
               id: String(Date.now() + idx) + Math.random().toString(36).substring(2, 5),
@@ -243,7 +286,6 @@ export function BatchItemClient() {
           return;
         }
 
-        // Gabungkan dengan baris yang sudah ada atau gantikan baris default yang masih kosong
         setRows((prev) => {
           const existingNonEmpty = prev.filter((r) => r.code.trim() || r.name.trim());
           return [...existingNonEmpty, ...importedRows];
@@ -272,7 +314,6 @@ export function BatchItemClient() {
     e.preventDefault();
     setError(null);
 
-    const validRows = rows.filter((r) => r.code.trim() && r.name.trim());
     if (validRows.length === 0) {
       setError("Isi minimal 1 baris barang dengan Kode SKU dan Nama Barang yang valid.");
       return;
@@ -290,6 +331,7 @@ export function BatchItemClient() {
 
   return (
     <form onSubmit={handleSubmit} className="w-full space-y-6">
+      {/* Back Link */}
       <div className="mb-2">
         <Link
           href="/persediaan"
@@ -309,10 +351,10 @@ export function BatchItemClient() {
         onChange={handleFileUpload}
       />
 
-      {/* Page Header */}
+      {/* Page Header — Editorial Fraunces Title */}
       <PageHeader
-        title="Input Cepat Barang Persediaan (Grid / Batch)"
-        eyebrow="Isi tabel massal seperti spreadsheet Excel atau impor template file untuk mendaftarkan puluhan SKU sekaligus."
+        title="Input Cepat Barang Persediaan"
+        eyebrow="Isi tabel massal mirip spreadsheet Excel atau unggah template CSV untuk mendaftarkan puluhan SKU sekaligus."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -320,7 +362,7 @@ export function BatchItemClient() {
               variant="outline"
               size="sm"
               onClick={handleDownloadTemplate}
-              className="h-9 px-3 text-xs font-medium border-rule bg-paper hover:bg-canvas text-ink transition-colors"
+              className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
             >
               <Download className="size-3.5 mr-1.5 text-terra" />
               Download Template
@@ -331,10 +373,10 @@ export function BatchItemClient() {
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              className="h-9 px-3 text-xs font-medium border-rule bg-paper hover:bg-canvas text-ink transition-colors"
+              className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
             >
               <Upload className="size-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400" />
-              Impor File (.csv)
+              Impor Template (.csv)
             </Button>
 
             <Button
@@ -342,7 +384,7 @@ export function BatchItemClient() {
               variant="outline"
               size="sm"
               onClick={() => router.push("/persediaan")}
-              className="h-9 px-3 text-xs font-medium border-rule"
+              className="h-9 px-3.5 text-xs font-medium rounded-xl border-rule bg-paper text-ink-soft hover:text-ink transition-colors"
             >
               Batal
             </Button>
@@ -351,12 +393,12 @@ export function BatchItemClient() {
               type="submit"
               size="sm"
               disabled={isPending || validRowsCount === 0}
-              className="h-9 px-4 bg-terra text-white hover:bg-terra/90 text-xs font-semibold shadow-xs transition-transform active:scale-[0.98] disabled:transform-none"
+              className="h-9 px-5 rounded-xl bg-terra text-white hover:bg-terra/90 text-xs font-semibold shadow-xs transition-transform active:scale-[0.98] disabled:transform-none"
             >
               {isPending ? (
                 <>
                   <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                  Menyimpan...
+                  Menyimpan Data...
                 </>
               ) : (
                 `Simpan ${validRowsCount} Barang Sekaligus`
@@ -367,42 +409,109 @@ export function BatchItemClient() {
       />
 
       {error && (
-        <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-700 dark:text-rose-300">
+        <div role="alert" className="flex items-center gap-2.5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-700 dark:text-rose-300">
           <AlertCircle className="size-4 shrink-0" />
-          <span>{error}</span>
+          <span className="font-medium">{error}</span>
         </div>
       )}
 
       {importSuccessMessage && (
-        <div role="status" className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-700 dark:text-emerald-300">
-          <div className="flex items-center gap-2">
+        <div role="status" className="flex items-center justify-between rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-700 dark:text-emerald-300">
+          <div className="flex items-center gap-2.5">
             <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
-            <span>{importSuccessMessage}</span>
+            <span className="font-medium">{importSuccessMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setImportSuccessMessage(null)}
-            className="text-[11px] underline text-emerald-700 dark:text-emerald-300 font-medium hover:opacity-80"
+            className="text-[11px] underline text-emerald-700 dark:text-emerald-300 font-bold hover:opacity-80 ml-4 shrink-0"
           >
             Tutup
           </button>
         </div>
       )}
 
-      {/* Spreadsheet Grid Container */}
+      {/* KPI Cards Elevation — Tonal Paper & Ink Matte */}
+      <Stagger className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Card 1: SKU Siap Simpan */}
+        <StaggerItem>
+          <div className="relative p-5 sm:p-6 rounded-2xl bg-paper border border-rule shadow-xs hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between text-ink-soft mb-2.5">
+              <span className="text-[11px] font-mono uppercase tracking-[0.1em] font-medium">
+                SKU Siap Simpan
+              </span>
+              <div className="w-8 h-8 rounded-lg bg-canvas border border-rule flex items-center justify-center">
+                <Package className="size-4 text-terra" />
+              </div>
+            </div>
+            <div className="text-3xl font-display font-semibold tracking-tight text-ink tnum">
+              {validRowsCount} <span className="text-sm font-sans font-normal text-ink-soft">/ {rows.length} baris</span>
+            </div>
+            <div className="mt-4 pt-3 border-t border-rule/60 flex items-center justify-between text-xs text-ink-soft">
+              <span>Kategori Terisi</span>
+              <span className="font-mono text-ink font-semibold">{uniqueCategoriesCount} Jenis</span>
+            </div>
+          </div>
+        </StaggerItem>
+
+        {/* Card 2: Estimasi Total Modal Stok Awal */}
+        <StaggerItem>
+          <div className="relative p-5 sm:p-6 rounded-2xl bg-paper border border-rule shadow-xs hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between text-ink-soft mb-2.5">
+              <span className="text-[11px] font-mono uppercase tracking-[0.1em] font-medium">
+                Estimasi Modal Awal
+              </span>
+              <div className="w-8 h-8 rounded-lg bg-canvas border border-rule flex items-center justify-center">
+                <Coins className="size-4 text-terra" />
+              </div>
+            </div>
+            <div className="text-3xl font-display font-semibold tracking-tight text-ink tnum">
+              <AnimatedNumber minor={totalEstimatedCostMinor} />
+            </div>
+            <div className="mt-4 pt-3 border-t border-rule/60 flex items-center justify-between text-xs text-ink-soft">
+              <span>Kalkulasi Otomatis</span>
+              <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">Qty x Modal</span>
+            </div>
+          </div>
+        </StaggerItem>
+
+        {/* Card 3: Potensi Nilai Jual Stok Awal */}
+        <StaggerItem>
+          <div className="relative p-5 sm:p-6 rounded-2xl bg-paper border border-rule shadow-xs hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between text-ink-soft mb-2.5">
+              <span className="text-[11px] font-mono uppercase tracking-[0.1em] font-medium">
+                Potensi Nilai Jual
+              </span>
+              <div className="w-8 h-8 rounded-lg bg-canvas border border-rule flex items-center justify-center">
+                <TrendingUp className="size-4 text-terra" />
+              </div>
+            </div>
+            <div className="text-3xl font-display font-semibold tracking-tight text-ink tnum">
+              <AnimatedNumber minor={totalEstimatedSellingMinor} />
+            </div>
+            <div className="mt-4 pt-3 border-t border-rule/60 flex items-center justify-between text-xs text-ink-soft">
+              <span>Proyeksi Bruto</span>
+              <span className="font-mono text-ink font-semibold">Qty x Jual</span>
+            </div>
+          </div>
+        </StaggerItem>
+      </Stagger>
+
+      {/* Spreadsheet Grid Container — Swiss 2.0 Typography & Table Rhythm */}
       <Reveal>
         <div className="border border-rule rounded-2xl bg-paper overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-rule flex flex-wrap items-center justify-between gap-3 bg-canvas/30">
-            <div className="flex items-center gap-2.5">
-              <div className="flex size-7 items-center justify-center rounded-lg bg-terra/10 border border-terra/20 text-terra">
+          {/* Table Toolbar */}
+          <div className="p-4 sm:p-5 border-b border-rule flex flex-wrap items-center justify-between gap-3 bg-canvas/40">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-terra/10 border border-terra/20 text-terra shadow-xs">
                 <FileSpreadsheet className="size-4" />
               </div>
               <div>
-                <span className="font-display font-medium text-sm text-ink block">
-                  Grid Input Massal
+                <span className="font-display font-medium text-base text-ink block leading-snug">
+                  Lembar Kerja Grid Spreadsheet
                 </span>
                 <span className="text-[11px] font-mono text-ink-soft">
-                  {validRowsCount} dari {rows.length} baris siap disimpan
+                  Tekan <kbd className="px-1.5 py-0.5 rounded bg-canvas border border-rule text-[11px] font-bold font-mono">Tab</kbd> untuk berpindah antar kolom input
                 </span>
               </div>
             </div>
@@ -413,9 +522,9 @@ export function BatchItemClient() {
                 variant="outline"
                 size="sm"
                 onClick={addRow}
-                className="h-8 text-xs font-mono border-rule bg-paper"
+                className="h-8 rounded-xl text-xs font-mono border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
               >
-                <Plus className="size-3.5 mr-1" />
+                <Plus className="size-3.5 mr-1 text-terra" />
                 Tambah 1 Baris
               </Button>
               <Button
@@ -423,28 +532,29 @@ export function BatchItemClient() {
                 variant="outline"
                 size="sm"
                 onClick={() => addMultipleRows(5)}
-                className="h-8 text-xs font-mono border-rule bg-paper"
+                className="h-8 rounded-xl text-xs font-mono border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
               >
-                <Plus className="size-3.5 mr-1" />
+                <Plus className="size-3.5 mr-1 text-terra" />
                 Tambah 5 Baris
               </Button>
             </div>
           </div>
 
+          {/* Table Data Swiss 2.0 */}
           <div className="overflow-x-auto min-w-full">
             <table className="w-full text-sm text-left border-collapse data-table">
-              <thead className="text-[11px] uppercase font-mono tracking-[0.1em] text-ink-soft bg-canvas/60 border-b border-rule">
+              <thead className="text-[11px] uppercase font-mono tracking-[0.1em] text-ink-soft bg-canvas/80 border-b border-rule">
                 <tr>
-                  <th className="py-2.5 px-3 font-medium w-12 text-center">#</th>
-                  <th className="py-2.5 px-3 font-medium w-36">Kode SKU *</th>
-                  <th className="py-2.5 px-3 font-medium min-w-[200px]">Nama Barang *</th>
-                  <th className="py-2.5 px-3 font-medium w-36">Kategori</th>
-                  <th className="py-2.5 px-3 font-medium w-24">Satuan</th>
-                  <th className="py-2.5 px-3 font-medium text-right w-24">Stok Awal</th>
-                  <th className="py-2.5 px-3 font-medium text-right w-32">Harga Modal</th>
-                  <th className="py-2.5 px-3 font-medium text-right w-32">Harga Jual</th>
-                  <th className="py-2.5 px-3 font-medium text-right w-24">Min. Stok</th>
-                  <th className="py-2.5 px-3 font-medium w-12 text-center">Hapus</th>
+                  <th className="py-3 px-3.5 font-medium w-12 text-center">#</th>
+                  <th className="py-3 px-3 font-medium w-36">Kode SKU *</th>
+                  <th className="py-3 px-3 font-medium min-w-[220px]">Nama Barang *</th>
+                  <th className="py-3 px-3 font-medium w-36">Kategori</th>
+                  <th className="py-3 px-3 font-medium w-28">Satuan</th>
+                  <th className="py-3 px-3 font-medium text-right w-24">Stok Awal</th>
+                  <th className="py-3 px-3 font-medium text-right w-36">Harga Modal (Rp)</th>
+                  <th className="py-3 px-3 font-medium text-right w-36">Harga Jual (Rp)</th>
+                  <th className="py-3 px-3 font-medium text-right w-24">Min. Stok</th>
+                  <th className="py-3 px-3 font-medium w-12 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-rule/60">
@@ -453,8 +563,10 @@ export function BatchItemClient() {
                   return (
                     <tr
                       key={row.id}
-                      className={`hover:bg-canvas/30 transition-colors ${
-                        isValid ? "bg-emerald-500/[0.02]" : ""
+                      className={`transition-colors ${
+                        isValid
+                          ? "bg-emerald-500/[0.02] hover:bg-emerald-500/[0.05]"
+                          : "hover:bg-canvas/40"
                       }`}
                     >
                       <td className="py-2 px-3 text-center font-mono text-xs text-ink-soft">
@@ -465,7 +577,7 @@ export function BatchItemClient() {
                           placeholder="BRG-001"
                           value={row.code}
                           onChange={(e) => handleCellChange(row.id, "code", e.target.value.toUpperCase())}
-                          className="h-8 text-xs font-mono bg-canvas border-rule"
+                          className="h-8 text-xs font-mono rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -473,7 +585,7 @@ export function BatchItemClient() {
                           placeholder="Nama produk..."
                           value={row.name}
                           onChange={(e) => handleCellChange(row.id, "name", e.target.value)}
-                          className="h-8 text-xs bg-canvas border-rule"
+                          className="h-8 text-xs rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -481,7 +593,7 @@ export function BatchItemClient() {
                           placeholder="Alat Tulis"
                           value={row.category}
                           onChange={(e) => handleCellChange(row.id, "category", e.target.value)}
-                          className="h-8 text-xs bg-canvas border-rule"
+                          className="h-8 text-xs rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -489,7 +601,7 @@ export function BatchItemClient() {
                           placeholder="Pcs"
                           value={row.unit}
                           onChange={(e) => handleCellChange(row.id, "unit", e.target.value)}
-                          className="h-8 text-xs bg-canvas border-rule"
+                          className="h-8 text-xs rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -498,7 +610,7 @@ export function BatchItemClient() {
                           min="0"
                           value={row.initialQty}
                           onChange={(e) => handleCellChange(row.id, "initialQty", Number(e.target.value))}
-                          className="h-8 text-xs text-right font-mono tnum bg-canvas border-rule"
+                          className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -506,7 +618,7 @@ export function BatchItemClient() {
                           placeholder="0"
                           value={row.initialCostText}
                           onChange={(e) => handleCellChange(row.id, "initialCostText", e.target.value)}
-                          className="h-8 text-xs text-right font-mono tnum bg-canvas border-rule"
+                          className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -514,7 +626,7 @@ export function BatchItemClient() {
                           placeholder="0"
                           value={row.standardSellingPriceText}
                           onChange={(e) => handleCellChange(row.id, "standardSellingPriceText", e.target.value)}
-                          className="h-8 text-xs text-right font-mono tnum bg-canvas border-rule"
+                          className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -523,7 +635,7 @@ export function BatchItemClient() {
                           min="0"
                           value={row.minStockAlert}
                           onChange={(e) => handleCellChange(row.id, "minStockAlert", e.target.value)}
-                          className="h-8 text-xs text-right font-mono tnum bg-canvas border-rule"
+                          className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
                       <td className="py-2 px-2 text-center">
@@ -532,7 +644,7 @@ export function BatchItemClient() {
                           variant="ghost"
                           size="sm"
                           onClick={() => removeRow(row.id)}
-                          className="h-7 w-7 p-0 text-ink-soft hover:text-terra"
+                          className="h-8 w-8 p-0 rounded-lg text-ink-soft hover:text-terra hover:bg-canvas"
                           title="Hapus baris"
                         >
                           <Trash2 className="size-3.5" />
@@ -545,10 +657,13 @@ export function BatchItemClient() {
             </table>
           </div>
 
-          <div className="p-3.5 border-t border-rule bg-canvas/30 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-soft">
-            <span className="inline-flex items-center gap-1.5">
-              <Info className="size-3.5 text-terra" />
-              Baris kosong (tanpa SKU &amp; Nama) akan diabaikan secara otomatis saat disimpan. Anda juga bisa mengedit manual setiap kolom setelah impor.
+          {/* Table Footer Summary & Information */}
+          <div className="p-4 border-t border-rule bg-canvas/40 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-soft">
+            <span className="inline-flex items-center gap-2">
+              <Info className="size-4 text-terra shrink-0" />
+              <span>
+                Baris kosong (tanpa SKU &amp; Nama) otomatis dilewati saat penyimpanan. Kolom harga dan stok otomatis dikonversi ke minor unit mata uang.
+              </span>
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -556,7 +671,7 @@ export function BatchItemClient() {
                 variant="ghost"
                 size="sm"
                 onClick={addRow}
-                className="h-7 text-xs font-mono text-ink hover:text-terra"
+                className="h-8 text-xs font-mono text-ink hover:text-terra hover:bg-canvas rounded-lg"
               >
                 + Tambah Baris
               </Button>
