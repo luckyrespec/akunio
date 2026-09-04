@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,9 +10,12 @@ import {
   Trash2,
   Table,
   Loader2,
-  Sparkles,
+  Download,
+  Upload,
   Info,
   CheckCircle2,
+  FileSpreadsheet,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +48,8 @@ export function BatchItemClient() {
   const [rows, setRows] = useState<BatchRow[]>(DEFAULT_ROWS);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCellChange = (id: string, field: keyof BatchRow, value: any) => {
     setRows((prev) =>
@@ -53,7 +58,7 @@ export function BatchItemClient() {
   };
 
   const addRow = () => {
-    const newId = String(Date.now());
+    const newId = String(Date.now()) + Math.random().toString(36).substring(2, 5);
     setRows((prev) => [
       ...prev,
       {
@@ -70,12 +75,198 @@ export function BatchItemClient() {
     ]);
   };
 
+  const addMultipleRows = (count: number) => {
+    const newRows: BatchRow[] = [];
+    for (let i = 0; i < count; i++) {
+      newRows.push({
+        id: String(Date.now() + i) + Math.random().toString(36).substring(2, 5),
+        code: "",
+        name: "",
+        category: "",
+        unit: "Pcs",
+        initialQty: 0,
+        initialCostText: "",
+        standardSellingPriceText: "",
+        minStockAlert: "5",
+      });
+    }
+    setRows((prev) => [...prev, ...newRows]);
+  };
+
   const removeRow = (id: string) => {
-    if (rows.length <= 1) return;
+    if (rows.length <= 1) {
+      setRows([
+        {
+          id: "1",
+          code: "",
+          name: "",
+          category: "",
+          unit: "Pcs",
+          initialQty: 0,
+          initialCostText: "",
+          standardSellingPriceText: "",
+          minStockAlert: "5",
+        },
+      ]);
+      return;
+    }
     setRows((prev) => prev.filter((r) => r.id !== id));
   };
 
   const validRowsCount = rows.filter((r) => r.code.trim() && r.name.trim()).length;
+
+  // 1. Download Template CSV / Excel
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "Kode SKU",
+      "Nama Barang",
+      "Kategori",
+      "Satuan",
+      "Stok Awal",
+      "Harga Modal",
+      "Harga Jual",
+      "Min Stok",
+    ];
+
+    const sampleRows = [
+      ["BRG-001", "Kertas HVS A4 70gr", "Alat Tulis", "Rim", "10", "45000", "55000", "5"],
+      ["BRG-002", "Pulpen Gel Hitam 0.5", "Alat Tulis", "Lusin", "25", "30000", "38000", "10"],
+      ["BRG-003", "Buku Tulis Sinar 38", "Buku", "Pak", "15", "25000", "32000", "5"],
+    ];
+
+    const escapeCsvValue = (val: string) => {
+      if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+        return `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    };
+
+    const csvContent = [
+      headers.join(","),
+      ...sampleRows.map((r) => r.map(escapeCsvValue).join(",")),
+    ].join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "template_import_persediaan_akunio.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Helper parser baris CSV sederhana dengan dukungan kutip ganda
+  const parseCsvLine = (line: string): string[] => {
+    const result: string[] = [];
+    let cur = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === "," && !inQuotes) {
+        result.push(cur.trim());
+        cur = "";
+      } else {
+        cur += char;
+      }
+    }
+    result.push(cur.trim());
+    return result;
+  };
+
+  // 2. Import CSV / Excel file dan masukkan ke grid
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    setImportSuccessMessage(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        if (!text) throw new Error("File kosong");
+
+        const lines = text
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean);
+
+        if (lines.length <= 1) {
+          setError("File template tidak memiliki baris data untuk diimpor.");
+          return;
+        }
+
+        // Baris 0 adalah Header
+        const dataLines = lines.slice(1);
+        const importedRows: BatchRow[] = [];
+
+        dataLines.forEach((line, idx) => {
+          const cols = parseCsvLine(line);
+          if (!cols || cols.length === 0) return;
+
+          const code = (cols[0] || "").trim().toUpperCase();
+          const name = (cols[1] || "").trim();
+          const category = (cols[2] || "").trim();
+          const unit = (cols[3] || "").trim() || "Pcs";
+          const initialQty = Number(cols[4]?.replace(/[^0-9.-]+/g, "")) || 0;
+          const initialCostText = (cols[5] || "").replace(/[^0-9]/g, "");
+          const standardSellingPriceText = (cols[6] || "").replace(/[^0-9]/g, "");
+          const minStockAlert = (cols[7] || "").replace(/[^0-9]/g, "") || "5";
+
+          // Hanya masukkan jika minimal kode atau nama tidak kosong sama sekali
+          if (code || name) {
+            importedRows.push({
+              id: String(Date.now() + idx) + Math.random().toString(36).substring(2, 5),
+              code,
+              name,
+              category,
+              unit,
+              initialQty,
+              initialCostText,
+              standardSellingPriceText,
+              minStockAlert,
+            });
+          }
+        });
+
+        if (importedRows.length === 0) {
+          setError("Tidak ada data barang yang valid dalam file yang diunggah.");
+          return;
+        }
+
+        // Gabungkan dengan baris yang sudah ada atau gantikan baris default yang masih kosong
+        setRows((prev) => {
+          const existingNonEmpty = prev.filter((r) => r.code.trim() || r.name.trim());
+          return [...existingNonEmpty, ...importedRows];
+        });
+
+        setImportSuccessMessage(
+          `Berhasil memuat ${importedRows.length} baris barang dari file ke dalam grid. Silakan tinjau dan lengkapi sebelum disimpan.`
+        );
+      } catch (err: any) {
+        setError(`Gagal membaca file: ${err?.message || "Format file tidak valid."}`);
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    };
+
+    reader.onerror = () => {
+      setError("Terjadi kesalahan saat membaca file.");
+    };
+
+    reader.readAsText(file);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,26 +300,58 @@ export function BatchItemClient() {
         </Link>
       </div>
 
+      {/* Hidden File Input for CSV / Excel */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,text/csv,application/vnd.ms-excel"
+        className="hidden"
+        onChange={handleFileUpload}
+      />
+
       {/* Page Header */}
       <PageHeader
         title="Input Cepat Barang Persediaan (Grid / Batch)"
-        eyebrow="Isi tabel massal seperti spreadsheet Excel untuk mendaftarkan banyak SKU sekaligus."
+        eyebrow="Isi tabel massal seperti spreadsheet Excel atau impor template file untuk mendaftarkan puluhan SKU sekaligus."
         actions={
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadTemplate}
+              className="h-9 px-3 text-xs font-medium border-rule bg-paper hover:bg-canvas text-ink transition-colors"
+            >
+              <Download className="size-3.5 mr-1.5 text-terra" />
+              Download Template
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-9 px-3 text-xs font-medium border-rule bg-paper hover:bg-canvas text-ink transition-colors"
+            >
+              <Upload className="size-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400" />
+              Impor File (.csv)
+            </Button>
+
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => router.push("/persediaan")}
-              className="h-9 px-4 text-xs font-medium border-rule"
+              className="h-9 px-3 text-xs font-medium border-rule"
             >
               Batal
             </Button>
+
             <Button
               type="submit"
               size="sm"
               disabled={isPending || validRowsCount === 0}
-              className="h-9 px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold shadow-xs transition-transform active:scale-[0.98] disabled:transform-none"
+              className="h-9 px-4 bg-terra text-white hover:bg-terra/90 text-xs font-semibold shadow-xs transition-transform active:scale-[0.98] disabled:transform-none"
             >
               {isPending ? (
                 <>
@@ -144,21 +367,46 @@ export function BatchItemClient() {
       />
 
       {error && (
-        <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 dark:text-rose-300">
-          {error}
+        <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-700 dark:text-rose-300">
+          <AlertCircle className="size-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {importSuccessMessage && (
+        <div role="status" className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-700 dark:text-emerald-300">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+            <span>{importSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setImportSuccessMessage(null)}
+            className="text-[11px] underline text-emerald-700 dark:text-emerald-300 font-medium hover:opacity-80"
+          >
+            Tutup
+          </button>
         </div>
       )}
 
       {/* Spreadsheet Grid Container */}
       <Reveal>
         <div className="border border-rule rounded-2xl bg-paper overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-rule flex items-center justify-between bg-canvas/30">
-            <div className="flex items-center gap-2">
-              <Table className="size-4 text-terra" />
-              <span className="font-display font-medium text-sm text-ink">
-                Grid Input Massal ({validRowsCount} baris siap simpan)
-              </span>
+          <div className="p-4 border-b border-rule flex flex-wrap items-center justify-between gap-3 bg-canvas/30">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-7 items-center justify-center rounded-lg bg-terra/10 border border-terra/20 text-terra">
+                <FileSpreadsheet className="size-4" />
+              </div>
+              <div>
+                <span className="font-display font-medium text-sm text-ink block">
+                  Grid Input Massal
+                </span>
+                <span className="text-[11px] font-mono text-ink-soft">
+                  {validRowsCount} dari {rows.length} baris siap disimpan
+                </span>
+              </div>
             </div>
+
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -168,7 +416,17 @@ export function BatchItemClient() {
                 className="h-8 text-xs font-mono border-rule bg-paper"
               >
                 <Plus className="size-3.5 mr-1" />
-                Tambah Baris
+                Tambah 1 Baris
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => addMultipleRows(5)}
+                className="h-8 text-xs font-mono border-rule bg-paper"
+              >
+                <Plus className="size-3.5 mr-1" />
+                Tambah 5 Baris
               </Button>
             </div>
           </div>
@@ -193,7 +451,12 @@ export function BatchItemClient() {
                 {rows.map((row, index) => {
                   const isValid = row.code.trim() && row.name.trim();
                   return (
-                    <tr key={row.id} className="hover:bg-canvas/30 transition-colors">
+                    <tr
+                      key={row.id}
+                      className={`hover:bg-canvas/30 transition-colors ${
+                        isValid ? "bg-emerald-500/[0.02]" : ""
+                      }`}
+                    >
                       <td className="py-2 px-3 text-center font-mono text-xs text-ink-soft">
                         {index + 1}
                       </td>
@@ -269,8 +532,8 @@ export function BatchItemClient() {
                           variant="ghost"
                           size="sm"
                           onClick={() => removeRow(row.id)}
-                          disabled={rows.length <= 1}
                           className="h-7 w-7 p-0 text-ink-soft hover:text-terra"
+                          title="Hapus baris"
                         >
                           <Trash2 className="size-3.5" />
                         </Button>
@@ -282,20 +545,22 @@ export function BatchItemClient() {
             </table>
           </div>
 
-          <div className="p-3.5 border-t border-rule bg-canvas/30 flex items-center justify-between text-xs text-ink-soft">
+          <div className="p-3.5 border-t border-rule bg-canvas/30 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-soft">
             <span className="inline-flex items-center gap-1.5">
               <Info className="size-3.5 text-terra" />
-              Baris kosong (tanpa SKU &amp; Nama) akan diabaikan secara otomatis saat disimpan.
+              Baris kosong (tanpa SKU &amp; Nama) akan diabaikan secara otomatis saat disimpan. Anda juga bisa mengedit manual setiap kolom setelah impor.
             </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={addRow}
-              className="h-7 text-xs font-mono text-ink hover:text-terra"
-            >
-              + Baris Baru
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={addRow}
+                className="h-7 text-xs font-mono text-ink hover:text-terra"
+              >
+                + Tambah Baris
+              </Button>
+            </div>
           </div>
         </div>
       </Reveal>
