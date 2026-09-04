@@ -35,7 +35,7 @@ export default async function StockOpnameDetailPage({ params }: Props) {
   const isSurplus = totalDiffMinor > 0n;
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-12">
+    <div className="space-y-6">
       {/* Header & Status Bar */}
       <Reveal>
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6 pb-6 border-b border-[var(--color-rule)]">

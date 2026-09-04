@@ -56,9 +56,9 @@ export function CreateItemDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="bg-[var(--color-tinta)] text-[var(--color-paper)] hover:opacity-90">
-          <Plus className="w-4 h-4 mr-1.5" />
-          Tambah Barang
+        <Button className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]">
+          <Plus className="size-4 mr-1.5" />
+          Tambah Barang Baru
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px] bg-[var(--color-paper)] border-[var(--color-border)]">
