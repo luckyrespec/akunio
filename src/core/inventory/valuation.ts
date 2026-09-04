@@ -34,6 +34,7 @@ export function calculateWeightedAverage(
 
 /**
  * Mengonsumsi antrean batch layer FIFO untuk barang yang keluar/dijual/rusak.
+ * Melempar bila qty negatif atau stok layer tidak mencukupi (overdraw).
  */
 export function consumeFifoLayers(
   layers: FifoLayer[],
@@ -43,6 +44,16 @@ export function consumeFifoLayers(
   remainingLayers: FifoLayer[];
   consumedBreakdown: LayerConsumption[];
 } {
+  if (!Number.isFinite(qtyToDeduct) || qtyToDeduct < 0) {
+    throw new Error("QTY_FIFO_TIDAK_VALID: qtyToDeduct harus >= 0");
+  }
+  if (qtyToDeduct === 0) {
+    return {
+      consumedCostMinor: 0n,
+      remainingLayers: layers.map((l) => ({ ...l })),
+      consumedBreakdown: [],
+    };
+  }
   let remainingToDeduct = qtyToDeduct;
   let totalConsumedCostMinor = 0n;
   const consumedBreakdown: LayerConsumption[] = [];
@@ -85,12 +96,22 @@ export function consumeFifoLayers(
     }
   }
 
+  if (remainingToDeduct > 1e-9) {
+    throw new Error("STOK_LAYER_TIDAK_CUKUP: permintaan melebihi sisa layer FIFO");
+  }
+
   return {
     consumedCostMinor: totalConsumedCostMinor,
     remainingLayers,
     consumedBreakdown,
   };
 }
+
+/**
+ * Catatan presisi: pembagian average-cost memakai pembulatan ke bawah (truncation,
+ * bukan round-half-up). Wajar untuk IDR tanpa sen, tetapi drift ±Rp1 dapat
+ * terakumulasi setelah banyak penerimaan — rekonsiliasi via opname berkala.
+ */
 
 /**
  * Menghitung selisih opname fisik vs buku sistem dan valuasinya.

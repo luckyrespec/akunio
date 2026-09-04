@@ -27,11 +27,6 @@ export default async function NewStockOpnamePage() {
         </Link>
       </div>
 
-      <PageHeader
-        title="Mulai Stok Opname Fisik"
-        eyebrow="Hitung stok fisik aktual gudang, hitung selisih otomatis, dan siapkan draf jurnal penyesuaian."
-      />
-
       <OpnameFormClient
         items={items.map((i) => ({
           id: i.id,

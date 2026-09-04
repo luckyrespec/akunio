@@ -94,68 +94,68 @@ export function ItemBaruClient() {
         </Link>
       </div>
 
-      {/* Page Header */}
+      {/* Page Header dengan Action Buttons Sejajar Inline */}
       <PageHeader
         title="Tambah Barang Persediaan"
         eyebrow="Daftarkan SKU baru, atur batas peringatan restock, dan catat saldo awal persediaan."
-      />
-
-      {/* Action Bar Split Button */}
-      <div className="flex items-center justify-end">
-        <div className="flex items-center gap-2.5">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/persediaan")}
-            className="h-9 px-4 text-xs font-medium border-rule"
-          >
-            Batal
-          </Button>
-
-          <div className="flex items-stretch">
+        actions={
+          <div className="flex items-center gap-2.5">
             <Button
-              type="submit"
+              type="button"
+              variant="outline"
               size="sm"
-              disabled={isPending}
-              className="h-9 rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold shadow-xs transition-transform active:scale-[0.98] disabled:transform-none"
+              onClick={() => router.push("/persediaan")}
+              className="h-9 px-4 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink-soft hover:text-ink transition-colors shadow-xs"
             >
-              {isPending ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                  Menyimpan...
-                </>
-              ) : (
-                "Simpan Barang"
-              )}
+              Batal
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={isPending}
-                  aria-label="Opsi penyimpanan lainnya"
-                  className="h-9 rounded-l-none border-l border-l-white/25 px-2 bg-terra text-white hover:bg-terra/90 shadow-xs disabled:transform-none"
-                >
-                  <ChevronDown className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-48 border-rule bg-paper">
-                <DropdownMenuItem onSelect={() => submitWithMode("save")}>
-                  Simpan Barang
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => submitWithMode("save-new")}>
-                  Simpan &amp; Tambah Lagi
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => router.push("/persediaan/baru/batch")}>
-                  Beralih ke Input Massal (Batch / Excel)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="inline-flex rounded-xl shadow-xs">
+              <Button
+                type="submit"
+                disabled={isPending}
+                size="sm"
+                className="h-9 px-4 text-xs font-medium rounded-l-xl rounded-r-none bg-ink text-paper hover:bg-ink/90 border-r border-paper/20"
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Simpan Barang"
+                )}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    disabled={isPending}
+                    size="sm"
+                    className="h-9 px-2 rounded-r-xl rounded-l-none bg-ink text-paper hover:bg-ink/90"
+                    aria-label="Opsi simpan lainnya"
+                  >
+                    <ChevronDown className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem
+                    onClick={() => submitWithMode("save")}
+                    className="text-xs cursor-pointer"
+                  >
+                    Simpan &amp; Lihat Rincian
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => submitWithMode("save-new")}
+                    className="text-xs cursor-pointer"
+                  >
+                    Simpan &amp; Tambah Baru
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {error && (
         <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 dark:text-rose-300">

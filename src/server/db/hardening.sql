@@ -8,7 +8,7 @@ ALTER TABLE journal_entries ADD CONSTRAINT je_status_chk
   CHECK (status IN ('DRAFT','POSTED'));
 ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS je_source_chk;
 ALTER TABLE journal_entries ADD CONSTRAINT je_source_chk
-  CHECK (source IN ('MANUAL','AI','DOCUMENT','IMPORT'));
+  CHECK (source IN ('MANUAL','AI','DOCUMENT','IMPORT','STOCK_OPNAME'));
 ALTER TABLE fiscal_periods DROP CONSTRAINT IF EXISTS period_status_chk;
 ALTER TABLE fiscal_periods ADD CONSTRAINT period_status_chk
   CHECK (status IN ('OPEN','CLOSED','LOCKED'));

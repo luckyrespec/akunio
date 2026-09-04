@@ -54,7 +54,7 @@
   --color-canvas: #f5f1e9;
   --color-paper: #fbfaf6;
   --color-ink: #232a33;
-  --color-ink-soft: #6b6f76;
+  --color-ink-soft: #64696f;
   --color-terra: #a8562f;
   --color-rule: #e7e1d4;
   --color-debit: #3e7c5a;
@@ -172,6 +172,13 @@
   --elevation-md: 0 1px 2px rgb(0 0 0 / 0.45), 0 12px 32px rgb(0 0 0 / 0.4), 0 24px 64px rgb(0 0 0 / 0.3);
 }
 
+/* Keterbacaan mode Lilin: teks putih gagal AA di atas terra terang,
+   jadi permukaan terra otomatis memakai teks kanvas gelap. */
+.dark .bg-terra.text-white,
+.dark .dark\:bg-terra.dark\:text-white {
+  color: var(--color-canvas);
+}
+
 /* Laporan keuangan dicetak selalu gaya kertas terang, sekalipun mode gelap aktif. */
 @media print {
   .dark {
@@ -192,7 +199,7 @@
     --color-canvas: #f5f1e9;
     --color-paper: #fbfaf6;
     --color-ink: #232a33;
-    --color-ink-soft: #6b6f76;
+    --color-ink-soft: #64696f;
     --color-terra: #a8562f;
     --color-rule: #e7e1d4;
     --color-debit: #3e7c5a;
@@ -236,6 +243,44 @@ html { background-color: var(--color-canvas); }
 .matte-card {
   box-shadow: var(--elevation-sm);
   transition: box-shadow var(--duration-base, 240ms) var(--ease-out-soft, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+/* Auth scene — slow spotlight drift (cinematic ambient, transform-only).
+   Dihentikan otomatis oleh aturan prefers-reduced-motion di bawah. */
+@keyframes auth-drift {
+  from { transform: translateX(-4%); }
+  to { transform: translateX(4%); }
+}
+.auth-drift {
+  animation: auth-drift 26s linear infinite alternate;
+}
+
+/* Auth scene — lapisan background beranimasi (semua transform-only).
+   Beams bergeser pelan, orb terra bernapas. Dihentikan otomatis oleh
+   aturan prefers-reduced-motion di bawah. */
+@keyframes beams-pan {
+  from { transform: translateX(-3%); }
+  to { transform: translateX(3%); }
+}
+.beams-pan {
+  animation: beams-pan 34s linear infinite alternate;
+}
+@keyframes orb-drift {
+  from { transform: translate(-10%, -6%) scale(1); }
+  to { transform: translate(8%, 10%) scale(1.15); }
+}
+.orb-drift {
+  animation: orb-drift 22s ease-in-out infinite alternate;
+}
+
+/* Cincin fokus 3px untuk kontrol kustom (nav, chip, tab, segmen):
+   shadcn Button sudah membawa ring sendiri; kelas ini untuk sisanya. */
+.focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+.focus-ring:focus-visible {
+  outline-color: color-mix(in oklab, var(--color-terra) 55%, transparent);
 }
 
 /* Tabular numerals everywhere money appears */
@@ -292,3 +337,27 @@ html { background-color: var(--color-canvas); }
     @apply font-sans;
   }
 }
+
+/* Print Optimization for Formal Accounting Sheets */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm 1.2cm;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt;
+  }
+  header, nav, aside, .topbar, [role="navigation"] {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .rule-double {
+    border-bottom: 3px double #000000 !important;
+  }
+}
+

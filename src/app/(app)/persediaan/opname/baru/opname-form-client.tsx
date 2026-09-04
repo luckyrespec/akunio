@@ -33,6 +33,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
 import { Money } from "@/core/money/money";
 import { Reveal, Stagger, StaggerItem, AnimatedNumber } from "@/components/motion";
 import { createStockOpnameAction } from "@/server/actions/inventory.actions";
@@ -69,9 +70,10 @@ export function OpnameFormClient({ items }: Props) {
   });
 
   const handleQtyChange = (itemId: string, val: number) => {
+    const safe = !Number.isFinite(val) || val < 0 ? 0 : val;
     setCounts((prev) => ({
       ...prev,
-      [itemId]: { ...prev[itemId], physicalQty: val },
+      [itemId]: { physicalQty: safe, reason: prev[itemId]?.reason ?? "" },
     }));
   };
 
@@ -108,11 +110,14 @@ export function OpnameFormClient({ items }: Props) {
 
   const submitWithMode = (mode: "save" | "save-another") => {
     setError(null);
-    const payloadItems = items.map((it) => ({
-      itemId: it.id,
-      physicalQty: counts[it.id]?.physicalQty ?? Number(it.currentQty),
-      reason: counts[it.id]?.reason || undefined,
-    }));
+    const payloadItems = items.map((it) => {
+      const raw = counts[it.id]?.physicalQty ?? Number(it.currentQty);
+      return {
+        itemId: it.id,
+        physicalQty: !Number.isFinite(raw) || raw < 0 ? 0 : raw,
+        reason: counts[it.id]?.reason || undefined,
+      };
+    });
 
     startTransition(async () => {
       const res = await createStockOpnameAction({
@@ -145,60 +150,64 @@ export function OpnameFormClient({ items }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      {/* Top Action Bar: Batal & Simpan Opname (split button persis seperti Tambah Aset Tetap) */}
-      <div className="mb-6 flex items-center justify-end">
-        <div className="flex items-center gap-2.5">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/persediaan/opname")}
-            className="h-9 px-4 text-xs font-medium border-rule max-sm:min-h-[44px]"
-          >
-            Batal
-          </Button>
-
-          <div className="flex items-stretch">
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Page Header dengan Action Buttons Sejajar Inline (seperti Batch Persediaan) */}
+      <PageHeader
+        title="Mulai Stok Opname Fisik"
+        eyebrow="Hitung stok fisik aktual gudang, hitung selisih otomatis, dan siapkan draf jurnal penyesuaian."
+        actions={
+          <div className="flex items-center gap-2.5">
             <Button
-              type="submit"
+              type="button"
+              variant="outline"
               size="sm"
-              disabled={isPending}
-              className="h-9 rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold shadow-xs transition-transform active:scale-[0.98] disabled:transform-none max-sm:min-h-[44px]"
+              onClick={() => router.push("/persediaan/opname")}
+              className="h-9 px-4 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink-soft hover:text-ink transition-colors shadow-xs"
             >
-              {isPending ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                  Menyimpan...
-                </>
-              ) : (
-                "Simpan Sesi Opname"
-              )}
+              Batal
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={isPending}
-                  aria-label="Opsi penyimpanan lainnya"
-                  className="h-9 rounded-l-none border-l border-l-white/25 px-2 bg-terra text-white hover:bg-terra/90 shadow-xs disabled:transform-none max-sm:min-h-[44px] max-sm:min-w-[44px]"
-                >
-                  <ChevronDown className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-48 border-rule bg-paper">
-                <DropdownMenuItem onSelect={() => submitWithMode("save")}>
-                  Simpan &amp; Lihat Rincian
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => submitWithMode("save-another")}>
-                  Simpan &amp; Buat Sesi Baru
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+
+            <div className="flex items-stretch shadow-xs rounded-xl overflow-hidden">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isPending}
+                className="h-9 rounded-l-xl rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-none"
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Simpan Sesi Opname"
+                )}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isPending}
+                    aria-label="Opsi penyimpanan lainnya"
+                    className="h-9 rounded-l-none rounded-r-xl border-l border-l-white/25 px-2.5 bg-terra text-white hover:bg-terra/90 shadow-none disabled:transform-none"
+                  >
+                    <ChevronDown className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-48 rounded-xl border-rule bg-paper shadow-md">
+                  <DropdownMenuItem onSelect={() => submitWithMode("save")} className="cursor-pointer text-xs py-2 font-medium">
+                    Simpan &amp; Lihat Rincian
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => submitWithMode("save-another")} className="cursor-pointer text-xs py-2 font-medium">
+                    Simpan &amp; Buat Sesi Baru
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {error && (
         <div role="alert" className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 dark:text-rose-300">
@@ -308,6 +317,7 @@ export function OpnameFormClient({ items }: Props) {
                               <td className="py-3 px-3 text-right">
                                 <Input
                                   type="number"
+                                  min="0"
                                   step="any"
                                   value={physQty}
                                   onChange={(e) => handleQtyChange(it.id, Number(e.target.value))}

@@ -16,7 +16,7 @@ import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { getStockOpnameWithItems } from "@/server/db/repos/inventory.repo";
 import { Money } from "@/core/money/money";
-import { GenerateDraftButton } from "./generate-draft-button";
+import { GenerateDraftButton, PostOpnameButton } from "./generate-draft-button";
 import { Reveal } from "@/components/motion";
 
 interface Props {
@@ -76,6 +76,10 @@ export default async function StockOpnameDetailPage({ params }: Props) {
                   ? "Draf Jurnal Terbit"
                   : opname.status === "COMPLETED"
                   ? "Selesai & Diposting"
+                  : opname.status === "IN_PROGRESS"
+                  ? "Dalam Proses"
+                  : opname.status === "CANCELLED"
+                  ? "Dibatalkan"
                   : "Draf Perhitungan"}
               </Badge>
             </div>
@@ -87,16 +91,20 @@ export default async function StockOpnameDetailPage({ params }: Props) {
           </div>
 
           {/* Action Trigger Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {opname.status === "DRAFT" && (
               <GenerateDraftButton opnameId={opname.id} />
             )}
 
+            {opname.status === "REVIEW_DRAFT_JOURNAL" && opname.journalEntryId && (
+              <PostOpnameButton opnameId={opname.id} />
+            )}
+
             {opname.journalEntryId && (
               <Link href={`/jurnal`}>
-                <Button className="h-10 px-4 rounded-[var(--radius-lg)] bg-[var(--color-ink)] text-[var(--color-paper)] hover:opacity-90 transition-opacity font-medium shadow-sm">
+                <Button variant="outline" className="h-10 px-4 rounded-[var(--radius-lg)]">
                   <FileText className="w-4 h-4 mr-2 text-[var(--color-terra)]" />
-                  Buka Draf Jurnal Penyesuaian
+                  {opname.status === "COMPLETED" ? "Lihat Jurnal Penyesuaian" : "Buka Draf Jurnal Penyesuaian"}
                 </Button>
               </Link>
             )}

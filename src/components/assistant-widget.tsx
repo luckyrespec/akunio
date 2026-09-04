@@ -197,25 +197,36 @@ export function AssistantWidget() {
   return (
     <>
       {/* 1. FLOATING QUICK ACCESS TRIGGER (Bottom-Right) */}
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className={cn(
-          "fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full border border-terra/40 bg-paper py-2 pl-3.5 pr-4 text-xs font-semibold text-ink shadow-lg backdrop-blur-md transition-[transform,box-shadow,border-color] duration-200 ease-out hover:scale-102 hover:border-terra hover:shadow-xl active:scale-[0.98] group",
-          open && "ring-2 ring-terra/30",
-        )}
-        aria-label="Buka Asisten Akunio (Ctrl+J)"
-        title="Buka Asisten Akunio (Ctrl+J)"
-      >
-        <div className="relative flex size-6 items-center justify-center rounded-full bg-terra text-white shadow-2xs">
-          <Sparkles className="size-3.5" />
-          <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-paper" />
-        </div>
-        <span className="font-display">Akunio Copilot</span>
-        <span className="hidden sm:inline-block rounded bg-canvas px-1.5 py-0.5 text-[11px] font-mono font-normal text-ink-soft border border-rule/60">
-          Ctrl+J
-        </span>
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
+            className={cn(
+              "fixed bottom-6 right-6 z-40 flex items-center gap-2.5 rounded-full border border-terra/40 bg-paper py-2 pl-2.5 pr-4 text-xs font-semibold text-ink shadow-lg backdrop-blur-md transition-[transform,box-shadow,border-color] duration-200 ease-out hover:scale-102 hover:border-terra hover:shadow-xl active:scale-[0.98] group",
+              open && "ring-2 ring-terra/30",
+            )}
+            aria-label="Buka Asisten Akunio"
+          >
+            <div className="relative flex size-6.5 items-center justify-center rounded-lg shadow-2xs overflow-hidden">
+              <svg viewBox="0 0 32 32" fill="none" aria-hidden className="size-6.5">
+                <rect width="32" height="32" rx="7" fill="var(--color-terra)" />
+                <g stroke="var(--color-paper)" strokeWidth="2.6" strokeLinecap="round">
+                  <path d="M16 7.5 9.2 24" />
+                  <path d="M16 7.5 22.8 24" />
+                  <path d="M11.9 17.6h8.2" strokeWidth="2" />
+                  <path d="M11 20.4h10" strokeWidth="2" />
+                </g>
+              </svg>
+              <span className="absolute top-0.5 right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-paper" />
+            </div>
+            <span className="font-display tracking-tight text-ink font-semibold">Akunio</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="text-xs font-medium">
+          Asisten Akunio <kbd className="ml-1.5 rounded bg-canvas px-1.5 py-0.5 font-mono text-[10px] text-ink-soft border border-rule/60">Ctrl+J</kbd>
+        </TooltipContent>
+      </Tooltip>
 
       {/* Backdrop on mobile */}
       {open && (

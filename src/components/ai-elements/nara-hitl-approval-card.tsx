@@ -10,6 +10,19 @@ import {
   ConfirmationAction,
 } from "@/components/ai-elements/confirmation";
 import type { PendingApproval } from "@/hooks/use-nara-stream-chat";
+import { Money } from "@/core/money/money";
+
+function formatRupiahInput(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "-";
+  const raw = String(value);
+  try {
+    return Money.parseIdr(raw).formatIdr();
+  } catch {
+    const n = Number(raw.replace(/[^0-9.-]+/g, ""));
+    if (!Number.isFinite(n)) return raw;
+    return `Rp ${n.toLocaleString("id-ID")}`;
+  }
+}
 
 interface NaraHitlApprovalCardProps {
   pendingApproval: PendingApproval;
@@ -70,13 +83,13 @@ export function NaraHitlApprovalCard({
                           {l.memo ? <span className="text-ink-soft ml-1.5">({String(l.memo)})</span> : null}
                         </td>
                         <td className="px-3 py-1.5 text-right font-semibold">
-                          {l.debit && l.debit !== "0"
-                            ? `Rp ${Number(l.debit).toLocaleString("id-ID")}`
+                          {l.debit && l.debit !== "0" && l.debit !== 0
+                            ? formatRupiahInput(l.debit)
                             : "-"}
                         </td>
                         <td className="px-3 py-1.5 text-right font-semibold">
-                          {l.credit && l.credit !== "0"
-                            ? `Rp ${Number(l.credit).toLocaleString("id-ID")}`
+                          {l.credit && l.credit !== "0" && l.credit !== 0
+                            ? formatRupiahInput(l.credit)
                             : "-"}
                         </td>
                       </tr>
@@ -143,13 +156,13 @@ export function NaraHitlApprovalCard({
                 <div>
                   <span className="text-[11px] text-ink-soft">Harga Modal:</span>{" "}
                   <strong className="font-mono">
-                    Rp {Number((pendingApproval.args as Record<string, unknown>).initialCostText || 0).toLocaleString("id-ID")}
+                    {formatRupiahInput((pendingApproval.args as Record<string, unknown>).initialCostText)}
                   </strong>
                 </div>
                 <div>
                   <span className="text-[11px] text-ink-soft">Harga Jual:</span>{" "}
                   <strong className="font-mono text-emerald-600 dark:text-emerald-400">
-                    Rp {Number((pendingApproval.args as Record<string, unknown>).standardSellingPriceText || 0).toLocaleString("id-ID")}
+                    {formatRupiahInput((pendingApproval.args as Record<string, unknown>).standardSellingPriceText)}
                   </strong>
                 </div>
               </div>
@@ -198,10 +211,10 @@ export function NaraHitlApprovalCard({
                           {String(it.initialQty ?? 0)}
                         </td>
                         <td className="px-2.5 py-1.5 text-right font-mono">
-                          {it.initialCostText ? `Rp ${Number(it.initialCostText).toLocaleString("id-ID")}` : "-"}
+                          {it.initialCostText ? formatRupiahInput(it.initialCostText) : "-"}
                         </td>
                         <td className="px-2.5 py-1.5 text-right font-mono text-emerald-600 dark:text-emerald-400">
-                          {it.standardSellingPriceText ? `Rp ${Number(it.standardSellingPriceText).toLocaleString("id-ID")}` : "-"}
+                          {it.standardSellingPriceText ? formatRupiahInput(it.standardSellingPriceText) : "-"}
                         </td>
                       </tr>
                     ))}

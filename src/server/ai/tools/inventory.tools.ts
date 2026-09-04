@@ -1,4 +1,4 @@
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   createInventoryItem,
   listInventoryItems,
@@ -76,7 +76,7 @@ export const inventoryToolDefs: ToolDefinition[] = [
 export const inventoryHandlers: Record<string, ToolHandler> = {
   list_inventory_items: async (orgId, _actor, args) => {
     try {
-      const allItems = await listInventoryItems(db, orgId);
+      const allItems = await withOrg(orgId, async (tx) => listInventoryItems(tx, orgId));
       const query = String(args.query ?? "").toLowerCase().trim();
       const category = String(args.category ?? "").toLowerCase().trim();
 
@@ -102,8 +102,9 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
           })),
         },
       };
-    } catch (err: any) {
-      return { success: false, error: err.message || "Gagal mengambil daftar persediaan" };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal mengambil daftar persediaan";
+      return { success: false, error: message };
     }
   },
 
@@ -121,18 +122,24 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
       const standardSellingPriceMinor = args.standardSellingPriceText
         ? Money.parseIdr(String(args.standardSellingPriceText)).minor
         : 0n;
+      const initialQty = typeof args.initialQty === "number" ? args.initialQty : Number(args.initialQty) || 0;
+      if (!Number.isFinite(initialQty) || initialQty < 0) {
+        return { success: false, error: "Stok awal harus angka >= 0." };
+      }
 
-      const item = await createInventoryItem(db, orgId, {
-        code,
-        name,
-        barcode: args.barcode ? String(args.barcode) : undefined,
-        category: args.category ? String(args.category) : undefined,
-        unit: args.unit ? String(args.unit) : "Pcs",
-        minStockAlert: args.minStockAlert ? String(args.minStockAlert) : "5",
-        initialQty: typeof args.initialQty === "number" ? args.initialQty : Number(args.initialQty) || 0,
-        initialCostMinor,
-        standardSellingPriceMinor,
-      });
+      const item = await withOrg(orgId, async (tx) =>
+        createInventoryItem(tx, orgId, {
+          code,
+          name,
+          barcode: args.barcode ? String(args.barcode) : undefined,
+          category: args.category ? String(args.category) : undefined,
+          unit: args.unit ? String(args.unit) : "Pcs",
+          minStockAlert: args.minStockAlert ? String(args.minStockAlert) : "5",
+          initialQty,
+          initialCostMinor,
+          standardSellingPriceMinor,
+        }),
+      );
 
       return {
         success: true,
@@ -145,8 +152,9 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
           message: `Barang ${item.name} (${item.code}) berhasil didaftarkan ke master persediaan.`,
         },
       };
-    } catch (err: any) {
-      return { success: false, error: err.message || "Gagal mendaftarkan barang persediaan" };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal mendaftarkan barang persediaan";
+      return { success: false, error: message };
     }
   },
 
@@ -157,43 +165,70 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
         return { success: false, error: "Daftar barang dalam batch tidak boleh kosong." };
       }
 
-      const results = await db.transaction(async (tx) => {
+      const seen = new Set<string>();
+      const outcome = await withOrg(orgId, async (tx) => {
         const createdList = [];
-        for (const raw of items) {
+        const skipped: Array<{ index: number; reason: string }> = [];
+        const errors: Array<{ index: number; code: string; message: string }> = [];
+        for (let idx = 0; idx < items.length; idx++) {
+          const raw = items[idx];
           const code = String(raw.code ?? "").trim().toUpperCase();
           const name = String(raw.name ?? "").trim();
-          if (!code || !name) continue;
+          if (!code || !name) {
+            skipped.push({ index: idx, reason: "Kode SKU dan Nama kosong" });
+            continue;
+          }
+          if (seen.has(code)) {
+            errors.push({ index: idx, code, message: `Duplikat SKU dalam batch: ${code}` });
+            continue;
+          }
+          seen.add(code);
+          const initialQty = typeof raw.initialQty === "number" ? raw.initialQty : Number(raw.initialQty) || 0;
+          if (!Number.isFinite(initialQty) || initialQty < 0) {
+            errors.push({ index: idx, code, message: "Stok awal harus angka >= 0" });
+            continue;
+          }
+          try {
+            const initialCostMinor = raw.initialCostText
+              ? Money.parseIdr(String(raw.initialCostText)).minor
+              : 0n;
+            const standardSellingPriceMinor = raw.standardSellingPriceText
+              ? Money.parseIdr(String(raw.standardSellingPriceText)).minor
+              : 0n;
 
-          const initialCostMinor = raw.initialCostText
-            ? Money.parseIdr(String(raw.initialCostText)).minor
-            : 0n;
-          const standardSellingPriceMinor = raw.standardSellingPriceText
-            ? Money.parseIdr(String(raw.standardSellingPriceText)).minor
-            : 0n;
-
-          const item = await createInventoryItem(tx, orgId, {
-            code,
-            name,
-            barcode: raw.barcode ? String(raw.barcode) : undefined,
-            category: raw.category ? String(raw.category) : undefined,
-            unit: raw.unit ? String(raw.unit) : "Pcs",
-            minStockAlert: raw.minStockAlert ? String(raw.minStockAlert) : "5",
-            initialQty: typeof raw.initialQty === "number" ? raw.initialQty : Number(raw.initialQty) || 0,
-            initialCostMinor,
-            standardSellingPriceMinor,
-          });
-          createdList.push(item);
+            const item = await createInventoryItem(tx, orgId, {
+              code,
+              name,
+              barcode: raw.barcode ? String(raw.barcode) : undefined,
+              category: raw.category ? String(raw.category) : undefined,
+              unit: raw.unit ? String(raw.unit) : "Pcs",
+              minStockAlert: raw.minStockAlert ? String(raw.minStockAlert) : "5",
+              initialQty,
+              initialCostMinor,
+              standardSellingPriceMinor,
+            });
+            createdList.push(item);
+          } catch (e) {
+            const message = e instanceof Error ? e.message : "Gagal menyimpan baris";
+            errors.push({ index: idx, code, message });
+          }
         }
-        return createdList;
+        return { createdList, skipped, errors };
       });
 
       return {
         success: true,
         data: {
-          insertedCount: results.length,
+          insertedCount: outcome.createdList.length,
+          skippedCount: outcome.skipped.length,
+          errorCount: outcome.errors.length,
+          skipped: outcome.skipped,
+          errors: outcome.errors,
           sourceFileName: args.sourceFileName ? String(args.sourceFileName) : undefined,
-          message: `Berhasil mendaftarkan ${results.length} barang ke katalog persediaan.`,
-          sampleItems: results.slice(0, 5).map((it) => ({
+          message: `Berhasil mendaftarkan ${outcome.createdList.length} barang ke katalog persediaan.` +
+            (outcome.skipped.length > 0 ? ` ${outcome.skipped.length} baris kosong dilewati.` : "") +
+            (outcome.errors.length > 0 ? ` ${outcome.errors.length} baris gagal.` : ""),
+          sampleItems: outcome.createdList.slice(0, 5).map((it) => ({
             code: it.code,
             name: it.name,
             unit: it.unit,
@@ -201,8 +236,9 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
           })),
         },
       };
-    } catch (err: any) {
-      return { success: false, error: err.message || "Gagal mendaftarkan batch barang persediaan" };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal mendaftarkan batch barang persediaan";
+      return { success: false, error: message };
     }
   },
 };

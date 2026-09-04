@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   Plus,
   Trash2,
-  Table,
   Loader2,
   Download,
   Upload,
@@ -17,11 +16,8 @@ import {
   FileSpreadsheet,
   AlertCircle,
   Package,
-  Layers,
   Coins,
-  ShieldCheck,
   TrendingUp,
-  Sparkles,
   ChevronDown,
 } from "lucide-react";
 import {
@@ -65,7 +61,7 @@ export function BatchItemClient() {
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleCellChange = (id: string, field: keyof BatchRow, value: any) => {
+  const handleCellChange = (id: string, field: keyof BatchRow, value: string | number) => {
     setRows((prev) =>
       prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
     );
@@ -235,12 +231,18 @@ export function BatchItemClient() {
     return result;
   };
 
-  // 2. Import CSV / Excel file dan masukkan ke grid
+  // 2. Import CSV dan masukkan ke grid (CSV saja — .xlsx tidak didukung, parser teks akan rusak untuk biner)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
     setImportSuccessMessage(null);
     const file = e.target.files?.[0];
     if (!file) return;
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith(".csv")) {
+      setError("Format tidak didukung: unggah file .csv (ekspor spreadsheet Anda sebagai CSV UTF-8). File .xlsx tidak dapat dibaca langsung.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -302,8 +304,9 @@ export function BatchItemClient() {
         setImportSuccessMessage(
           `Berhasil memuat ${importedRows.length} baris barang dari file ke dalam grid. Silakan tinjau dan lengkapi sebelum disimpan.`
         );
-      } catch (err: any) {
-        setError(`Gagal membaca file: ${err?.message || "Format file tidak valid."}`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Format file tidak valid.";
+        setError(`Gagal membaca file: ${message}`);
       } finally {
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
@@ -321,6 +324,7 @@ export function BatchItemClient() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setImportSuccessMessage(null);
 
     if (validRows.length === 0) {
       setError("Isi minimal 1 baris barang dengan Kode SKU dan Nama Barang yang valid.");
@@ -331,7 +335,13 @@ export function BatchItemClient() {
       const res = await createBatchItemsAction(validRows);
       if (!res.ok) {
         setError(res.error || "Gagal menyimpan batch barang");
+      } else if (res.errors && res.errors.length > 0) {
+        const detail = res.errors.slice(0, 3).map((er: { code: string; message: string }) => `${er.code}: ${er.message}`).join("; ");
+        setError(`Tersimpan ${res.count} barang, ${res.errors.length} baris gagal: ${detail}`);
       } else {
+        if (res.skipped && res.skipped.length > 0) {
+          setImportSuccessMessage(`Tersimpan ${res.count} barang. ${res.skipped.length} baris kosong dilewati.`);
+        }
         router.push("/persediaan");
       }
     });
@@ -341,7 +351,7 @@ export function BatchItemClient() {
     <form
       onSubmit={handleSubmit}
       className="w-full space-y-6"
-      data-assistant-context="Halaman Input Cepat Barang Persediaan (Grid / Batch). Pengguna dapat mengisi massal tabel SKU atau meminta asisten mengekstrak file Excel/CSV ke dalam katalog persediaan."
+      data-assistant-context="Halaman Input Cepat Barang Persediaan (Grid / Batch). Pengguna dapat mengisi massal tabel SKU atau meminta asisten mengekstrak file CSV ke dalam katalog persediaan."
     >
       {/* Back Link */}
       <div className="mb-2">
@@ -354,11 +364,11 @@ export function BatchItemClient() {
         </Link>
       </div>
 
-      {/* Hidden File Input for CSV / Excel */}
+      {/* Hidden File Input for CSV */}
       <input
         ref={fileInputRef}
         type="file"
-        accept=".csv,text/csv,application/vnd.ms-excel"
+        accept=".csv,text/csv"
         className="hidden"
         onChange={handleFileUpload}
       />
@@ -371,21 +381,6 @@ export function BatchItemClient() {
           <div className="flex items-center gap-2">
             {/* Desktop Actions (>1024px / lg) */}
             <div className="hidden xl:flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const copilotTrigger = document.querySelector('button[aria-label*="Buka Asisten"]') as HTMLButtonElement | null;
-                  if (copilotTrigger) copilotTrigger.click();
-                }}
-                className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-terra transition-colors shadow-xs"
-                title="Buka Asisten AI untuk bantu ekstrak file atau catat barang"
-              >
-                <Sparkles className="size-3.5 mr-1.5 text-terra" />
-                Bantuan AI
-              </Button>
-
               <Button
                 type="button"
                 variant="outline"
@@ -425,17 +420,6 @@ export function BatchItemClient() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56 rounded-xl border-rule bg-paper p-1.5 shadow-md">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const copilotTrigger = document.querySelector('button[aria-label*="Buka Asisten"]') as HTMLButtonElement | null;
-                      if (copilotTrigger) copilotTrigger.click();
-                    }}
-                    className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas py-2"
-                  >
-                    <Sparkles className="size-3.5 mr-2 text-terra" />
-                    <span>Bantuan Asisten AI</span>
-                  </DropdownMenuItem>
-
                   <DropdownMenuItem
                     onClick={handleDownloadTemplate}
                     className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas py-2"
