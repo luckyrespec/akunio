@@ -1,10 +1,7 @@
-import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { memberships } from "@/server/db/schema/org";
-import { user } from "@/server/db/schema/auth";
 import { ensureUserWorkspace } from "@/server/bootstrap/ensure-workspace";
-import { auth } from "./auth-server";
 
 export type Role = "OWNER" | "ACCOUNTANT" | "VIEWER";
 
@@ -16,41 +13,39 @@ export interface AppContext {
   role: Role;
 }
 
-export async function isEmailVerified(userId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ emailVerified: user.emailVerified })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1);
-  return row?.emailVerified ?? false;
-}
-
 export async function getActiveContext(): Promise<AppContext | null> {
-  const s = await auth.api.getSession({ headers: await headers() });
-  if (!s) return null;
+  // Lazy import: @neondatabase/auth pulls next/headers at module scope,
+  // which vitest cannot resolve. Tests run behind the TEST_CTX_ORG seam
+  // (guard.ts) and never reach this import; real requests resolve it fine.
+  const { auth } = await import("./auth-server");
+  const { data: session } = await auth.getSession();
+  const u = session?.user;
+  if (!u) return null;
 
   let [m] = await db
     .select()
     .from(memberships)
-    .where(eq(memberships.userId, s.user.id))
+    .where(eq(memberships.userId, u.id))
     .limit(1);
 
-  // Self-heal: logged in but workspace missing (e.g. wiped by an old test
-  // run) — rebuild it instead of bouncing the user to /masuk forever.
+  // Lazy provisioning menggantikan signup-hook lama: request terautentikasi
+  // pertama membuat org + OWNER + profil IN_PROGRESS (+ cermin identitas
+  // lokal untuk join email). Neon Auth bersifat managed — hook user.create
+  // lokal tidak lagi menyala.
   if (!m) {
-    await ensureUserWorkspace(s.user.id, s.user.name);
+    await ensureUserWorkspace(u.id, u.name ?? u.email, u.email);
     [m] = await db
       .select()
       .from(memberships)
-      .where(eq(memberships.userId, s.user.id))
+      .where(eq(memberships.userId, u.id))
       .limit(1);
     if (!m) return null;
   }
 
   return {
-    userId: s.user.id,
-    userEmail: s.user.email,
-    emailVerified: s.user.emailVerified ?? false,
+    userId: u.id,
+    userEmail: u.email,
+    emailVerified: u.emailVerified ?? false,
     orgId: m.orgId,
     role: m.role,
   };

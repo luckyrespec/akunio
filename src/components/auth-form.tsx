@@ -67,12 +67,14 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
           );
           return;
         }
-        // requireEmailVerification: signup succeeds with token === null
-        // (no session) until the user verifies their email.
-        const token = (res.data as unknown as { token?: string | null } | null)?.token;
+        // Neon Auth: jangan menebak status verifikasi dari bentuk respons
+        // (berbeda saat require on/off) — cek sesi yang sebenarnya ada.
+        // Ada sesi → /onboarding (gate menolak yang tak bersesi).
+        // Tanpa sesi → /verifikasi (kasus require_email_verification).
+        const { data: sess } = await authClient.getSession();
         // Use hard navigation to ensure session cookies are fully sent to Server Components.
         // Completed users pass the onboarding gate straight to /dasbor.
-        window.location.href = token ? "/onboarding" : verificationUrl(email);
+        window.location.href = sess?.session ? "/onboarding" : verificationUrl(email);
         return;
       }
 

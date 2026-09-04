@@ -1,7 +1,9 @@
 import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
 
-// Better Auth core tables. Property keys must match Better Auth's field
-// names; column names follow its default snake_case convention.
+// Legacy identity tables from the self-hosted Better Auth era. Auth of
+// record now lives in Neon's managed auth (neon_auth schema per branch).
+// Only `user` is still written — as a read mirror (id/email/name) for
+// member-list joins. Never store passwords or sessions here anymore.
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),

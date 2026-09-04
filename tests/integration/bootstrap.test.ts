@@ -3,8 +3,11 @@ import { describe, it, expect, afterAll } from "vitest";
 import { Pool } from "pg";
 import { truncateAll } from "./helpers";
 
-describe.skipIf(process.env.SKIP_DB_TESTS === "1")("org bootstrap on signup", () => {
-  // admin conn: auth hooks run outside RLS scope
+// NOTE: workspace provisioning is driven by lazy ensureUserWorkspace on the
+// first authenticated request (Neon Auth is managed — there is no local
+// signup hook anymore). Real signup is covered by e2e against Neon Auth.
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("org bootstrap on first login", () => {
+  // admin conn: provisioning runs outside RLS scope
   const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
   afterAll(async () => {
     await pool.end();
@@ -12,24 +15,18 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("org bootstrap on signup", ()
   });
 
   it("creates org + owner membership + IN_PROGRESS profile, without COA/periods", async () => {
-    const { auth } = await import("@/server/auth/auth-server");
-    const res = await auth.api.signUpEmail({
-      body: {
-        email: `u${Date.now()}@test.id`,
-        password: "rahasia123",
-        name: "PT Uji",
-      },
-    });
-    expect(res.user).toBeDefined();
+    const { ensureUserWorkspace } = await import("@/server/bootstrap/ensure-workspace");
+    const userId = `neon-user-${Date.now()}`;
+    await ensureUserWorkspace(userId, "PT Uji", `u${Date.now()}@test.id`);
 
     const orgRow = await pool.query<{ org_id: string }>(
       `SELECT m.org_id FROM memberships m WHERE m.user_id = $1 AND m.role = 'OWNER'`,
-      [res.user!.id],
+      [userId],
     );
     expect(orgRow.rowCount).toBe(1);
     const orgId = orgRow.rows[0].org_id;
 
-    // Deferred provisioning: signup seeds neither accounts nor periods.
+    // Deferred provisioning: ensure seeds neither accounts nor periods.
     const accs0 = await pool.query<{ n: number }>(
       "SELECT count(*)::int AS n FROM accounts WHERE org_id=$1",
       [orgId],
@@ -46,6 +43,13 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("org bootstrap on signup", ()
     const profile = await getProfile(db, orgId);
     expect(profile?.status).toBe("IN_PROGRESS");
     expect(profile?.currentStep).toBe("NAMA");
+
+    // Local identity mirror is kept for member-list joins.
+    const mirror = await pool.query<{ email: string }>(
+      `SELECT email FROM "user" WHERE id = $1`,
+      [userId],
+    );
+    expect(mirror.rowCount).toBe(1);
 
     // Explicit seeding still works and is idempotent.
     const { seedOrgData } = await import("@/server/bootstrap/seed-org");
@@ -71,11 +75,10 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("org bootstrap on signup", ()
     expect(accs2.rows[0].n).toBe(accs.rows[0].n);
 
     // Double ensure still yields exactly one org + one profile.
-    const { ensureUserWorkspace } = await import("@/server/bootstrap/ensure-workspace");
-    await ensureUserWorkspace(res.user!.id, "PT Uji");
+    await ensureUserWorkspace(userId, "PT Uji");
     const orgs = await pool.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM memberships WHERE user_id = $1`,
-      [res.user!.id],
+      [userId],
     );
     expect(orgs.rows[0].n).toBe(1);
     const profiles = await pool.query<{ n: number }>(

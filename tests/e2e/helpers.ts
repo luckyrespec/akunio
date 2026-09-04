@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
-/** Daftar → /verifikasi → tandai verified via seam → masuk → /onboarding. */
+/** Daftar → sesi langsung (branch e2e mematikan verifikasi email) → /onboarding. */
 export async function signupAndVerify(
   page: Page,
   name: string,
@@ -13,15 +13,7 @@ export async function signupAndVerify(
   await page.getByLabel("Kata Sandi").fill(password);
   await page.getByRole("button", { name: "Daftar" }).click();
   // Generous: cold dev server + bcrypt + parallel workers can take a while.
-  await expect(page).toHaveURL(/\/verifikasi/, { timeout: 30000 });
-
-  const res = await page.request.post("/api/test/verify", { data: { email } });
-  expect(res.ok()).toBe(true);
-
-  await page.goto("/masuk");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Kata Sandi").fill(password);
-  await page.getByRole("button", { name: "Masuk" }).click();
+  // Branch e2e Neon Auth: require_email_verification=false → sesi langsung.
   await expect(page).toHaveURL(/\/onboarding/, { timeout: 30000 });
 }
 
