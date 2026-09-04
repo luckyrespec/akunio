@@ -22,7 +22,14 @@ import {
   ShieldCheck,
   TrendingUp,
   Sparkles,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
@@ -361,46 +368,92 @@ export function BatchItemClient() {
         title="Input Cepat Barang Persediaan"
         eyebrow="Isi tabel massal mirip spreadsheet Excel atau unggah template CSV untuk mendaftarkan puluhan SKU sekaligus."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                // Trigger event or dispatch to open assistant
-                const copilotTrigger = document.querySelector('button[aria-label*="Buka Asisten"]') as HTMLButtonElement | null;
-                if (copilotTrigger) {
-                  copilotTrigger.click();
-                }
-              }}
-              className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-terra transition-colors shadow-xs"
-              title="Buka Asisten AI untuk bantu ekstrak file atau catat barang"
-            >
-              <Sparkles className="size-3.5 mr-1.5 text-terra" />
-              Bantuan Asisten AI
-            </Button>
+          <div className="flex items-center gap-2">
+            {/* Desktop Actions (>1024px / lg) */}
+            <div className="hidden xl:flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const copilotTrigger = document.querySelector('button[aria-label*="Buka Asisten"]') as HTMLButtonElement | null;
+                  if (copilotTrigger) copilotTrigger.click();
+                }}
+                className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-terra transition-colors shadow-xs"
+                title="Buka Asisten AI untuk bantu ekstrak file atau catat barang"
+              >
+                <Sparkles className="size-3.5 mr-1.5 text-terra" />
+                Bantuan AI
+              </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadTemplate}
-              className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
-            >
-              <Download className="size-3.5 mr-1.5 text-terra" />
-              Download Template
-            </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadTemplate}
+                className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
+              >
+                <Download className="size-3.5 mr-1.5 text-terra" />
+                Template
+              </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
-            >
-              <Upload className="size-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400" />
-              Impor Template (.csv)
-            </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
+              >
+                <Upload className="size-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400" />
+                Impor CSV
+              </Button>
+            </div>
+
+            {/* Responsive Dropdown for Smaller Screens (<= 1280px) */}
+            <div className="flex xl:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
+                  >
+                    <FileSpreadsheet className="size-3.5 mr-1.5 text-terra" />
+                    Opsi Berkas
+                    <ChevronDown className="size-3.5 ml-1.5 text-ink-soft" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 rounded-xl border-rule bg-paper p-1.5 shadow-md">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const copilotTrigger = document.querySelector('button[aria-label*="Buka Asisten"]') as HTMLButtonElement | null;
+                      if (copilotTrigger) copilotTrigger.click();
+                    }}
+                    className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas py-2"
+                  >
+                    <Sparkles className="size-3.5 mr-2 text-terra" />
+                    <span>Bantuan Asisten AI</span>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={handleDownloadTemplate}
+                    className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas py-2"
+                  >
+                    <Download className="size-3.5 mr-2 text-terra" />
+                    <span>Download Template CSV</span>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => fileInputRef.current?.click()}
+                    className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas py-2"
+                  >
+                    <Upload className="size-3.5 mr-2 text-emerald-600 dark:text-emerald-400" />
+                    <span>Impor Berkas (.csv)</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
             <Button
               type="button"
@@ -416,15 +469,15 @@ export function BatchItemClient() {
               type="submit"
               size="sm"
               disabled={isPending || validRowsCount === 0}
-              className="h-9 px-5 rounded-xl bg-terra text-white hover:bg-terra/90 text-xs font-semibold shadow-xs transition-transform active:scale-[0.98] disabled:transform-none"
+              className="h-9 px-4 sm:px-5 rounded-xl bg-terra text-white hover:bg-terra/90 text-xs font-semibold shadow-xs transition-transform active:scale-[0.98] disabled:transform-none shrink-0"
             >
               {isPending ? (
                 <>
                   <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                  Menyimpan Data...
+                  Menyimpan...
                 </>
               ) : (
-                `Simpan ${validRowsCount} Barang Sekaligus`
+                `Simpan ${validRowsCount} Barang`
               )}
             </Button>
           </div>
