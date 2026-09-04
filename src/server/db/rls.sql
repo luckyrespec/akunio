@@ -123,6 +123,10 @@ BEGIN
         WHERE ct.id = chat_messages.thread_id
           AND ct.org_id = current_setting('app.current_org', true)::uuid
       ))
+    $p$;
+  END IF;
+END $$;
+
 -- stock_opname_items is isolated via stock_opnames.org_id:
 ALTER TABLE stock_opname_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_opname_items FORCE ROW LEVEL SECURITY;
