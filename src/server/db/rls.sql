@@ -8,10 +8,11 @@ DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY['memberships','accounts','fiscal_periods',
                            'journal_entries','journal_lines','journal_seq_counters','audit_log',
-                           'documents','ai_drafts',
+                           'documents','ai_drafts','journal_documents',
                             'tenant_chunks','chat_threads','onboarding_messages','org_profiles','ai_findings','ai_proposals',
                            'contacts','invoices','bank_reconciliations',
-                           'fixed_assets','asset_depreciation_lines','asset_disposals']
+                           'fixed_assets','asset_depreciation_lines','asset_disposals',
+                           'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -122,6 +123,25 @@ BEGIN
         WHERE ct.id = chat_messages.thread_id
           AND ct.org_id = current_setting('app.current_org', true)::uuid
       ))
+-- stock_opname_items is isolated via stock_opnames.org_id:
+ALTER TABLE stock_opname_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stock_opname_items FORCE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'stock_opname_items' AND policyname = 'tenant_isolation_stock_opname_items') THEN
+    EXECUTE $p$
+      CREATE POLICY tenant_isolation_stock_opname_items ON stock_opname_items
+      USING (EXISTS (
+        SELECT 1 FROM stock_opnames so
+        WHERE so.id = stock_opname_items.opname_id
+          AND so.org_id = current_setting('app.current_org', true)::uuid
+      ))
+      WITH CHECK (EXISTS (
+        SELECT 1 FROM stock_opnames so
+        WHERE so.id = stock_opname_items.opname_id
+          AND so.org_id = current_setting('app.current_org', true)::uuid
+      ))
     $p$;
   END IF;
 END $$;
+

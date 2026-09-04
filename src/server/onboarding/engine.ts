@@ -51,7 +51,7 @@ export interface FinalizeResult {
 
 const NAMA_CHIPS: string[] = [];
 const JENIS_CHIPS = Object.values(BUSINESS_TYPE_LABELS);
-const SKALA_CHIPS = ["<10jt / bulan", "10–50jt / bulan", "50–200jt / bulan", ">200jt / bulan"];
+const SKALA_CHIPS = ["Baru memulai usaha", "<10jt / bulan", "10–50jt / bulan", "50–200jt / bulan", ">200jt / bulan"];
 const KARYAWAN_CHIPS = ["Sendiri / 1", "2–5 orang", "6–20 orang", ">20 orang", "Lewati"];
 const LOKASI_CHIPS = ["Lewati"];
 const REFERRAL_CHIPS = ["Teman / Keluarga", "Google", "Instagram / TikTok", "Lainnya"];
@@ -59,6 +59,7 @@ const RINGKASAN_CHIPS = ["Ya, lanjut", "Ubah jawaban"];
 const COA_CHIPS = ["Gunakan COA ini", "Tambah akun", "Hapus akun"];
 
 const REVENUE_LABELS = {
+  BARU_MULAI: "Baru memulai usaha",
   LT_10JT: "< Rp10 jt/bulan",
   "R_10_50JT": "Rp10–50 jt/bulan",
   "R_50_200JT": "Rp50–200 jt/bulan",
@@ -86,6 +87,10 @@ function draftOf(profile: OrgProfile): AccountDef[] | null {
 }
 
 /** LLM only rephrases; values never come from it. Always falls back. */
+export function buildPolishPrompt(template: string): string {
+  return `Parafrasekan ulang pesan onboarding berikut dalam Bahasa Indonesia yang hangat dan singkat (maks 80 kata, jangan ubah fakta, nama, angka, atau pilihan yang disebutkan, tanpa emoji berlebihan):\n\n${template}`;
+}
+
 async function polish(template: string): Promise<string> {
   try {
     if (process.env.AI_MOCK === "1" || !process.env.GEMINI_API_KEY) return template;
@@ -99,7 +104,7 @@ async function polish(template: string): Promise<string> {
           content: [
             {
               type: "text",
-              text: `Parafrasekan ulang pesan onboarding berikut dalam Bahasa Indonesia yang hangat dan singkat (maks 80 kata, jangan ubah fakta, nama, angka, atau pilihan yang disebutkan, tanpa emoji berlebihan):\n\n${template}`,
+              text: buildPolishPrompt(template),
             },
           ],
         } as never,
@@ -121,7 +126,7 @@ function questionFor(step: OnboardingStep): { reply: string; chips: string[] } {
   switch (step) {
     case "NAMA":
       return {
-        reply: "Halo! Saya Nara, asisten pembukuan Anda. Senang berkenalan! Siapa nama panggilan Anda?",
+        reply: "Halo! Saya Akunio, asisten pembukuan Anda. Senang berkenalan! Siapa nama panggilan Anda?",
         chips: NAMA_CHIPS,
       };
     case "USAHA":
@@ -129,7 +134,7 @@ function questionFor(step: OnboardingStep): { reply: string; chips: string[] } {
     case "JENIS":
       return { reply: "Usaha Anda bergerak di bidang apa? Pilih yang paling mendekati.", chips: JENIS_CHIPS };
     case "SKALA":
-      return { reply: "Berapa omzet usaha per bulan? (kira-kira saja)", chips: SKALA_CHIPS };
+      return { reply: "Berapa omzet usaha per bulan? (kira-kira saja — atau pilih Baru memulai usaha)", chips: SKALA_CHIPS };
     case "LOKASI":
       return { reply: "Di kota mana usaha beroperasi? (boleh dilewati)", chips: LOKASI_CHIPS };
     case "REFERRAL":
@@ -225,6 +230,10 @@ export async function submitOnboardingMessage(
   q: Queryable,
   orgId: string,
   raw: string,
+  hooks?: {
+    /** Pengganti polish() internal agar reply bisa di-stream per token. */
+    streamPolish?: (template: string) => Promise<string>;
+  },
 ): Promise<EngineReply> {
   const text = raw.trim().slice(0, 500);
   let profile = (await getProfile(q, orgId)) ?? (await upsertProfile(q, orgId, {}));
@@ -248,7 +257,7 @@ export async function submitOnboardingMessage(
     coaPreview?: AccountDef[],
   ): Promise<EngineReply> => {
     profile = await upsertProfile(q, orgId, { ...patch, currentStep: next });
-    const reply = await polish(template);
+    const reply = hooks?.streamPolish ? await hooks.streamPolish(template) : await polish(template);
     await addOnboardingMessage(q, orgId, "assistant", reply, next);
     return { reply, chips, step: next, coaPreview };
   };
@@ -284,7 +293,8 @@ export async function submitOnboardingMessage(
         const emp = parseEmployees(text);
         if (emp !== null) {
           const ask = questionFor("LOKASI");
-          return done(`Omzet ${REVENUE_LABELS[rev]}, ${emp} orang. ${ask.reply}`, ask.chips, "LOKASI", {
+          const revText = rev === "BARU_MULAI" ? REVENUE_LABELS[rev] : `Omzet ${REVENUE_LABELS[rev]}`;
+          return done(`${revText}, ${emp} orang. ${ask.reply}`, ask.chips, "LOKASI", {
             revenueRange: rev,
             employeeCount: emp,
           });
@@ -489,6 +499,23 @@ export async function finalizeOnboarding(orgId: string, key: string): Promise<Fi
         .set({ name: profile.businessName })
         .where(eq(organizations.id, orgId));
     }
+
+    // Inisialisasi pengaturan default persediaan & stok
+    const orgAccounts = await tx.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const invAcc = orgAccounts.find((a) => a.code.startsWith("1-13") || a.name.toLowerCase().includes("persediaan"));
+    const cogsAcc = orgAccounts.find((a) => a.code.startsWith("5-10") || a.name.toLowerCase().includes("pokok penjualan"));
+    const lossAcc = orgAccounts.find((a) => a.name.toLowerCase().includes("selisih") || a.code.startsWith("5-19"));
+
+    const { inventorySettings } = await import("@/server/db/schema/inventory");
+    await tx.insert(inventorySettings).values({
+      orgId,
+      valuationMethod: "WEIGHTED_AVERAGE",
+      recordingMethod: type === "JASA" ? "PERIODIC" : "PERPETUAL",
+      inventoryAccountId: invAcc?.id ?? null,
+      cogsAccountId: cogsAcc?.id ?? null,
+      adjustmentLossAccountId: lossAcc?.id ?? null,
+    }).onConflictDoNothing();
+
     await upsertProfile(tx, orgId, {
       status: "COMPLETED",
       currentStep: "SELESAI",

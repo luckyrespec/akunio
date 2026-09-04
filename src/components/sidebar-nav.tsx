@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
-  BadgeCheck,
   BookOpen,
+  Boxes,
   Building2,
   CalendarCheck,
   FileBarChart,
@@ -14,19 +14,36 @@ import {
   Receipt,
   Search,
   Settings2,
-  Sparkles,
   Users,
   X,
-  Zap,
 } from "lucide-react";
-import { authClient } from "@/server/auth/auth-client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { NavUser } from "@/components/nav-user";
+
+/**
+ * AkunioMark — huruf "A" ledger: dua kaki diagonal + mistar ganda
+ * (motif rule-double pembukuan) dalam satu bahasa goresan round-cap.
+ * Warna memakai token agar ikut mode Lilin.
+ */
+function AkunioMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" fill="none" aria-hidden className={className}>
+      <rect width="32" height="32" rx="8" fill="var(--color-terra)" />
+      <g stroke="var(--color-paper)" strokeWidth="2.6" strokeLinecap="round">
+        <path d="M16 7.5 9.2 24" />
+        <path d="M16 7.5 22.8 24" />
+        <path d="M11.9 17.6h8.2" strokeWidth="2" />
+        <path d="M11 20.4h10" strokeWidth="2" />
+      </g>
+    </svg>
+  );
+}
 
 const STANDARD_ITEMS = [
   { href: "/dasbor", label: "Dasbor", icon: LayoutDashboard },
   { href: "/faktur", label: "Faktur & Tagihan", icon: Receipt },
+  { href: "/persediaan", label: "Persediaan & Stok", icon: Boxes, match: (p: string) => p.startsWith("/persediaan") },
   { href: "/rekonsiliasi", label: "Rekonsiliasi Bank", icon: ArrowLeftRight },
   { href: "/aset", label: "Aset Tetap", icon: Building2 },
   { href: "/kontak", label: "Kontak", icon: Users },
@@ -51,11 +68,6 @@ export function SidebarNav({
 }) {
   const pathname = usePathname();
 
-  async function keluar() {
-    await authClient.signOut();
-    window.location.href = "/masuk";
-  }
-
   const isAsistenActive = pathname.startsWith("/asisten");
 
   const isActive = (href: string, match?: (p: string) => boolean) => {
@@ -69,14 +81,9 @@ export function SidebarNav({
         {/* Brand Header */}
         <div className={cn("flex items-center justify-between gap-2", !isDrawer && collapsed && "justify-center")}>
           <div className="flex items-center gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-terra text-white shadow-xs">
-              <BadgeCheck className="size-4" />
-            </div>
+            <AkunioMark className="size-8 shrink-0 shadow-xs" />
             {(isDrawer || !collapsed) && (
-              <div className="min-w-0">
-                <p className="font-display text-[1.35rem] font-semibold leading-none tracking-tight text-ink">Neraca</p>
-                <p className="text-[10px] uppercase tracking-widest text-ink-soft mt-0.5">SaaS Akuntansi SME</p>
-              </div>
+              <p className="font-display text-xl font-semibold leading-none tracking-tight text-ink">Akunio</p>
             )}
           </div>
           {isDrawer && onCloseMobile && (
@@ -93,58 +100,38 @@ export function SidebarNav({
             onClick={() => {
               if (isDrawer && onCloseMobile) onCloseMobile();
             }}
-            title={!isDrawer && collapsed ? "Asisten AI Nara" : undefined}
+            title={!isDrawer && collapsed ? "Akunio AI" : undefined}
             className={cn(
-              "group relative flex items-center gap-3 rounded-2xl transition-[color,background-color,border-color,box-shadow] duration-200 overflow-hidden",
+              "group flex items-center gap-3 rounded-2xl transition-[color,background-color,border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra/50",
               !isDrawer && collapsed
-                ? "justify-center p-2.5 border"
-                : "p-3 border",
+                ? "justify-center p-2 border"
+                : "p-2.5 border",
               isAsistenActive
-                ? "bg-gradient-to-br from-terra/15 via-terra/10 to-amber-500/10 border-terra/50 shadow-sm ring-1 ring-terra/30"
-                : "bg-gradient-to-br from-canvas/80 via-paper to-canvas border-rule hover:border-terra/40 hover:bg-canvas shadow-2xs hover:shadow-xs",
+                ? "bg-terra/[0.12] border-terra/60 shadow-xs ring-1 ring-terra/40"
+                : "border-terra/30 bg-terra/[0.06] hover:border-terra/50 hover:bg-terra/[0.1] shadow-2xs hover:shadow-xs",
             )}
           >
-            {/* Soft Ambient Light on Active */}
-            {isAsistenActive && (
-              <div className="absolute -right-6 -top-6 size-20 rounded-full bg-terra/15 blur-xl pointer-events-none" />
-            )}
 
-            {/* Glowing Icon Container */}
-            <div
-              className={cn(
-                "relative flex size-9 shrink-0 items-center justify-center rounded-xl transition-[transform,background-color,border-color] duration-300",
-                isAsistenActive
-                  ? "bg-terra text-white shadow-xs shadow-terra/30"
-                  : "bg-canvas border border-rule group-hover:border-terra/40 group-hover:bg-terra/10 text-terra",
-              )}
-            >
-              <Sparkles className="size-4 transition-transform [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-110" />
-              {/* Online pulse dot */}
-              <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-paper" />
-            </div>
+            {/* Brand mark — motif milik produk, bukan ikon AI generik */}
+            <AkunioMark className="size-9 shrink-0 shadow-2xs transition-transform duration-300 [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-105" />
 
-            {/* Label and Value Proposition */}
+            {/* Label satu baris + petunjuk shortcut */}
             {(isDrawer || !collapsed) && (
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="font-display text-xs font-semibold text-ink tracking-tight flex items-center gap-1.5">
-                    <span>Asisten AI</span>
-                    <span className="inline-flex items-center rounded-md bg-terra/15 px-1.5 py-0.2 text-[9px] font-bold text-terra uppercase tracking-wider">
-                      Copilot
-                    </span>
-                  </span>
-                </div>
-                <p className="text-[10px] text-ink-soft leading-tight mt-0.5 truncate group-hover:text-ink transition-colors">
-                  Catat transaksi & tanya laporan
-                </p>
-              </div>
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="truncate text-xs font-semibold text-ink tracking-tight">
+                  Akunio AI
+                </span>
+                <kbd className="ml-auto hidden shrink-0 rounded border border-rule/70 bg-paper/80 px-1.5 py-0.5 font-mono text-[11px] font-normal text-ink-soft xl:inline">
+                  Ctrl J
+                </kbd>
+              </span>
             )}
           </Link>
         </div>
 
         {/* Section Divider & Label */}
         {(isDrawer || !collapsed) && (
-          <div className="px-1 pt-6 pb-2 text-[10px] font-semibold uppercase tracking-wider text-ink-soft/70">
+          <div className="px-1 pt-6 pb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft/70">
             Menu Pembukuan
           </div>
         )}
@@ -163,7 +150,7 @@ export function SidebarNav({
                 }}
                 title={!isDrawer && collapsed ? item.label : undefined}
                 className={cn(
-                  "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors",
+                  "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors focus-ring",
                   !isDrawer && collapsed && "justify-center px-2 py-2.5",
                   active
                     ? "bg-canvas text-terra font-semibold border border-rule shadow-2xs"
@@ -178,18 +165,9 @@ export function SidebarNav({
         </nav>
       </div>
 
-      {/* Footer Nav Controls */}
-      <div className={cn("flex flex-col gap-2 pt-4 border-t border-rule/60", !isDrawer && collapsed && "items-center border-t-0")}>
-        <ThemeToggle />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={keluar}
-          className={cn("justify-start text-ink-soft hover:text-destructive text-xs h-8", !isDrawer && collapsed && "size-8 justify-center p-0")}
-          title={!isDrawer && collapsed ? "Keluar" : undefined}
-        >
-          <span className={!isDrawer && collapsed ? "" : "truncate"}>{!isDrawer && collapsed ? "⎋" : "Keluar dari Sesi"}</span>
-        </Button>
+      {/* Footer: menu pengguna */}
+      <div className={cn("flex flex-col gap-2 border-t border-rule/60 pt-3", !isDrawer && collapsed && "items-center border-t-0")}>
+        <NavUser collapsed={!isDrawer && collapsed} align={isDrawer ? "start" : "end"} />
       </div>
     </div>
   );
@@ -199,7 +177,7 @@ export function SidebarNav({
       {/* Desktop Sidebar (lg and above) */}
       <aside
         className={cn(
-          "hidden lg:flex shrink-0 flex-col justify-between overflow-hidden border-r border-rule bg-paper py-6 h-screen sticky top-0",
+          "hidden lg:flex shrink-0 flex-col justify-between overflow-hidden border-r border-rule bg-paper py-6 h-screen sticky top-0 motion-safe:transition-[width,padding] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]",
           collapsed ? "w-[4.25rem] px-2.5" : "w-64 px-4 pr-5",
         )}
       >

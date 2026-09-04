@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { journalEntries, journalLines } from "../schema/journal";
 import { accounts } from "../schema/org";
+import { documents, journalDocuments } from "../schema/ai";
 import type { Queryable } from "./queryable";
 import { findPeriodByDate } from "./periods.repo";
 import { postingMetaMap } from "./accounts.repo";
@@ -51,10 +52,16 @@ export interface EntryView {
   lines: LineView[];
 }
 
-async function assemble(q: Queryable, where: SQL | undefined, limit?: number): Promise<EntryView[]> {
-  const base = q.select().from(journalEntries).where(where);
-  const entries = await (limit ? base.limit(limit) : base)
-    .orderBy(desc(journalEntries.entryDate), desc(journalEntries.seq));
+async function assemble(
+  q: Queryable,
+  where: SQL | undefined,
+  limit?: number,
+  offset?: number,
+): Promise<EntryView[]> {
+  let query = q.select().from(journalEntries).where(where).$dynamic();
+  if (offset) query = query.offset(offset);
+  if (limit) query = query.limit(limit);
+  const entries = await query.orderBy(desc(journalEntries.entryDate), desc(journalEntries.seq));
   if (entries.length === 0) return [];
   const lineRows = await q.select({
     id: journalLines.id,
@@ -89,9 +96,83 @@ async function assemble(q: Queryable, where: SQL | undefined, limit?: number): P
 }
 
 export async function listEntriesWithLines(
-  q: Queryable, orgId: string, limit = 50,
+  q: Queryable, orgId: string, limit = 50, offset = 0,
 ): Promise<EntryView[]> {
-  return assemble(q, eq(journalEntries.orgId, orgId), limit);
+  return assemble(q, eq(journalEntries.orgId, orgId), limit, offset);
+}
+
+export async function countEntries(q: Queryable, orgId: string): Promise<number> {
+  const [row] = await q
+    .select({ n: sql<number>`count(*)::int` })
+    .from(journalEntries)
+    .where(eq(journalEntries.orgId, orgId));
+  return row?.n ?? 0;
+}
+
+function entrySearchWhere(orgId: string, lineEntryIds: string[], term: string): SQL {
+  const like = `%${term}%`;
+  return and(
+    eq(journalEntries.orgId, orgId),
+    or(
+      ilike(journalEntries.number, like),
+      ilike(journalEntries.memo, like),
+      ...(lineEntryIds.length > 0 ? [inArray(journalEntries.id, lineEntryIds)] : []),
+    ),
+  ) as SQL;
+}
+
+async function findLineEntryIds(q: Queryable, orgId: string, term: string): Promise<string[]> {
+  const like = `%${term}%`;
+  const rows = await q
+    .selectDistinct({ entryId: journalLines.entryId })
+    .from(journalLines)
+    .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+    .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        or(ilike(accounts.code, like), ilike(accounts.name, like)),
+      ),
+    );
+  return rows.map((r) => r.entryId);
+}
+
+export async function searchEntriesWithLines(
+  q: Queryable, orgId: string, term: string, limit = 25, offset = 0,
+): Promise<EntryView[]> {
+  const ids = await findLineEntryIds(q, orgId, term);
+  return assemble(q, entrySearchWhere(orgId, ids, term), limit, offset);
+}
+
+export async function countSearchEntries(
+  q: Queryable, orgId: string, term: string,
+): Promise<number> {
+  const ids = await findLineEntryIds(q, orgId, term);
+  const [row] = await q
+    .select({ n: sql<number>`count(*)::int` })
+    .from(journalEntries)
+    .where(entrySearchWhere(orgId, ids, term));
+  return row?.n ?? 0;
+}
+
+/** Cari entri berdasar nominal total (debit = kredit = amount). */
+export async function searchEntriesByAmount(
+  q: Queryable, orgId: string, amountMinor: bigint, limit = 10,
+): Promise<EntryView[]> {
+  const rows = await q
+    .select({ entryId: journalLines.entryId })
+    .from(journalLines)
+    .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+    .where(eq(journalEntries.orgId, orgId))
+    .groupBy(journalLines.entryId)
+    .having(sql`SUM(${journalLines.debit}) = ${dec(amountMinor)}::numeric`)
+    .limit(limit);
+  if (rows.length === 0) return [];
+  return assemble(
+    q,
+    and(eq(journalEntries.orgId, orgId), inArray(journalEntries.id, rows.map((r) => r.entryId))),
+    limit,
+  );
 }
 
 export async function getPostedEntry(
@@ -101,6 +182,67 @@ export async function getPostedEntry(
   const entry = rows[0] ?? null;
   if (entry && entry.status !== "POSTED") throw new Error("BUKAN_JURNAL_POSTED");
   return entry;
+}
+
+export interface EntryDocument {
+  id: string;
+  fileName: string | null;
+  mime: string;
+  sizeBytes: number;
+  createdAt: Date;
+}
+
+export async function linkDocumentToEntry(
+  q: Queryable,
+  input: { orgId: string; entryId: string; documentId: string; fileName?: string },
+): Promise<void> {
+  const [doc] = await q.select({ id: documents.id })
+    .from(documents)
+    .where(and(eq(documents.orgId, input.orgId), eq(documents.id, input.documentId)))
+    .limit(1);
+  if (!doc) throw new Error("DOKUMEN_TIDAK_DITEMUKAN");
+  const [entry] = await q.select({ id: journalEntries.id })
+    .from(journalEntries)
+    .where(and(eq(journalEntries.orgId, input.orgId), eq(journalEntries.id, input.entryId)))
+    .limit(1);
+  if (!entry) throw new Error("JURNAL_TIDAK_DITEMUKAN");
+  await q.insert(journalDocuments).values({
+    orgId: input.orgId,
+    entryId: input.entryId,
+    documentId: input.documentId,
+    fileName: input.fileName ?? null,
+  }).onConflictDoNothing();
+}
+
+export async function listEntryDocuments(
+  q: Queryable, orgId: string, entryId: string,
+): Promise<EntryDocument[]> {
+  const rows = await q.select({
+    id: documents.id,
+    fileName: journalDocuments.fileName,
+    mime: documents.mime,
+    sizeBytes: documents.sizeBytes,
+    createdAt: journalDocuments.createdAt,
+  })
+    .from(journalDocuments)
+    .innerJoin(documents, eq(documents.id, journalDocuments.documentId))
+    .where(and(eq(journalDocuments.orgId, orgId), eq(journalDocuments.entryId, entryId)))
+    .orderBy(asc(journalDocuments.createdAt));
+  return rows;
+}
+
+/** Jurnal pembalik yang menunjuk ke entri ini (biasanya 0–1 baris). */
+export async function findReversalEntries(
+  q: Queryable, orgId: string, entryId: string,
+): Promise<Array<{ id: string; number: string; entryDate: string }>> {
+  return q.select({
+    id: journalEntries.id,
+    number: journalEntries.number,
+    entryDate: journalEntries.entryDate,
+  })
+    .from(journalEntries)
+    .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.reversalOfId, entryId)))
+    .orderBy(desc(journalEntries.entryDate));
 }
 
 export interface PostResult { id: string; number: string }
@@ -192,3 +334,65 @@ export async function postJournalEntry(
 
   return { id: entry.id, number };
 }
+
+export async function createDraftJournalEntry(
+  q: Queryable,
+  orgId: string,
+  input: JournalEntryInput,
+  opts: { reversalOfId?: string } = {},
+): Promise<PostResult> {
+  const period = await findPeriodByDate(q, orgId, input.dateISO);
+  if (!period) throw new PostingError([{ code: "PERIODE_TIDAK_DITEMUKAN" }]);
+
+  const issues = validateEntry(input, period.status);
+  if (issues.length > 0) throw new PostingError(issues);
+
+  const orgAccounts = await q.select().from(accounts).where(eq(accounts.orgId, orgId));
+  const acctIssues = checkPostingAccounts(input.lines, postingMetaMap(orgAccounts));
+  if (acctIssues.length > 0) throw new PostingError(acctIssues);
+
+  const year = period.name.slice(0, 4);
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:${year}`}))`);
+  const counterRes = await q.execute(sql`
+    INSERT INTO journal_seq_counters (org_id, period_id, last)
+    VALUES (${orgId}, ${period.id}, 1)
+    ON CONFLICT (org_id, period_id)
+    DO UPDATE SET last = journal_seq_counters.last + 1
+    RETURNING last
+  `);
+  const periodSeq = Number((counterRes.rows?.[0] as { last: number } | undefined)?.last ?? 1);
+  const baseRes = await q.execute<{ base: number }>(sql`
+    SELECT COALESCE(SUM(c.last), 0)::int AS base
+    FROM journal_seq_counters c
+    JOIN fiscal_periods p ON p.id = c.period_id
+    WHERE c.org_id = ${orgId} AND left(p.name, 4) = ${year} AND c.period_id <> ${period.id}
+  `);
+  const seq = periodSeq + Number(baseRes.rows?.[0]?.base ?? 0);
+  const number = journalNumber(period.name, seq);
+
+  const [entry] = await q.insert(journalEntries).values({
+    orgId,
+    periodId: period.id,
+    seq,
+    number,
+    entryDate: input.dateISO,
+    memo: input.memo,
+    source: input.source ?? "MANUAL",
+    status: "DRAFT",
+    reversalOfId: opts.reversalOfId ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
+  }).returning({ id: journalEntries.id });
+
+  await q.insert(journalLines).values(input.lines.map((l, i) => ({
+    orgId,
+    entryId: entry.id,
+    accountId: l.accountId,
+    position: i,
+    debit: dec(l.debitMinor),
+    credit: dec(l.creditMinor),
+    memo: l.memo ?? null,
+  })));
+
+  return { id: entry.id, number };
+}
+
