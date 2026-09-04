@@ -93,6 +93,7 @@ export function AssistantWidget() {
     handleSendMessage,
     handleStopStreaming,
     handleToolDecision,
+    restorePendingFromMessages,
   } = useNaraStreamChat({
     activeThreadId,
     setActiveThreadId,
@@ -153,14 +154,16 @@ export function AssistantWidget() {
         const res = await fetch(`/api/nara/threads/${activeThreadId}`);
         if (res.ok) {
           const data = await res.json();
-          setMessages(data.messages ?? []);
+          const loaded = data.messages ?? [];
+          setMessages(loaded);
+          restorePendingFromMessages(activeThreadId, loaded);
         }
       } catch (e) {
         console.error("Gagal memuat percakapan", e);
       }
     }
     loadThread();
-  }, [activeThreadId, open, setMessages]);
+  }, [activeThreadId, open, setMessages, restorePendingFromMessages]);
 
   // Proactive Daily Briefing on first daily open
   React.useEffect(() => {
@@ -201,15 +204,15 @@ export function AssistantWidget() {
           "fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full border border-terra/40 bg-paper py-2 pl-3.5 pr-4 text-xs font-semibold text-ink shadow-lg backdrop-blur-md transition-[transform,box-shadow,border-color] duration-200 ease-out hover:scale-102 hover:border-terra hover:shadow-xl active:scale-[0.98] group",
           open && "ring-2 ring-terra/30",
         )}
-        aria-label="Buka Asisten Nara (Ctrl+J)"
-        title="Buka Asisten Nara (Ctrl+J)"
+        aria-label="Buka Asisten Akunio (Ctrl+J)"
+        title="Buka Asisten Akunio (Ctrl+J)"
       >
         <div className="relative flex size-6 items-center justify-center rounded-full bg-terra text-white shadow-2xs">
           <Sparkles className="size-3.5" />
           <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-paper" />
         </div>
-        <span className="font-display">Nara Copilot</span>
-        <span className="hidden sm:inline-block rounded bg-canvas px-1.5 py-0.5 text-[10px] font-mono font-normal text-ink-soft border border-rule/60">
+        <span className="font-display">Akunio Copilot</span>
+        <span className="hidden sm:inline-block rounded bg-canvas px-1.5 py-0.5 text-[11px] font-mono font-normal text-ink-soft border border-rule/60">
           Ctrl+J
         </span>
       </button>
@@ -297,7 +300,7 @@ export function AssistantWidget() {
         <div className="flex items-center justify-between px-4 py-2 border-b border-rule/60 bg-canvas/60 text-[11px] text-ink-soft shrink-0">
           <div className="flex items-center gap-1.5 truncate">
             <span>Konteks aktif:</span>
-            <Badge variant="outline" className="border-terra/30 bg-paper text-terra text-[10px] font-medium h-5 px-1.5">
+            <Badge variant="outline" className="border-terra/30 bg-paper text-terra text-[11px] font-medium h-5 px-1.5">
               {pageContext.label || pageContext.title || "Halaman Ini"}
             </Badge>
           </div>
@@ -350,29 +353,54 @@ export function AssistantWidget() {
               emptyState={
                 <ConversationEmptyState
                   icon={<Sparkles className="size-8 text-terra" />}
-                  title="Halo! Ada yang bisa Nara bantu?"
-                  description={`Nara siap membantu pembukuan, mencatat transaksi dari nota, atau menjelaskan laporan di ${pageContext.label || "aplikasi"}.`}
+                  title="Halo! Ada yang bisa Akunio bantu?"
+                  description={`Akunio siap membantu pembukuan, mencatat transaksi dari nota, atau menjelaskan laporan di ${pageContext.label || "aplikasi"}.`}
                 >
                   <Suggestions className="flex flex-col gap-2 mt-4 w-full text-left">
-                    <Suggestion
-                      label="☀️ Briefing Keuangan Hari Ini"
-                      description="Ringkasan kas masuk, kas keluar, dan tugas hari ini"
-                      suggestion="☀️ Berikan ringkasan briefing keuangan hari ini."
-                      onClick={(val) => {
-                        setInput(val);
-                        handleSendMessage(val);
-                      }}
-                    />
+                    {pageContext.pathname.includes("/persediaan") ? (
+                      <>
+                        <Suggestion
+                          label="📦 Ekstrak & Input Barang dari File"
+                          description="Unggah CSV/Excel atau beri daftar teks untuk dimasukkan ke katalog"
+                          suggestion="Tolong bantu ekstrak dan daftarkan barang-barang ini ke master persediaan:"
+                          onClick={(val) => {
+                            setInput(val);
+                            fileInputRef.current?.click();
+                          }}
+                        />
+                        <Suggestion
+                          label="📋 Cek Daftar Stok Persediaan"
+                          description="Lihat ringkasan barang dengan stok atau harga modalnya"
+                          suggestion="Tampilkan daftar barang persediaan yang ada saat ini."
+                          onClick={(val) => {
+                            setInput(val);
+                            handleSendMessage(val);
+                          }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Suggestion
+                          label="☀️ Briefing Keuangan Hari Ini"
+                          description="Ringkasan kas masuk, kas keluar, dan tugas hari ini"
+                          suggestion="☀️ Berikan ringkasan briefing keuangan hari ini."
+                          onClick={(val) => {
+                            setInput(val);
+                            handleSendMessage(val);
+                          }}
+                        />
 
-                    <Suggestion
-                      label="📊 Saldo Kas & Laba Berjalan"
-                      description="Cek posisi saldo bank dan performa laba tahun berjalan"
-                      suggestion="Berapa saldo kas/bank dan laba bersih bulan berjalan?"
-                      onClick={(val) => {
-                        setInput(val);
-                        handleSendMessage(val);
-                      }}
-                    />
+                        <Suggestion
+                          label="📊 Saldo Kas & Laba Berjalan"
+                          description="Cek posisi saldo bank dan performa laba tahun berjalan"
+                          suggestion="Berapa saldo kas/bank dan laba bersih bulan berjalan?"
+                          onClick={(val) => {
+                            setInput(val);
+                            handleSendMessage(val);
+                          }}
+                        />
+                      </>
+                    )}
                   </Suggestions>
                 </ConversationEmptyState>
               }
@@ -434,7 +462,7 @@ export function AssistantWidget() {
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/*,application/pdf"
+                  accept="image/*,application/pdf,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="hidden"
                   onChange={(e) => {
                     if (e.target.files) handleAttachFiles(e.target.files);
@@ -449,12 +477,12 @@ export function AssistantWidget() {
                       className="size-7 rounded-full border border-rule/70 bg-canvas text-ink-soft hover:text-ink hover:bg-canvas transition-colors"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploading || isStreaming}
-                      aria-label="Lampirkan nota / berkas"
+                      aria-label="Lampirkan nota, PDF, atau spreadsheet CSV/Excel"
                     >
                       <Plus className="size-3.5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="top">Lampirkan nota atau PDF</TooltipContent>
+                  <TooltipContent side="top">Lampirkan nota, PDF, atau file CSV/Excel</TooltipContent>
                 </Tooltip>
 
                 <HitlTool

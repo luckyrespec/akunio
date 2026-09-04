@@ -18,6 +18,10 @@ const PATH_LABELS: Record<string, string> = {
   "/laporan/perubahan-ekuitas": "Perubahan Ekuitas",
   "/temuan": "Diagnosa & Anomali",
   "/pengaturan": "Pengaturan Akun & Periode",
+  "/persediaan/baru/batch": "Input Cepat Persediaan (Grid / Batch)",
+  "/persediaan/baru": "Tambah Barang Persediaan",
+  "/persediaan/opname": "Sesi Stok Opname",
+  "/persediaan": "Katalog & Mutasi Persediaan",
 };
 
 export function getActivePageContext(): PageContext {
@@ -26,7 +30,7 @@ export function getActivePageContext(): PageContext {
   }
 
   const pathname = window.location.pathname;
-  const title = document.title || "Neraca";
+  const title = document.title || "Akunio";
 
   // Match known paths or fallback to formatted pathname
   let label = PATH_LABELS[pathname];

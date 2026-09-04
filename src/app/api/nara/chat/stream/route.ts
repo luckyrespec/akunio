@@ -15,6 +15,12 @@ import {
   MUTATING_TOOLS,
   executeNaraTool,
 } from "@/server/ai/nara-tools";
+import {
+  STORE_INTERACTIONS,
+  clearThreadInteractionId,
+  isStaleInteractionError,
+  saveThreadInteractionId,
+} from "@/server/ai/interaction-memory";
 import { getDocument } from "@/server/storage/storage";
 import { hybridSearch } from "@/server/db/repos/rag-search";
 import { embed } from "@/server/ai/embeddings";
@@ -112,6 +118,14 @@ function generateSmartTitle(prompt: string): string {
       }
     }
 
+    // Gemini server-side memory: lanjutkan interaksi sebelumnya di thread yang sama.
+    // combinasikan dengan riwayat lokal di bawah sebagai cadangan anti-lupa.
+    let previousInteractionId: string | null = null;
+    try {
+      const tRow = await getThread(db, ctx.orgId, threadId!);
+      previousInteractionId = (tRow as { geminiInteractionId?: string | null } | null)?.geminiInteractionId ?? null;
+    } catch {}
+
     // Save user message to database
     await db.transaction((tx) =>
       addMessage(tx, threadId!, "user", trimmedMsg || "Lampiran dikirim", {
@@ -148,7 +162,9 @@ function generateSmartTitle(prompt: string): string {
 
     const liveNumbers = await getLiveNumbers(ctx.orgId);
     const history = await listMessages(db, threadId!);
-    const lastMessages = history.slice(-6).map((m) => `${m.role}: ${m.content}`).join("\n");
+    // 12 pesan terakhir agar konfirmasi singkat ("ok catatkan ya") tetap
+    // punya konteks objeknya (mis. aset laptop 10jt + metode Garis Lurus).
+    const lastMessages = history.slice(-12).map((m) => `${m.role}: ${m.content}`).join("\n");
 
     // Fetch Chart of Accounts (COA) leaf accounts so Gemini knows exact codes
     const accRows = await db.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
@@ -157,7 +173,8 @@ function generateSmartTitle(prompt: string): string {
       .map((a) => `${a.code}: ${a.name} (${a.type}, normal ${a.normal})`)
       .join(", ");
 
-    const systemInstruction = `Anda adalah Nara, Asisten Akuntansi AI Cerdas untuk UMKM Indonesia (berdasarkan standar IFRS/SAK EMKM).
+    const systemInstruction = `Anda adalah Akunio, Asisten Akuntansi AI Cerdas untuk UMKM Indonesia (berdasarkan standar IFRS/SAK EMKM).
+- Nama kamu adalah Akunio. Jika pengguna bertanya siapa namamu, siapa kamu, atau menyebut nama "Nara", tegaskan bahwa namamu adalah Akunio dan jangan pernah mengaku bernama Nara.
 - Anda ramah, solutif, teliti, dan selalu memberikan jawaban serta analisis pembukuan yang tuntas dalam Bahasa Indonesia.
 - Gaya Percakapan:
   * Berkomunikasilah secara natural, hangat, dan mengalir seperti percakapan dengan rekan kerja akuntan pribadi.
@@ -184,10 +201,34 @@ function generateSmartTitle(prompt: string): string {
     - 'get_daily_briefing': Ringkasan harian kas, laba, dan transaksi tertunda.
     - 'get_report': Laporan neraca, laba_rugi, arus_kas, perubahan_ekuitas.
     - 'list_accounts', 'drilldown_account_details', 'check_accounting_health', 'list_periods'.
+  * Persediaan & Inventaris Barang Dagang:
+    - 'list_inventory_items': Lihat daftar stok barang, harga modal rata-rata, harga jual, dan kategori.
+    - 'add_inventory_item': Tambah 1 barang baru ke master persediaan (butuh konfirmasi).
+    - 'batch_add_inventory_items': Tambah puluhan SKU barang sekaligus ke master persediaan (butuh konfirmasi).
+      JIKA PENGGUNA MENGUNGGAH FILE EXCEL / CSV ATAU MEMINTA INPUT BANYAK BARANG:
+      AI WAJIB mengekstrak data tabel barang tersebut secara cerdas (Kode SKU, Nama Barang, Kategori, Satuan, Stok Awal, Harga Modal, Harga Jual, Min. Stok),
+      kemudian memanggil tool 'batch_add_inventory_items' dengan list items lengkap untuk ditinjau dan disetujui pengguna!
+  * Aset Tetap & Penyusutan:
+    - 'recommend_asset_depreciation': Rekomendasi masa manfaat, tarif, dan metode penyusutan (Garis Lurus / Saldo Menurun).
+    - 'run_monthly_depreciation': Posting beban penyusutan bulanan ke buku besar.
+- ATURAN KONTEKS PERCAKAPAN (ANTI-LUPA, WAJIB):
+  * Jika pesan pengguna singkat / konfirmasi tanpa detail ("ok", "ya", "catatkan ya", "lanjutkan", "proses", "apa itu maksud ...?" lalu "ok"),
+    WAJIB ambil objek pembicaraan dari Riwayat Percakapan — JANGAN minta ulang detail yang sudah ada di riwayat.
+  * Contoh: riwayat memuat "aset laptop 10jt" + rekomendasi Garis Lurus 48 bulan, lalu user berkata "ok catatkan ya"
+    → anggap user menyetujui pencatatan aset laptop Rp10.000.000 metode Garis Lurus. Jangan jawab generik "sebutkan detail transaksinya".
+  * Hanya tanyakan field yang benar-benar belum ada (mis. sumber dana / tanggal beli bila belum disebut), sebutkan kembali nilai yang sudah diketahui agar user tinggal konfirmasi.
 - Aturan Pencatatan Transaksi:
   Ketika pengguna meminta mencatat transaksi (misal: "catat awal modal usaha saya 1 juta ya" atau "catat bayar sewa 5jt"):
   Pilihlah akun yang tepat dari Daftar Akun (COA) Tersedia (misal Kas: 1110, Modal Disetor: 3100), dan gunakan 'post_journal' atau 'create_journal_draft'.
   Pastikan jumlah Debit dan Kredit seimbang.
+- Aturan Pencatatan Persediaan Barang:
+  * Jika pengguna memberikan rincian barang (misal: "tambahkan barang SKU BRG-101 Kopi Susu modal 12rb jual 18rb stok 50"), gunakan 'add_inventory_item'.
+  * Jika pengguna mengunggah file spreadsheet/CSV atau memberikan daftar banyak barang, ekstrak seluruh baris barang dan panggil 'batch_add_inventory_items'.
+- Aturan Pencatatan Aset Tetap:
+  * Untuk pertanyaan ("metode apa?", "masa manfaat berapa?") panggil 'recommend_asset_depreciation' dulu bila relevan.
+  * Untuk perintah mencatat aset ("catatkan laptop 10jt ya"): ingat nama + nominal + metode dari riwayat.
+    Jika sumber dana / tanggal belum jelas, tanyakan HANYA itu (sambil menyebut kembali data yang sudah ada).
+    Jika user sudah menyetujui, siapkan pencatatan via tool jurnal/draf yang sesuai atau arahkan ke /aset/baru dengan ringkasan terisi — jangan mengulang pertanyaan umum.
 - Aturan Pengambilan Laporan / Briefing:
   Panggil tool terkait, lalu sampaikan ringkasannya secara natural dan informatif.
 - Jangan pernah mengarang angka; selalu gunakan data dari konteks atau hasil tool.`;
@@ -213,7 +254,7 @@ ${lastMessages}
 Pesan Pengguna:
 ${trimmedMsg}
 
-${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen. Ekstrak data transaksi/angka dari gambar/PDF terlampir bila relevan.)` : ""}`;
+${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen. Ekstrak data transaksi, barang persediaan, atau angka dari gambar/PDF/CSV/Excel terlampir bila relevan.)` : ""}`;
 
     // Prepare multimodal content parts
     const contentParts: Array<{ type: string; text?: string; data?: string; mime_type?: string }> = [
@@ -223,12 +264,20 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
     for (const att of attachments) {
       try {
         const buf = await getDocument(att.storageKey);
-        const type = att.mime === "application/pdf" ? "document" : "image";
-        contentParts.push({
-          type,
-          data: buf.toString("base64"),
-          mime_type: att.mime,
-        });
+        if (att.mime === "text/csv" || att.mime === "text/plain") {
+          // Send plain text content directly for high-fidelity extraction
+          contentParts.push({
+            type: "text",
+            text: `\n--- ISI FILE TERLAMPIR (${att.fileName}) ---\n${buf.toString("utf-8")}\n--- AKHIR ISI FILE ---`,
+          });
+        } else {
+          const type = att.mime === "application/pdf" ? "document" : "image";
+          contentParts.push({
+            type,
+            data: buf.toString("base64"),
+            mime_type: att.mime,
+          });
+        }
       } catch (err) {
         console.warn(`Gagal memuat attachment ${att.storageKey}`, err);
       }
@@ -265,22 +314,61 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
         const pendingCalls = new Map<number, PendingCall>();
 
         try {
-          const interactionStream = await ai.interactions.create({
-            model: selectedModel,
-            input: [{ type: "user_input", content: contentParts as never }] as never,
-            stream: true,
-            store: false,
-            tools: ALL_NARA_TOOLS,
-            generation_config: modelPreset === "deep" ? { thinking_summaries: "auto" } : undefined,
-          });
+          // Server-side memory per thread: store:true + previous_interaction_id.
+          // Jika id basi/kedaluwarsa, ulangi sekali tanpa chaining.
+          let interactionStream: AsyncIterable<{
+            event_type: string;
+            index?: number;
+            delta?: { type: string; text?: string; content?: { text?: string }; arguments?: string };
+            step?: { type: string; name?: string; arguments?: unknown; call_id?: string; id?: string };
+            interaction?: { id?: string };
+          }>;
+          let latestInteractionId: string | null = null;
+          const baseMemory = previousInteractionId
+            ? { store: STORE_INTERACTIONS, previous_interaction_id: previousInteractionId }
+            : { store: STORE_INTERACTIONS };
+          try {
+            interactionStream = (await ai.interactions.create({
+              model: selectedModel,
+              input: [{ type: "user_input", content: contentParts as never }] as never,
+              stream: true,
+              ...baseMemory,
+              tools: ALL_NARA_TOOLS,
+              generation_config: modelPreset === "deep" ? { thinking_summaries: "auto" } : undefined,
+            })) as unknown as typeof interactionStream;
+          } catch (e) {
+            if (previousInteractionId && isStaleInteractionError(e)) {
+              console.warn("previous_interaction_id basi, ulangi tanpa chaining", e);
+              await clearThreadInteractionId(ctx.orgId, threadId!);
+              previousInteractionId = null;
+              interactionStream = (await ai.interactions.create({
+                model: selectedModel,
+                input: [{ type: "user_input", content: contentParts as never }] as never,
+                stream: true,
+                store: STORE_INTERACTIONS,
+                tools: ALL_NARA_TOOLS,
+                generation_config: modelPreset === "deep" ? { thinking_summaries: "auto" } : undefined,
+              })) as unknown as typeof interactionStream;
+            } else {
+              throw e;
+            }
+          }
 
           for await (const event of interactionStream as AsyncIterable<{
             event_type: string;
             index?: number;
             delta?: { type: string; text?: string; content?: { text?: string }; arguments?: string };
             step?: { type: string; name?: string; arguments?: unknown; call_id?: string; id?: string };
+            interaction?: { id?: string };
           }>) {
             const idx = event.index ?? 0;
+
+            if (
+              (event.event_type === "interaction.created" || event.event_type === "interaction.completed") &&
+              event.interaction?.id
+            ) {
+              latestInteractionId = event.interaction.id;
+            }
 
             if (event.event_type === "step.start" && event.step?.type === "function_call") {
               const call = event.step;
@@ -360,7 +448,7 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                     callId,
                     toolName,
                     args,
-                    explanation: `Nara membutuhkan konfirmasi Anda untuk menjalankan '${toolName}'.`,
+                    explanation: `Akunio membutuhkan konfirmasi Anda untuk menjalankan '${toolName}'.`,
                   });
                   toolInvocations.push({
                     callId,
@@ -393,7 +481,7 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                 .map((t) => `Hasil Tool [${t.toolName}]:\n${JSON.stringify(t.result, null, 2)}`)
                 .join("\n\n");
 
-              const synthPrompt = `Anda adalah Nara, Asisten Akuntansi AI Cerdas.
+              const synthPrompt = `Anda adalah Akunio, Asisten Akuntansi AI Cerdas.
 Pengguna bertanya: "${trimmedMsg}"
 Hasil eksekusi data di sistem:
 ${toolContext}
@@ -411,16 +499,26 @@ Tugas:
                 model: selectedModel,
                 input: [{ type: "user_input", content: [{ type: "text", text: synthPrompt }] } as never],
                 stream: true,
-                store: false,
+                store: STORE_INTERACTIONS,
+                ...(latestInteractionId || previousInteractionId
+                  ? { previous_interaction_id: latestInteractionId ?? previousInteractionId! }
+                  : {}),
               });
 
               for await (const sEvent of synthStream as AsyncIterable<{
                 event_type: string;
                 delta?: { type: string; text?: string };
+                interaction?: { id?: string };
               }>) {
+                if (sEvent.event_type === "interaction.created" && sEvent.interaction?.id) {
+                  latestInteractionId = sEvent.interaction.id;
+                }
                 if (sEvent.event_type === "step.delta" && sEvent.delta?.type === "text" && sEvent.delta.text) {
                   fullText += sEvent.delta.text;
                   send({ type: "text", delta: sEvent.delta.text });
+                }
+                if (sEvent.event_type === "interaction.completed" && sEvent.interaction?.id) {
+                  latestInteractionId = sEvent.interaction.id;
                 }
               }
             } catch (sErr) {
@@ -437,7 +535,7 @@ Tugas:
             send({ type: "text", delta: fullText });
           }
 
-          // Persist assistant message to database
+          // Persist assistant message to database + simpan memory Gemini per thread
           const assistantMsg = await db.transaction((tx) =>
             addMessage(tx, threadId!, "assistant", fullText || "(Menunggu tindakan)", {
               reasoning: fullReasoning || undefined,
@@ -445,6 +543,9 @@ Tugas:
               citations: citations.length > 0 ? citations : null,
             }),
           );
+          if (latestInteractionId) {
+            await saveThreadInteractionId(ctx.orgId, threadId!, latestInteractionId);
+          }
 
           send({
             type: "done",

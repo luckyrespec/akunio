@@ -108,6 +108,107 @@ export function NaraHitlApprovalCard({
                 </div>
               )}
             </div>
+          ) : pendingApproval.toolName === "add_inventory_item" ? (
+            <div className="rounded-xl bg-canvas p-3.5 text-xs space-y-2 border border-rule text-ink">
+              <div className="flex items-center justify-between pb-2 border-b border-rule/50">
+                <div>
+                  <span className="text-[11px] font-mono text-ink-soft uppercase">Kode SKU</span>
+                  <div className="font-mono font-bold text-terra text-sm">
+                    {String((pendingApproval.args as Record<string, unknown>).code ?? "")}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[11px] font-mono text-ink-soft uppercase">Satuan</span>
+                  <div className="font-medium text-ink">
+                    {String((pendingApproval.args as Record<string, unknown>).unit ?? "Pcs")}
+                  </div>
+                </div>
+              </div>
+              <div className="font-semibold text-sm text-ink">
+                {String((pendingApproval.args as Record<string, unknown>).name ?? "")}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-rule/50">
+                <div>
+                  <span className="text-[11px] text-ink-soft">Stok Awal:</span>{" "}
+                  <strong className="font-mono">
+                    {String((pendingApproval.args as Record<string, unknown>).initialQty ?? 0)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[11px] text-ink-soft">Kategori:</span>{" "}
+                  <strong>
+                    {String((pendingApproval.args as Record<string, unknown>).category ?? "-")}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[11px] text-ink-soft">Harga Modal:</span>{" "}
+                  <strong className="font-mono">
+                    Rp {Number((pendingApproval.args as Record<string, unknown>).initialCostText || 0).toLocaleString("id-ID")}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[11px] text-ink-soft">Harga Jual:</span>{" "}
+                  <strong className="font-mono text-emerald-600 dark:text-emerald-400">
+                    Rp {Number((pendingApproval.args as Record<string, unknown>).standardSellingPriceText || 0).toLocaleString("id-ID")}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          ) : pendingApproval.toolName === "batch_add_inventory_items" &&
+            Array.isArray((pendingApproval.args as Record<string, unknown>).items) ? (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between text-xs text-ink-soft">
+                <span>
+                  Total Barang:{" "}
+                  <strong className="text-ink">
+                    {((pendingApproval.args as Record<string, unknown>).items as unknown[]).length} SKU
+                  </strong>
+                </span>
+                {Boolean((pendingApproval.args as Record<string, unknown>).sourceFileName) && (
+                  <span className="text-[11px] font-mono">
+                    Sumber: {String((pendingApproval.args as Record<string, unknown>).sourceFileName)}
+                  </span>
+                )}
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-rule bg-canvas">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-canvas/90 border-b border-rule text-ink-soft text-[11px] sticky top-0">
+                    <tr>
+                      <th className="px-2.5 py-1.5 font-medium">SKU</th>
+                      <th className="px-2.5 py-1.5 font-medium">Nama Barang</th>
+                      <th className="px-2.5 py-1.5 font-medium text-right">Stok</th>
+                      <th className="px-2.5 py-1.5 font-medium text-right">Modal</th>
+                      <th className="px-2.5 py-1.5 font-medium text-right">Jual</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-rule/60 text-ink">
+                    {(
+                      (pendingApproval.args as Record<string, unknown>).items as Array<
+                        Record<string, unknown>
+                      >
+                    ).map((it, idx) => (
+                      <tr key={idx} className="hover:bg-paper/50">
+                        <td className="px-2.5 py-1.5 font-semibold text-terra">
+                          {String(it.code ?? "")}
+                        </td>
+                        <td className="px-2.5 py-1.5 font-sans truncate max-w-[150px]">
+                          {String(it.name ?? "")}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right font-mono">
+                          {String(it.initialQty ?? 0)}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right font-mono">
+                          {it.initialCostText ? `Rp ${Number(it.initialCostText).toLocaleString("id-ID")}` : "-"}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                          {it.standardSellingPriceText ? `Rp ${Number(it.standardSellingPriceText).toLocaleString("id-ID")}` : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : (
             <div className="rounded-xl bg-canvas p-3 font-mono text-[11px] leading-relaxed border border-rule text-ink">
               {JSON.stringify(pendingApproval.args, null, 2)}

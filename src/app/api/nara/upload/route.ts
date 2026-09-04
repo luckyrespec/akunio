@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     for (const file of files) {
       if (!ALLOWED_MIMES.includes(file.type as never)) {
         return NextResponse.json(
-          { error: `Tipe file ${file.name} tidak didukung. Tipe file harus gambar (PNG, JPG, WebP) atau PDF.` },
+          { error: `Tipe file ${file.name} tidak didukung. Tipe file harus gambar (PNG, JPG, WebP), PDF, atau Spreadsheet (CSV / Excel).` },
           { status: 400 },
         );
       }

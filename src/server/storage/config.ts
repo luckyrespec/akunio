@@ -1,7 +1,14 @@
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 
 export const ALLOWED_MIMES = [
-  "image/jpeg", "image/png", "image/webp", "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+  "text/csv",
+  "text/plain",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ] as const;
 
 const EXT: Record<string, string> = {
@@ -9,6 +16,10 @@ const EXT: Record<string, string> = {
   "image/png": ".png",
   "image/webp": ".webp",
   "application/pdf": ".pdf",
+  "text/csv": ".csv",
+  "text/plain": ".csv",
+  "application/vnd.ms-excel": ".csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
 };
 
 export function extForMime(mime: string): string {

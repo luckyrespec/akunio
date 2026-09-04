@@ -21,6 +21,7 @@ import {
   Coins,
   ShieldCheck,
   TrendingUp,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -330,7 +331,11 @@ export function BatchItemClient() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full space-y-6">
+    <form
+      onSubmit={handleSubmit}
+      className="w-full space-y-6"
+      data-assistant-context="Halaman Input Cepat Barang Persediaan (Grid / Batch). Pengguna dapat mengisi massal tabel SKU atau meminta asisten mengekstrak file Excel/CSV ke dalam katalog persediaan."
+    >
       {/* Back Link */}
       <div className="mb-2">
         <Link
@@ -357,6 +362,24 @@ export function BatchItemClient() {
         eyebrow="Isi tabel massal mirip spreadsheet Excel atau unggah template CSV untuk mendaftarkan puluhan SKU sekaligus."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // Trigger event or dispatch to open assistant
+                const copilotTrigger = document.querySelector('button[aria-label*="Buka Asisten"]') as HTMLButtonElement | null;
+                if (copilotTrigger) {
+                  copilotTrigger.click();
+                }
+              }}
+              className="h-9 px-3 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-terra transition-colors shadow-xs"
+              title="Buka Asisten AI untuk bantu ekstrak file atau catat barang"
+            >
+              <Sparkles className="size-3.5 mr-1.5 text-terra" />
+              Bantuan Asisten AI
+            </Button>
+
             <Button
               type="button"
               variant="outline"
