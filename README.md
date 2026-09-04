@@ -1,6 +1,8 @@
-# 📖 Neraca — AI Accounting SaaS
+# Akunio — SaaS Akuntansi Berbasis AI untuk UKM
 
-> **Sistem Pembukuan Berbasis AI dengan Standar IFRS & SAK EMKM, Integritas Buku Besar Imutabel, dan Antarmuka Paper & Ink Matte.**
+> **Pembukuan double-entry yang rapi tanpa drama: foto nota langsung jadi jurnal seimbang, buku besar dikunci anti-utak-atik, dan laporan keuangan standar IFRS / SAK EMKM tersedia real-time.**
+
+Akunio dirancang untuk pemilik usaha kecil-menengah dan akuntan yang ingin hijrah dari spreadsheet: transaksi tercatat lewat input manual, chat AI, atau foto struk — semuanya melewati validasi keseimbangan (Debit = Kredit) sebelum diposting, dan jurnal yang sudah diposting tidak bisa diubah (koreksi hanya lewat jurnal pembalik yang tertaut).
 
 ---
 
@@ -24,14 +26,14 @@
 
 ## 1. Gambaran Umum & Nilai Bisnis
 
-**Neraca** adalah aplikasi akuntansi modern (*SaaS*) yang dirancang khusus untuk Usaha Kecil dan Menengah (UKM/SME) yang membutuhkan kepatuhan standar akuntansi keuangan (IFRS for SMEs / SAK EMKM) tanpa kerumitan administrasi manual.
+**Akunio** adalah aplikasi akuntansi modern (*SaaS*) yang dirancang khusus untuk Usaha Kecil dan Menengah (UKM/SME) yang membutuhkan kepatuhan standar akuntansi keuangan (IFRS for SMEs / SAK EMKM) tanpa kerumitan administrasi manual.
 
 Aplikasi ini mengatasi 3 masalah utama bisnis:
 1. **Human Error & Jurnal Tidak Seimbang**: Jurnal manual sering mengalami kesalahan pencatatan posisi debit/kredit dan saldo akun.
 2. **Keterlambatan Pelaporan Keuangan**: Bukti kuitansi dan nota menumpuk berhari-hari sebelum dicatat oleh akuntan.
 3. **Ketiadaan Jejak Audit yang Kredibel**: Manipulasi angka atau penghapusan data sepihak merusak integritas laporan keuangan.
 
-Neraca menyelesaikannya dengan menggabungkan **Core Ledger Imutabel** (tidak bisa diubah sembarangan setelah diposting) dan **Nara AI Copilot** yang mengekstraksi nota belanja, mencocokkan bagan akun (COA), dan menyusun laporan laba rugi secara seketika.
+Akunio menyelesaikannya dengan menggabungkan **Core Ledger Imutabel** (tidak bisa diubah sembarangan setelah diposting) dan **Nara AI Copilot** yang mengekstraksi nota belanja, mencocokkan bagan akun (COA), dan menyusun laporan laba rugi secara seketika.
 
 ---
 
@@ -80,7 +82,7 @@ flowchart TD
 4. **Draft Preparation**: Jurnal disajikan dalam bentuk draf yang rapi dan transparan.
 
 ### C. Mekanisme Persetujuan Human-in-The-Loop (HITL)
-Untuk menjamin kontrol internal perusahaan, Neraca menerapkan dua mode izin:
+Untuk menjamin kontrol internal perusahaan, Akunio menerapkan dua mode izin:
 - 🛡️ **Izin Transaksi (Smart Mode — Direkomendasikan)**: AI menyusun draf dan kalkulasi, namun mewajibkan otorisasi klik dari pengguna sebelum jurnal diposting ke buku besar.
 - ⚡ **Otomatis (Autonomous Mode)**: AI diizinkan mengeksekusi pencatatan rutin secara instan tanpa konfirmasi berulang jika tingkat keyakinan tinggi.
 
