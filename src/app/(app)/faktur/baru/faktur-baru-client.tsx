@@ -1,0 +1,693 @@
+"use client";
+
+import * as React from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "motion/react";
+import { Loader2, Plus, Trash2, FileText, Scale, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { AnimatedNumber, Stagger, StaggerItem } from "@/components/motion";
+import { TemplateFormal, type InvoiceDetailData } from "@/components/invoicing/template-formal";
+import { Money } from "@/core/money/money";
+import { calculateInvoiceTotals } from "@/core/invoicing/calculations";
+import { createInvoiceWithPostingAction } from "@/server/actions/invoice.actions";
+import type { InvoiceType } from "@/server/db/schema/invoicing";
+import { cn } from "@/lib/utils";
+
+export interface ContactOption {
+  id: string;
+  name: string;
+  type: string;
+  paymentTermsDays: number;
+}
+
+interface ItemRow {
+  id: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  discount: string;
+  taxRate: string;
+}
+
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function dueFromTerms(fromISO: string, days: number) {
+  const d = new Date(fromISO || todayISO());
+  d.setDate(d.getDate() + (days || 30));
+  return d.toISOString().slice(0, 10);
+}
+
+function emptyRow(): ItemRow {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    description: "",
+    quantity: "1",
+    unitPrice: "",
+    discount: "0",
+    taxRate: "0",
+  };
+}
+
+function toMinorSafe(numText: string): bigint {
+  return BigInt(Math.round((parseFloat(numText) || 0) * 100));
+}
+
+export function FakturBaruClient({
+  contacts,
+  initialType,
+  orgName,
+}: {
+  contacts: ContactOption[];
+  initialType: InvoiceType;
+  orgName: string;
+}) {
+  const router = useRouter();
+
+  const contactsFor = React.useCallback(
+    (t: InvoiceType) =>
+      contacts.filter((c) =>
+        t === "INVOICE" ? c.type === "CUSTOMER" || c.type === "BOTH" : c.type === "VENDOR" || c.type === "BOTH",
+      ),
+    [contacts],
+  );
+
+  const [type, setType] = useState<InvoiceType>(initialType);
+  const [contactId, setContactId] = useState(() => contactsFor(initialType)[0]?.id || "");
+  const [issueDate, setIssueDate] = useState(todayISO);
+  const [dueDate, setDueDate] = useState(() =>
+    dueFromTerms(todayISO(), contactsFor(initialType)[0]?.paymentTermsDays || 30),
+  );
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<ItemRow[]>([emptyRow()]);
+  const [postToLedger, setPostToLedger] = useState(true);
+  const [view, setView] = useState<"form" | "preview">("form");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [postWarning, setPostWarning] = useState<{ id: string; message: string } | null>(null);
+
+  const isInvoice = type === "INVOICE";
+
+  function handleTypeChange(t: InvoiceType) {
+    setType(t);
+    setPostWarning(null);
+    const list = contactsFor(t);
+    const first = list[0];
+    setContactId(first?.id || "");
+    setDueDate(dueFromTerms(issueDate, first?.paymentTermsDays || 30));
+  }
+
+  function handleContactChange(id: string) {
+    setContactId(id);
+    const found = contacts.find((c) => c.id === id);
+    if (found) setDueDate(dueFromTerms(issueDate, found.paymentTermsDays || 30));
+  }
+
+  function addItem() {
+    setItems((prev) => [...prev, emptyRow()]);
+  }
+
+  function removeItem(id: string) {
+    if (items.length <= 1) return;
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  }
+
+  function updateItem(id: string, field: keyof ItemRow, val: string) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: val } : it)));
+  }
+
+  const totals = useMemo(() => {
+    return calculateInvoiceTotals(
+      items.map((it) => ({
+        quantity: parseFloat(it.quantity) || 0,
+        unitPriceMinor: toMinorSafe(it.unitPrice),
+        discountMinor: toMinorSafe(it.discount),
+        taxRatePercent: parseFloat(it.taxRate) || 0,
+      })),
+      0n,
+    );
+  }, [items]);
+
+  const selectedContact = contacts.find((c) => c.id === contactId);
+  const netSubtotal = totals.subtotalMinor - totals.discountMinor;
+
+  const draft: InvoiceDetailData = {
+    id: "draft",
+    type,
+    invoiceNumber: isInvoice ? "INV-DRAF" : "BILL-DRAF",
+    issueDate: issueDate || todayISO(),
+    dueDate: dueDate || issueDate || todayISO(),
+    subtotalMinor: totals.subtotalMinor,
+    discountMinor: totals.discountMinor,
+    taxMinor: totals.taxMinor,
+    totalMinor: totals.totalMinor,
+    amountPaidMinor: 0n,
+    status: "ISSUED",
+    notes: notes || null,
+    orgName,
+    contact: {
+      id: selectedContact?.id || "-",
+      name: selectedContact?.name || "(Pilih kontak)",
+      phone: null,
+      email: null,
+      address: null,
+      taxId: null,
+    },
+    items: items.map((it, i) => ({
+      id: it.id,
+      description: it.description || `(Item ${i + 1})`,
+      quantity: it.quantity || "0",
+      unitPriceMinor: toMinorSafe(it.unitPrice),
+      discountMinor: toMinorSafe(it.discount),
+      taxRatePercent: it.taxRate || "0",
+      totalMinor: totals.items[i]?.totalMinor ?? 0n,
+    })),
+    payments: [],
+  };
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setPostWarning(null);
+    if (!contactId) {
+      setError("Silakan pilih mitra kontak.");
+      return;
+    }
+    if (items.some((it) => !it.description.trim() || !it.unitPrice)) {
+      setError("Semua baris item wajib memiliki deskripsi dan harga satuan.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await createInvoiceWithPostingAction(
+        {
+          type,
+          contactId,
+          issueDate,
+          dueDate: dueDate || issueDate,
+          notes: notes.trim() || null,
+        },
+        items.map((it) => ({
+          description: it.description.trim(),
+          quantity: it.quantity,
+          unitPriceMinor: toMinorSafe(it.unitPrice),
+          discountMinor: toMinorSafe(it.discount),
+          taxRatePercent: it.taxRate,
+        })),
+        postToLedger,
+      );
+      if (!res.ok || !res.data) {
+        setError(res.error || "Gagal membuat faktur.");
+        return;
+      }
+      if (res.data.postWarning) {
+        setPostWarning({ id: res.data.invoice.id, message: res.data.postWarning });
+        return;
+      }
+      router.push(`/faktur/${res.data.invoice.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal membuat faktur.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* View switcher */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-ink-soft">
+          {view === "form"
+            ? "Lengkapi dokumen, lalu periksa pratinjau sebelum diterbitkan."
+            : "Periksa dokumen dan jurnal — persis seperti yang akan tersimpan."}
+        </p>
+        <div className="flex items-center rounded-lg border border-rule bg-paper p-1 shadow-xs" role="tablist" aria-label="Tampilan editor">
+          {(["form", "preview"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={view === v}
+              onClick={() => setView(v)}
+              className={cn(
+                "relative rounded-md px-3.5 py-1.5 text-xs font-medium transition-colors",
+                view === v ? "text-terra font-semibold" : "text-ink-soft hover:text-ink",
+              )}
+            >
+              {view === v && (
+                <motion.span
+                  layoutId="faktur-baru-view-pill"
+                  transition={{ duration: 0.24, ease: EASE_OUT }}
+                  className="absolute inset-0 rounded-md bg-canvas shadow-xs"
+                />
+              )}
+              <span className="relative z-10">{v === "form" ? "Formulir" : "Pratinjau"}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <AnimatePresence mode="popLayout" initial={false}>
+        {view === "form" ? (
+          <motion.div
+            key="form-view"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+          >
+      <div className="mx-auto w-full max-w-4xl">
+        <Stagger className="flex min-w-0 flex-col gap-6" staggerDelay={0.07}>
+          {/* Section 1 — Pihak & tanggal */}
+          <StaggerItem>
+            <Card className="border-rule bg-paper shadow-xs">
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="font-display text-base text-ink">
+                      {isInvoice ? "Pelanggan & Tanggal" : "Pemasok & Tanggal"}
+                    </CardTitle>
+                    <CardDescription>
+                      {isInvoice ? "Kepada siapa faktur ini ditagihkan." : "Dari vendor mana tagihan ini diterima."}
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center rounded-lg border border-rule bg-canvas p-1" role="tablist" aria-label="Jenis dokumen">
+                    {(["INVOICE", "BILL"] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        role="tab"
+                        aria-selected={type === t}
+                        onClick={() => handleTypeChange(t)}
+                        className={cn(
+                          "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                          type === t ? "bg-paper text-terra font-semibold shadow-2xs" : "text-ink-soft hover:text-ink",
+                        )}
+                      >
+                        {t === "INVOICE" ? "Penjualan" : "Pembelian"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-4">
+                  {error && (
+                    <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 dark:text-rose-300">
+                      {error}
+                    </div>
+                  )}
+                  {postWarning && (
+                    <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+                      <p className="font-semibold">Faktur tersimpan, tetapi jurnal gagal diposting:</p>
+                      <p className="mt-0.5">{postWarning.message}</p>
+                      <Link href={`/faktur/${postWarning.id}`} className="mt-1.5 inline-flex items-center gap-1 font-medium text-terra hover:underline">
+                        Buka faktur untuk posting manual <ArrowRight className="size-3" />
+                      </Link>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="fk-kontak">{isInvoice ? "Pelanggan *" : "Pemasok *"}</Label>
+                      <select
+                        id="fk-kontak"
+                        value={contactId}
+                        onChange={(e) => handleContactChange(e.target.value)}
+                        className="h-9 w-full rounded-lg border border-rule bg-canvas px-3 text-xs text-ink shadow-2xs focus:outline-none focus:ring-1 focus:ring-terra"
+                        required
+                      >
+                        <option value="" disabled>Pilih Kontak</option>
+                        {contactsFor(type).map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="fk-terbit">Tanggal Terbit</Label>
+                      <Input
+                        id="fk-terbit"
+                        type="date"
+                        value={issueDate}
+                        onChange={(e) => setIssueDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="fk-tempo">Jatuh Tempo</Label>
+                      <Input
+                        id="fk-tempo"
+                        type="date"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="fk-catatan">Catatan / Info Pembayaran</Label>
+                    <Textarea
+                      id="fk-catatan"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Contoh: Transfer ke BCA 1234567890 a/n Perusahaan, maksimal 30 hari"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+
+          {/* Section 2 — Rincian item */}
+          <StaggerItem>
+            <Card className="border-rule bg-paper shadow-xs">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="font-display text-base text-ink">Rincian Barang / Jasa</CardTitle>
+                    <CardDescription>{items.length} baris · total dihitung otomatis.</CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addItem}
+                    className="h-8 border-rule text-xs"
+                  >
+                    <Plus data-icon="inline-start" />
+                    Tambah Baris
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[180px]">Deskripsi</TableHead>
+                      <TableHead className="w-16 text-center">Qty</TableHead>
+                      <TableHead className="w-32 text-right">Harga</TableHead>
+                      <TableHead className="w-28 text-right">Diskon</TableHead>
+                      <TableHead className="w-20 text-center">PPN</TableHead>
+                      <TableHead className="w-28 text-right">Jumlah</TableHead>
+                      <TableHead className="w-10"><span className="sr-only">Aksi</span></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      {items.map((it, idx) => (
+                        <motion.tr
+                          key={it.id}
+                          layout
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.99 }}
+                          transition={{ duration: 0.2, ease: EASE_OUT }}
+                          className="border-b border-rule/60 last:border-0"
+                        >
+                          <TableCell>
+                            <Input
+                              placeholder={`Item ${idx + 1} — deskripsi barang/jasa`}
+                              value={it.description}
+                              onChange={(e) => updateItem(it.id, "description", e.target.value)}
+                              className="h-8 bg-paper text-xs"
+                              aria-label={`Deskripsi baris ${idx + 1}`}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={it.quantity}
+                              onChange={(e) => updateItem(it.id, "quantity", e.target.value)}
+                              className="h-8 bg-paper text-center text-xs"
+                              aria-label={`Kuantitas baris ${idx + 1}`}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={it.unitPrice}
+                              onChange={(e) => updateItem(it.id, "unitPrice", e.target.value)}
+                              placeholder="Rp"
+                              className="tnum h-8 bg-paper text-right text-xs"
+                              aria-label={`Harga satuan baris ${idx + 1}`}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={it.discount}
+                              onChange={(e) => updateItem(it.id, "discount", e.target.value)}
+                              placeholder="Rp"
+                              className="tnum h-8 bg-paper text-right text-xs"
+                              aria-label={`Diskon baris ${idx + 1}`}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <select
+                              value={it.taxRate}
+                              onChange={(e) => updateItem(it.id, "taxRate", e.target.value)}
+                              className="w-full rounded-md border border-rule bg-paper px-1 py-1.5 text-center text-[11px] text-ink focus:outline-none focus:ring-1 focus:ring-terra"
+                              aria-label={`PPN baris ${idx + 1}`}
+                            >
+                              <option value="0">0%</option>
+                              <option value="11">11%</option>
+                              <option value="12">12%</option>
+                            </select>
+                          </TableCell>
+                          <TableCell className="tnum text-right text-xs font-medium text-ink">
+                            {Money.fromMinor(totals.items[idx]?.totalMinor ?? 0n).formatIdr()}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <button
+                              type="button"
+                              onClick={() => removeItem(it.id)}
+                              disabled={items.length <= 1}
+                              className="rounded-md p-1.5 text-ink-soft transition-colors hover:bg-rose-500/10 hover:text-destructive disabled:opacity-30"
+                              aria-label={`Hapus baris ${idx + 1}`}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </TableCell>
+                        </motion.tr>
+                      ))}
+                    </AnimatePresence>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+
+          {/* Section 3 — Posting jurnal */}
+          <StaggerItem>
+            <Card className="border-rule bg-paper shadow-xs">
+              <CardHeader>
+                <CardTitle className="font-display text-base text-ink">Posting ke Jurnal</CardTitle>
+                <CardDescription>
+                  {isInvoice
+                    ? "Dr 1200 Piutang Usaha / Cr 4100 Pendapatan + 2200 PPN Keluaran."
+                    : "Dr 5100 Beban/Pembelian + 1400 PPN Masukan / Cr 2100 Utang Usaha."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <label htmlFor="fk-posting" className="flex cursor-pointer items-start gap-3 rounded-xl border border-rule bg-canvas/60 p-3.5">
+                  <input
+                    id="fk-posting"
+                    type="checkbox"
+                    checked={postToLedger}
+                    onChange={(e) => setPostToLedger(e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 accent-terra"
+                  />
+                  <span>
+                    <span className="block text-xs font-semibold text-ink">Langsung posting ke jurnal saat diterbitkan</span>
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-soft">
+                      Matikan jika dokumen ini hanya arsip — Anda tetap bisa mempostingnya dari daftar faktur.
+                    </span>
+                  </span>
+                </label>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+
+          <div className="flex items-center justify-end gap-2.5">
+            <Link href="/faktur">
+              <Button type="button" variant="outline" disabled={loading}>
+                Batal
+              </Button>
+            </Link>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={() => setView("preview")}
+              className="border-terra/40 text-terra hover:bg-terra/10"
+            >
+              <FileText data-icon="inline-start" />
+              Lihat Pratinjau
+            </Button>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="bg-terra text-white shadow-xs hover:bg-terra/90 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]"
+            >
+              {loading && <Loader2 data-icon="inline-start" className="animate-spin" />}
+              {isInvoice ? "Terbitkan Faktur" : "Catat Tagihan"}
+            </Button>
+          </div>
+        </Stagger>
+      </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="preview-view"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+          >
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="min-w-0">
+          <TemplateFormal invoice={draft} />
+        </div>
+        <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">
+          {(error || postWarning) && (
+            <div className="flex flex-col gap-3">
+              {error && (
+                <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 dark:text-rose-300">
+                  {error}
+                </div>
+              )}
+              {postWarning && (
+                <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+                  <p className="font-semibold">Faktur tersimpan, tetapi jurnal gagal diposting:</p>
+                  <p className="mt-0.5">{postWarning.message}</p>
+                  <Link href={`/faktur/${postWarning.id}`} className="mt-1.5 inline-flex items-center gap-1 font-medium text-terra hover:underline">
+                    Buka faktur untuk posting manual <ArrowRight className="size-3" />
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+          <Card className="border-rule bg-paper shadow-xs">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between font-display text-sm text-ink">
+                <span className="flex items-center gap-2">
+                  <Scale className="size-4 text-terra" />
+                  Total Tagihan
+                </span>
+                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-700">
+                  Seimbang
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="tnum font-display text-2xl font-semibold tracking-tight text-terra">
+                <AnimatedNumber minor={totals.totalMinor} />
+              </div>
+              <p className="mt-1 text-[11px] text-ink-soft">
+                {totals.subtotalMinor > 0n && <>Subtotal {Money.fromMinor(totals.subtotalMinor).formatIdr()}</>}
+                {totals.taxMinor > 0n && <> + PPN {Money.fromMinor(totals.taxMinor).formatIdr()}</>}
+                {postToLedger ? " · akan diposting ke jurnal." : " · arsip saja, tanpa jurnal."}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-rule bg-paper shadow-xs">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-display text-sm text-ink">Jurnal yang Terbentuk</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!postToLedger ? (
+                <p className="text-xs leading-relaxed text-ink-soft">
+                  Posting dimatikan — tidak ada jurnal yang terbentuk.
+                </p>
+              ) : totals.totalMinor <= 0n ? (
+                <p className="text-xs leading-relaxed text-ink-soft">
+                  Lengkapi item agar jurnal terbentuk.
+                </p>
+              ) : isInvoice ? (
+                <div className="flex flex-col gap-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span><span className="mr-1.5 font-mono font-bold text-emerald-600">D</span><span className="font-mono font-medium">1200</span><span className="mx-1 text-ink-soft">·</span>Piutang Usaha</span>
+                    <span className="tnum shrink-0 font-medium">{Money.fromMinor(totals.totalMinor).formatIdr()}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span><span className="mr-1.5 pl-4 font-mono font-bold text-terra">K</span><span className="font-mono font-medium">4100</span><span className="mx-1 text-ink-soft">·</span>Pendapatan</span>
+                    <span className="tnum shrink-0 font-medium">{Money.fromMinor(netSubtotal).formatIdr()}</span>
+                  </div>
+                  {totals.taxMinor > 0n && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span><span className="mr-1.5 pl-4 font-mono font-bold text-terra">K</span><span className="font-mono font-medium">2200</span><span className="mx-1 text-ink-soft">·</span>PPN Keluaran</span>
+                      <span className="tnum shrink-0 font-medium">{Money.fromMinor(totals.taxMinor).formatIdr()}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span><span className="mr-1.5 font-mono font-bold text-emerald-600">D</span><span className="font-mono font-medium">5100</span><span className="mx-1 text-ink-soft">·</span>Beban/Pembelian</span>
+                    <span className="tnum shrink-0 font-medium">{Money.fromMinor(netSubtotal).formatIdr()}</span>
+                  </div>
+                  {totals.taxMinor > 0n && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span><span className="mr-1.5 font-mono font-bold text-emerald-600">D</span><span className="font-mono font-medium">1400</span><span className="mx-1 text-ink-soft">·</span>PPN Masukan</span>
+                      <span className="tnum shrink-0 font-medium">{Money.fromMinor(totals.taxMinor).formatIdr()}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <span><span className="mr-1.5 pl-4 font-mono font-bold text-terra">K</span><span className="font-mono font-medium">2100</span><span className="mx-1 text-ink-soft">·</span>Utang Usaha</span>
+                    <span className="tnum shrink-0 font-medium">{Money.fromMinor(totals.totalMinor).formatIdr()}</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-col gap-2.5">
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-terra text-white shadow-xs hover:bg-terra/90 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]"
+            >
+              {loading && <Loader2 data-icon="inline-start" className="animate-spin" />}
+              {isInvoice ? "Terbitkan Faktur" : "Catat Tagihan"}
+            </Button>
+            <Button type="button" variant="outline" disabled={loading} onClick={() => setView("form")} className="w-full">
+              ← Kembali Edit
+            </Button>
+          </div>
+        </div>
+      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </form>
+  );
+}

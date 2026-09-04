@@ -198,7 +198,7 @@ export function AssistantWidget() {
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full border border-terra/40 bg-paper py-2 pl-3.5 pr-4 text-xs font-semibold text-ink shadow-lg backdrop-blur-md transition-all duration-200 ease-out hover:scale-102 hover:border-terra hover:shadow-xl active:scale-[0.98] group",
+          "fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full border border-terra/40 bg-paper py-2 pl-3.5 pr-4 text-xs font-semibold text-ink shadow-lg backdrop-blur-md transition-[transform,box-shadow,border-color] duration-200 ease-out hover:scale-102 hover:border-terra hover:shadow-xl active:scale-[0.98] group",
           open && "ring-2 ring-terra/30",
         )}
         aria-label="Buka Asisten Nara (Ctrl+J)"
@@ -225,7 +225,7 @@ export function AssistantWidget() {
       {/* 2. RIGHT SIDE-SHEET COPILOT PANEL */}
       <aside
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex h-full w-full sm:w-[420px] md:w-[460px] max-w-full flex-col border-l border-rule bg-paper shadow-2xl transition-transform duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]",
+          "fixed inset-y-0 right-0 z-50 flex h-full w-full sm:w-[420px] md:w-[460px] max-w-full flex-col border-l border-rule bg-paper shadow-2xl transition-transform duration-300 [transition-timing-function:var(--ease-drawer,cubic-bezier(0.32,0.72,0,1))]",
           open ? "translate-x-0" : "translate-x-full pointer-events-none",
         )}
       >

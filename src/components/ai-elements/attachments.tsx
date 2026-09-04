@@ -67,7 +67,7 @@ export function AttachmentItem({
     return (
       <div
         className={cn(
-          "group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-rule bg-paper shadow-2xs transition-all hover:border-terra/60 hover:shadow-xs",
+          "group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-rule bg-paper shadow-2xs transition-[border-color,box-shadow] hover:border-terra/60 hover:shadow-xs",
           isImage ? "h-36 sm:h-40" : "h-24 sm:h-28 p-3",
           className,
         )}
@@ -79,7 +79,7 @@ export function AttachmentItem({
             <img
               src={attachment.previewUrl || attachment.url}
               alt={attachment.fileName}
-              className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="size-full object-cover transition-transform duration-300 [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-105"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-90" />
             <div className="absolute bottom-2 left-2.5 right-2.5 text-white">
@@ -120,7 +120,7 @@ export function AttachmentItem({
           <button
             type="button"
             onClick={onRemove}
-            className="absolute right-2 top-2 z-10 flex size-6 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-xs transition-transform hover:scale-110 active:scale-95"
+            className="absolute right-2 top-2 z-10 flex size-6 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-xs transition-transform [@media(hover:hover)_and_(pointer:fine)]:hover:scale-110 active:scale-[0.98]"
             aria-label="Hapus lampiran"
           >
             <X className="size-3.5" />
@@ -134,7 +134,7 @@ export function AttachmentItem({
   return (
     <div
       className={cn(
-        "group relative flex items-center gap-2 rounded-xl border border-rule bg-canvas/80 px-2.5 py-1.5 text-xs text-ink shadow-2xs transition-all hover:bg-canvas hover:border-terra/40",
+        "group relative flex items-center gap-2 rounded-xl border border-rule bg-canvas/80 px-2.5 py-1.5 text-xs text-ink shadow-2xs transition-colors hover:bg-canvas hover:border-terra/40",
         className,
       )}
       {...props}

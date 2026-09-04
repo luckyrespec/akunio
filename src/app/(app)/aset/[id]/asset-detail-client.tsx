@@ -174,7 +174,7 @@ export function AssetDetailClient({
         <button
           type="button"
           onClick={() => setActiveTab("schedule")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-[color,background-color,box-shadow] ${
             activeTab === "schedule"
               ? "bg-paper text-terra font-semibold shadow-xs"
               : "text-ink-soft hover:text-ink"
@@ -186,7 +186,7 @@ export function AssetDetailClient({
         <button
           type="button"
           onClick={() => setActiveTab("info")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-[color,background-color,box-shadow] ${
             activeTab === "info"
               ? "bg-paper text-terra font-semibold shadow-xs"
               : "text-ink-soft hover:text-ink"

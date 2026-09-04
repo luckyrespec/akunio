@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { Plus, Search, Phone, Mail, MapPin, Edit, Users, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { type ContactType } from "@/server/db/schema/invoicing";
 import { normalizeIndonesianPhone } from "@/core/invoicing/whatsapp";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { Reveal } from "@/components/motion";
 
 export interface ContactRow {
   id: string;
@@ -68,7 +70,7 @@ export function ContactDirectory({ initialContacts }: ContactDirectoryProps) {
               setEditingContact(null);
               setDialogOpen(true);
             }}
-            className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs"
+            className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]"
           >
             <Plus className="size-4 mr-1.5" />
             Tambah Kontak Baru
@@ -79,39 +81,66 @@ export function ContactDirectory({ initialContacts }: ContactDirectoryProps) {
       {/* Filter & Search Bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {/* Type Tabs */}
-        <div className="flex items-center gap-1.5 rounded-lg border border-rule bg-canvas p-1 text-xs">
+        <div className="flex items-center gap-1.5 rounded-lg border border-rule bg-canvas p-1 text-xs" role="tablist">
           <button
             type="button"
+            role="tab"
+            aria-selected={filterType === "ALL"}
             onClick={() => setFilterType("ALL")}
-            className={`rounded-md px-3 py-1 font-medium transition-colors ${
+            className={`relative rounded-md px-3 py-1 font-medium transition-colors ${
               filterType === "ALL"
-                ? "bg-paper text-ink shadow-2xs"
+                ? "text-ink"
                 : "text-ink-soft hover:text-ink"
             }`}
           >
-            Semua ({contactsList.length})
+            {filterType === "ALL" && (
+              <motion.span
+                layoutId="kontak-type-pill"
+                transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+                className="absolute inset-0 rounded-md bg-paper shadow-2xs"
+              />
+            )}
+            <span className="relative z-10">Semua ({contactsList.length})</span>
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={filterType === "CUSTOMER"}
             onClick={() => setFilterType("CUSTOMER")}
-            className={`rounded-md px-3 py-1 font-medium transition-colors ${
+            className={`relative rounded-md px-3 py-1 font-medium transition-colors ${
               filterType === "CUSTOMER"
-                ? "bg-paper text-ink shadow-2xs"
+                ? "text-ink"
                 : "text-ink-soft hover:text-ink"
             }`}
           >
-            Pelanggan ({customerCount})
+            {filterType === "CUSTOMER" && (
+              <motion.span
+                layoutId="kontak-type-pill"
+                transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+                className="absolute inset-0 rounded-md bg-paper shadow-2xs"
+              />
+            )}
+            <span className="relative z-10">Pelanggan ({customerCount})</span>
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={filterType === "VENDOR"}
             onClick={() => setFilterType("VENDOR")}
-            className={`rounded-md px-3 py-1 font-medium transition-colors ${
+            className={`relative rounded-md px-3 py-1 font-medium transition-colors ${
               filterType === "VENDOR"
-                ? "bg-paper text-ink shadow-2xs"
+                ? "text-ink"
                 : "text-ink-soft hover:text-ink"
             }`}
           >
-            Pemasok ({vendorCount})
+            {filterType === "VENDOR" && (
+              <motion.span
+                layoutId="kontak-type-pill"
+                transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+                className="absolute inset-0 rounded-md bg-paper shadow-2xs"
+              />
+            )}
+            <span className="relative z-10">Pemasok ({vendorCount})</span>
           </button>
         </div>
 
@@ -128,10 +157,26 @@ export function ContactDirectory({ initialContacts }: ContactDirectoryProps) {
       </div>
 
       {/* Contacts Table */}
+      <Reveal delay={0.08}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.div
+          key={`${filterType}-${search}`}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+        >
       <div className="rounded-xl border border-rule bg-paper shadow-2xs overflow-hidden">
         {filtered.length === 0 ? (
           <div className="p-12 text-center text-xs text-ink-soft">
-            <Users className="size-8 mx-auto mb-2 text-ink-soft/40" />
+            <motion.span
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+              className="inline-block"
+            >
+              <Users className="size-8 mx-auto mb-2 text-ink-soft/40" />
+            </motion.span>
             <p>Tidak ada kontak yang ditemukan.</p>
           </div>
         ) : (
@@ -217,6 +262,9 @@ export function ContactDirectory({ initialContacts }: ContactDirectoryProps) {
           </div>
         )}
       </div>
+        </motion.div>
+      </AnimatePresence>
+      </Reveal>
 
       {/* Dialog Form */}
       <CreateContactDialog

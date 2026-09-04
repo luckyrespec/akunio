@@ -52,7 +52,7 @@ export function HitlPolicySelector({
           onClick={() => handleSelect("smart")}
           disabled={saving}
           className={cn(
-            "flex flex-col items-start rounded-xl border p-3.5 text-left transition-all",
+            "flex flex-col items-start rounded-xl border p-3.5 text-left transition-colors",
             selected === "smart"
               ? "border-terra bg-terra/5 ring-1 ring-terra"
               : "border-rule bg-card/50 hover:bg-muted/50",
@@ -72,7 +72,7 @@ export function HitlPolicySelector({
           onClick={() => handleSelect("strict")}
           disabled={saving}
           className={cn(
-            "flex flex-col items-start rounded-xl border p-3.5 text-left transition-all",
+            "flex flex-col items-start rounded-xl border p-3.5 text-left transition-colors",
             selected === "strict"
               ? "border-terra bg-terra/5 ring-1 ring-terra"
               : "border-rule bg-card/50 hover:bg-muted/50",
@@ -92,7 +92,7 @@ export function HitlPolicySelector({
           onClick={() => handleSelect("autonomous")}
           disabled={saving}
           className={cn(
-            "flex flex-col items-start rounded-xl border p-3.5 text-left transition-all",
+            "flex flex-col items-start rounded-xl border p-3.5 text-left transition-colors",
             selected === "autonomous"
               ? "border-terra bg-terra/5 ring-1 ring-terra"
               : "border-rule bg-card/50 hover:bg-muted/50",

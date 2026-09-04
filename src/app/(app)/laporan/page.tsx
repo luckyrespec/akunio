@@ -30,7 +30,7 @@ export default async function LaporanIndex() {
               <Link
                 key={r.href}
                 href={r.href}
-                className="group flex flex-col justify-between rounded-2xl border border-rule bg-paper p-6 shadow-xs transition-all hover:border-terra/40 hover:shadow-sm"
+                className="group flex flex-col justify-between rounded-2xl border border-rule bg-paper p-6 shadow-xs transition-[border-color,box-shadow] hover:border-terra/40 hover:shadow-sm"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex size-10 items-center justify-center rounded-xl bg-canvas text-terra group-hover:bg-terra group-hover:text-white transition-colors">

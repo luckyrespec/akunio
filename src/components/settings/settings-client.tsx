@@ -146,7 +146,7 @@ export function SettingsClient({
                 type="button"
                 onClick={() => handleSelectTab(tab.id)}
                 className={cn(
-                  "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs transition-all text-left group",
+                  "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs transition-colors text-left group",
                   isActive
                     ? "bg-terra/10 text-terra font-semibold border border-terra/25 shadow-2xs"
                     : "text-ink-soft hover:bg-canvas hover:text-ink border border-transparent",

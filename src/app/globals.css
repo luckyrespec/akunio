@@ -63,9 +63,16 @@
   --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
 
-  /* Motion — Paper & Ink Matte */
+  /* Motion — Paper & Ink Matte.
+     Aturan: entering/exiting pakai --ease-out; gerak di layar pakai
+     --ease-in-out; drawer/sheet pakai --ease-drawer; hover/warna pakai
+     ease bawaan; marquee/progress pakai linear. Jangan pakai kurva
+     ease-in untuk UI. --duration-slow/--duration-spring hanya untuk
+     marketing/eksplanatori; UI interaktif maksimal 240ms. */
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-soft: cubic-bezier(0.55, 0.06, 0.68, 0.19);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --duration-fast: 150ms;
   --duration-base: 240ms;
   --duration-slow: 400ms;
@@ -208,12 +215,20 @@ html { background-color: var(--color-canvas); }
   }
 }
 
-/* Motion respect — industry standard */
+/* Motion respect — kurangi dan lembutkan, bukan nol: matikan gerak
+   berulang/posisi, pertahankan feedback opacity yang membantu pemahaman.
+   Primitif motion/* sudah branch useReducedMotion() sendiri. Elemen
+   notifikasi/banner yang harus tetap fade lembut diberi .motion-keep-fade. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  .motion-keep-fade {
+    animation-duration: 0.2s !important;
+    transition-duration: 0.2s !important;
   }
 }
 

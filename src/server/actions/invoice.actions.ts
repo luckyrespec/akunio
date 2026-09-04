@@ -30,6 +30,35 @@ export async function createInvoiceAction(
   }
 }
 
+export async function createInvoiceWithPostingAction(
+  invoiceData: CreateInvoiceInput,
+  itemsData: CreateInvoiceItemInput[],
+  postToLedger: boolean,
+) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const invoice = await createInvoiceRepo(db, ctx.orgId, invoiceData, itemsData);
+
+    let journalEntryId: string | null = null;
+    let postWarning: string | null = null;
+    if (postToLedger) {
+      try {
+        journalEntryId = await postInvoiceToLedger(db, ctx.orgId, invoice.id, ctx.userEmail);
+      } catch (e) {
+        // Faktur tetap tersimpan sebagai belum-terposting; user bisa posting dari daftar.
+        postWarning = e instanceof Error ? e.message : "Gagal memposting faktur ke jurnal.";
+      }
+    }
+
+    revalidatePath("/faktur");
+    revalidatePath("/jurnal");
+    revalidatePath("/buku-besar");
+    return { ok: true as const, data: { invoice, journalEntryId, postWarning } };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Gagal membuat faktur." };
+  }
+}
+
 export async function postInvoiceToJournalAction(invoiceId: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);

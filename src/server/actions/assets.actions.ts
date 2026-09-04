@@ -13,6 +13,8 @@ import {
   disposeAsset,
   type CreateFixedAssetInput,
 } from "@/server/db/repos/assets.repo";
+import { postJournalEntry } from "@/server/db/repos/journals.repo";
+import { buildAcquisitionJournal } from "@/core/assets/acquisition";
 import { Money } from "@/core/money/money";
 
 export interface AssetActionResult<T = unknown> {
@@ -21,7 +23,7 @@ export interface AssetActionResult<T = unknown> {
   error?: string;
 }
 
-function fail(e: unknown): AssetActionResult {
+function fail<T = unknown>(e: unknown): AssetActionResult<T> {
   if (isRedirectError(e)) throw e;
   if (e instanceof Error) {
     if (e.message === "FORBIDDEN_AKSES") {
@@ -92,8 +94,92 @@ export async function createFixedAssetAction(payload: {
   }
 }
 
-export async function listFixedAssetsAction(): Promise<AssetActionResult> {
+export async function createAssetWithAcquisitionAction(payload: {
+  name: string;
+  category: "TANAH" | "BANGUNAN" | "KENDARAAN" | "MESIN_PERALATAN" | "INVENTARIS_KANTOR";
+  acquisitionDate: string;
+  inServiceDate: string;
+  acquisitionCostText: string;
+  salvageValueText?: string;
+  usefulLifeMonths: number;
+  depreciationMethod: "STRAIGHT_LINE" | "DECLINING_BALANCE";
+  depreciationRatePercent?: number;
+  assetAccountId: string;
+  accumulatedDepAccountId: string;
+  depreciationExpenseAccountId: string;
+  notes?: string;
+  postAcquisition: boolean;
+  counterAccountId?: string;
+}): Promise<AssetActionResult<{ asset: { id: string }; journalEntryId: string | null }>> {
   try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const costMinor = Money.parseIdr(payload.acquisitionCostText).minor;
+    const salvageMinor = payload.salvageValueText
+      ? Money.parseIdr(payload.salvageValueText).minor
+      : 0n;
+
+    if (payload.postAcquisition && !payload.counterAccountId) {
+      return { ok: false, error: "Pilih akun lawan untuk jurnal perolehan (Kas/Bank, Utang, atau Modal)." };
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const asset = await createFixedAsset(tx, {
+        orgId: ctx.orgId,
+        name: payload.name.trim(),
+        category: payload.category,
+        acquisitionDate: payload.acquisitionDate,
+        inServiceDate: payload.inServiceDate,
+        acquisitionCostMinor: costMinor,
+        salvageValueMinor: salvageMinor,
+        usefulLifeMonths: payload.usefulLifeMonths,
+        depreciationMethod: payload.depreciationMethod,
+        depreciationRatePercent: payload.depreciationRatePercent,
+        assetAccountId: payload.assetAccountId,
+        accumulatedDepAccountId: payload.accumulatedDepAccountId,
+        depreciationExpenseAccountId: payload.depreciationExpenseAccountId,
+        notes: payload.notes?.trim(),
+      });
+
+      let journalEntryId: string | null = null;
+      if (payload.postAcquisition && payload.counterAccountId) {
+        const je = await postJournalEntry(
+          tx,
+          ctx.orgId,
+          ctx.userEmail,
+          buildAcquisitionJournal({
+            assetId: asset.id,
+            assetCode: asset.code,
+            assetName: asset.name,
+            assetAccountId: payload.assetAccountId,
+            counterAccountId: payload.counterAccountId,
+            acquisitionCostMinor: costMinor,
+            acquisitionDate: payload.acquisitionDate,
+          }),
+        );
+        journalEntryId = je.id;
+      }
+
+      await appendAudit(tx, {
+        orgId: ctx.orgId,
+        actor: ctx.userEmail,
+        action: "ASSET_REGISTER",
+        subjectType: "fixed_asset",
+        subjectId: asset.id,
+        data: { code: asset.code, name: asset.name, cost: costMinor.toString(), journalEntryId },
+      });
+
+      return { asset: { id: asset.id }, journalEntryId };
+    });
+
+    revalidatePath("/aset");
+    revalidatePath("/jurnal");
+    return { ok: true, data: result };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function listFixedAssetsAction(): Promise<AssetActionResult> {  try {
     const ctx = await requireContext();
     const assets = await listFixedAssets(db, ctx.orgId);
     return { ok: true, data: assets };

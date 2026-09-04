@@ -104,7 +104,7 @@ export function PeriodDialog({ mode, period, trigger }: PeriodDialogProps) {
         ) : (
           <Button
             size="sm"
-            className="h-8 gap-1.5 rounded-xl bg-terra text-white text-xs px-3.5 shadow-2xs hover:bg-terra/90 transition-all active:scale-95"
+            className="h-8 gap-1.5 rounded-xl bg-terra text-white text-xs px-3.5 shadow-2xs hover:bg-terra/90 transition-[transform,background-color] active:scale-[0.98]"
           >
             <Plus className="size-3.5" />
             <span>Tambah Periode</span>

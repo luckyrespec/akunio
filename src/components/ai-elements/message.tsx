@@ -37,7 +37,7 @@ export const MessageContent = React.forwardRef<HTMLDivElement, MessageContentPro
       <div
         ref={ref}
         className={cn(
-          "relative max-w-[88%] md:max-w-[80%] rounded-2xl px-5 py-3.5 shadow-xs transition-all",
+          "relative max-w-[88%] md:max-w-[80%] rounded-2xl px-5 py-3.5 shadow-xs transition-colors",
           from === "user"
             ? "bg-ink text-white shadow-xs dark:bg-terra dark:text-white"
             : "border border-rule bg-paper text-ink",

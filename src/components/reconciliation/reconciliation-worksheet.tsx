@@ -270,7 +270,7 @@ export function ReconciliationWorksheet({
 
       {/* Manual Link Action Bar if items selected */}
       {selectedStatementId && selectedLedgerId && !isCompleted && (
-        <div className="rounded-xl border border-terra/40 bg-terra/10 p-3 flex items-center justify-between animate-in fade-in">
+        <div className="motion-keep-fade rounded-xl border border-terra/40 bg-terra/10 p-3 flex items-center justify-between animate-in fade-in">
           <span className="text-xs font-semibold text-terra">
             1 baris mutasi bank dan 1 baris buku kas telah dipilih.
           </span>

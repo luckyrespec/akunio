@@ -19,7 +19,7 @@ export function Confirmation({
     <div
       data-status={status}
       className={cn(
-        "my-3 rounded-2xl border p-4 shadow-xs transition-all bg-paper",
+        "my-3 rounded-2xl border p-4 shadow-xs transition-colors bg-paper",
         status === "pending" && "border-amber-600/30 bg-amber-500/5",
         status === "approved" && "border-emerald-600/30 bg-emerald-500/5",
         status === "rejected" && "border-rose-600/30 bg-rose-500/5",

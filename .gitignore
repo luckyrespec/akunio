@@ -14,6 +14,8 @@
 /coverage
 /test-results
 /playwright-report
+/blob-report
+/playwright/.cache
 
 # next.js
 /.next/
@@ -24,6 +26,7 @@
 
 # misc
 .DS_Store
+Thumbs.db
 *.pem
 
 # debug
@@ -46,5 +49,19 @@ next-env.d.ts
 # project
 dist/
 .superpowers/
+.turbo/
+
+# local working notes (canonical plans live in docs/superpowers/plans/)
+/plans/
+/scratch/
+
+# seaweedfs leftovers (real data lives outside the repo)
+/filerldb2/
+
+# editors
+.idea/
+*.swp
+*.swo
+*~
 
 *.log

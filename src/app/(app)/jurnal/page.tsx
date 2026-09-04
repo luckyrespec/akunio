@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import { GlowCard } from "@/components/aceternity/glow-card";
+import { Reveal } from "@/components/motion";
+import { JournalTabs } from "@/components/journal/journal-tabs";
 
 export default async function JurnalPage({
   searchParams,
@@ -25,30 +27,9 @@ export default async function JurnalPage({
         eyebrow="Catatan transaksi harian & draft AI"
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center rounded-lg border border-rule bg-paper p-1 shadow-xs">
-              <Link
-                href="/jurnal"
-                className={`rounded-md px-3.5 py-1.5 text-xs font-medium transition-all ${
-                  tab === "manual"
-                    ? "bg-canvas text-terra font-semibold shadow-xs"
-                    : "text-ink-soft hover:text-ink hover:bg-canvas/50"
-                }`}
-              >
-                Entri Manual
-              </Link>
-              <Link
-                href="/jurnal?tab=draft"
-                className={`rounded-md px-3.5 py-1.5 text-xs font-medium transition-all ${
-                  tab === "draft"
-                    ? "bg-canvas text-terra font-semibold shadow-xs"
-                    : "text-ink-soft hover:text-ink hover:bg-canvas/50"
-                }`}
-              >
-                Draft AI
-              </Link>
-            </div>
+            <JournalTabs tab={tab} />
             <Link href="/jurnal/baru">
-              <Button className="bg-terra text-white shadow-xs hover:bg-terra/90">
+              <Button className="bg-terra text-white shadow-xs hover:bg-terra/90 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]">
                 + Tulis Jurnal
               </Button>
             </Link>
@@ -65,6 +46,7 @@ async function ManualTab({ orgId }: { orgId: string }) {
   const entries = await db.transaction((tx) => listEntriesWithLines(tx, orgId, 100));
 
   return (
+    <Reveal delay={0.08}>
     <div className="space-y-4">
       {/* Mobile Card View (< sm) */}
       <div className="space-y-3 sm:hidden">
@@ -177,6 +159,7 @@ async function ManualTab({ orgId }: { orgId: string }) {
         </p>
       )}
     </div>
+    </Reveal>
   );
 }
 
@@ -185,6 +168,7 @@ async function DraftTab({ orgId }: { orgId: string }) {
   const now = new Date();
 
   return (
+    <Reveal delay={0.08}>
     <div className="space-y-4">
       {/* Mobile Card View (< sm) */}
       <div className="space-y-3 sm:hidden">
@@ -300,5 +284,6 @@ async function DraftTab({ orgId }: { orgId: string }) {
         </GlowCard>
       </div>
     </div>
+    </Reveal>
   );
 }

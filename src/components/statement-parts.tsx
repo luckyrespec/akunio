@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PrintButton } from "@/components/print-button";
 import { PageHeader } from "@/components/page-header";
+import { Reveal } from "@/components/motion";
 import { Money } from "@/core/money/money";
 
 export interface PeriodOption { name: string }
@@ -35,7 +36,9 @@ export function StatementShell({
           Tampilkan
         </button>
       </form>
+      <Reveal delay={0.08}>
       <div className="mt-6 rounded-2xl border border-rule bg-paper p-6 sm:p-8 shadow-xs">{children}</div>
+      </Reveal>
     </section>
   );
 }

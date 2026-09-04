@@ -59,7 +59,7 @@ export function Reasoning({
     <ReasoningContext.Provider value={{ isOpen, setIsOpen, isStreaming, duration }}>
       <div
         className={cn(
-          "my-2.5 rounded-xl border border-rule/80 bg-canvas/60 text-xs text-ink-soft transition-all",
+          "my-2.5 rounded-xl border border-rule/80 bg-canvas/60 text-xs text-ink-soft transition-colors",
           className,
         )}
         {...props}

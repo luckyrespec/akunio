@@ -114,7 +114,7 @@ export const Conversation = React.forwardRef<HTMLDivElement, ConversationProps>(
           {isDragging && (
             <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-paper/85 backdrop-blur-xs border-2 border-dashed border-terra p-6 animate-in fade-in-0 pointer-events-none">
               <div className="flex size-16 items-center justify-center rounded-2xl bg-terra/15 text-terra shadow-sm mb-3">
-                <UploadCloud className="size-8 animate-bounce" />
+                <UploadCloud className="size-8" />
               </div>
               <h3 className="font-display text-base font-bold text-ink">Lepaskan berkas di sini untuk melampirkan</h3>
               <p className="text-xs text-ink-soft mt-1">Berkas akan langsung disematkan ke percakapan Nara</p>
@@ -159,7 +159,7 @@ export function ConversationScrollButton({
       variant="secondary"
       onClick={scrollToBottom}
       className={cn(
-        "absolute bottom-4 right-4 z-30 size-8 rounded-full border border-rule bg-paper/90 shadow-md backdrop-blur-xs hover:bg-canvas transition-transform active:scale-95 text-ink",
+        "absolute bottom-4 right-4 z-30 size-8 rounded-full border border-rule bg-paper/90 shadow-md backdrop-blur-xs hover:bg-canvas transition-transform active:scale-[0.98] text-ink",
         className,
       )}
       aria-label="Scroll to bottom"

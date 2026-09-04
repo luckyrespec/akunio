@@ -296,7 +296,7 @@ export function AsistenLibraryView({
               return (
                 <div
                   key={file.id}
-                  className="flex flex-col justify-between rounded-2xl border border-rule bg-paper p-3.5 shadow-xs hover:border-terra/60 transition-all group"
+                  className="flex flex-col justify-between rounded-2xl border border-rule bg-paper p-3.5 shadow-xs hover:border-terra/60 transition-[border-color,box-shadow] group"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex size-9 items-center justify-center rounded-xl bg-canvas border border-rule">

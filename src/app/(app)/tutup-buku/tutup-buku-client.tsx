@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { motion } from "motion/react";
 import {
   CalendarCheck,
   CheckCircle2,
@@ -31,6 +32,7 @@ import { postMonthlyDepreciationAction } from "@/server/actions/assets.actions";
 import type { PreClosingChecklistResult } from "@/core/periods/closing-checklist";
 import { Money } from "@/core/money/money";
 import { PageHeader } from "@/components/page-header";
+import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 
 interface AccountOption {
   id: string;
@@ -198,20 +200,28 @@ export function TutupBukuClient({
 
       {/* Action Notification */}
       {actionError && (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2.5">
+        <div className="motion-keep-fade rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2.5">
           <AlertCircle className="size-4 shrink-0 mt-0.5" />
           <span>{actionError}</span>
         </div>
       )}
 
       {actionSuccess && (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2.5">
-          <CheckCircle2 className="size-4 shrink-0 mt-0.5" />
+        <div className="motion-keep-fade rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2.5">
+          <motion.span
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
+            className="inline-flex shrink-0 mt-0.5"
+          >
+            <CheckCircle2 className="size-4" />
+          </motion.span>
           <span>{actionSuccess}</span>
         </div>
       )}
 
       {/* Period Status Card */}
+      <Reveal>
       <Card className="border-rule bg-paper shadow-xs">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -286,6 +296,7 @@ export function TutupBukuClient({
           </div>
         </CardContent>
       </Card>
+      </Reveal>
 
       {/* Stepper Wizard / Pre-closing Checklist */}
       <div className="space-y-3">
@@ -302,10 +313,11 @@ export function TutupBukuClient({
         </div>
 
         {checklist ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 1. Rekonsiliasi Bank */}
+            <StaggerItem>
             <Card
-              className={`border transition-all ${
+              className={`border transition-colors ${
                 checklist.items.bankReconciliation.passed
                   ? "border-rule bg-paper"
                   : "border-rose-500/40 bg-rose-500/5"
@@ -343,10 +355,12 @@ export function TutupBukuClient({
                 </div>
               </CardContent>
             </Card>
+            </StaggerItem>
 
             {/* 2. Draf Jurnal Belum Diposting */}
+            <StaggerItem>
             <Card
-              className={`border transition-all ${
+              className={`border transition-colors ${
                 checklist.items.pendingDrafts.passed
                   ? "border-rule bg-paper"
                   : "border-rose-500/40 bg-rose-500/5"
@@ -384,10 +398,12 @@ export function TutupBukuClient({
                 </div>
               </CardContent>
             </Card>
+            </StaggerItem>
 
             {/* 3. Penyusutan Aset Tetap */}
+            <StaggerItem>
             <Card
-              className={`border transition-all ${
+              className={`border transition-colors ${
                 checklist.items.depreciationPosted.passed
                   ? "border-rule bg-paper"
                   : "border-amber-500/40 bg-amber-500/5"
@@ -431,10 +447,12 @@ export function TutupBukuClient({
                 </div>
               </CardContent>
             </Card>
+            </StaggerItem>
 
             {/* 4. Faktur & Piutang / Hutang */}
+            <StaggerItem>
             <Card
-              className={`border transition-all ${
+              className={`border transition-colors ${
                 checklist.items.unpostedInvoices.passed
                   ? "border-rule bg-paper"
                   : "border-rose-500/40 bg-rose-500/5"
@@ -472,10 +490,12 @@ export function TutupBukuClient({
                 </div>
               </CardContent>
             </Card>
+            </StaggerItem>
 
             {/* 5. Keseimbangan Neraca Saldo */}
+            <StaggerItem className="md:col-span-2">
             <Card
-              className={`border md:col-span-2 transition-all ${
+              className={`border transition-colors ${
                 checklist.items.trialBalance.passed
                   ? "border-rule bg-paper"
                   : "border-rose-500/40 bg-rose-500/5"
@@ -512,7 +532,8 @@ export function TutupBukuClient({
                 </div>
               </CardContent>
             </Card>
-          </div>
+            </StaggerItem>
+          </Stagger>
         ) : (
           <div className="rounded-xl border border-rule bg-paper p-8 text-center text-xs text-ink-soft">
             <Loader2 className="size-5 animate-spin mx-auto mb-2 text-terra" />

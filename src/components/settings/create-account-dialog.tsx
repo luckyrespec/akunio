@@ -223,7 +223,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
       <DialogTrigger asChild>
         <Button
           size="sm"
-          className="h-8 gap-1.5 rounded-xl bg-terra text-white text-xs px-3.5 shadow-2xs hover:bg-terra/90 transition-all active:scale-95"
+          className="h-8 gap-1.5 rounded-xl bg-terra text-white text-xs px-3.5 shadow-2xs hover:bg-terra/90 transition-[transform,background-color] active:scale-[0.98]"
           disabled={disabled}
         >
           <Plus className="size-3.5" />
@@ -264,7 +264,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
                       type="button"
                       onClick={() => handleTypeChange(t)}
                       className={cn(
-                        "flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all",
+                        "flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-colors",
                         isSelected
                           ? cn(conf.bg, "font-bold shadow-2xs", conf.color)
                           : "border-rule bg-canvas/40 text-ink-soft hover:bg-canvas hover:text-ink",
@@ -313,7 +313,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
                     type="button"
                     onClick={() => setNormal("D")}
                     className={cn(
-                      "flex items-center justify-center rounded-xl border text-xs font-medium transition-all",
+                      "flex items-center justify-center rounded-xl border text-xs font-medium transition-colors",
                       normal === "D"
                         ? "border-terra/60 bg-terra/10 text-terra font-semibold"
                         : "border-rule bg-canvas/40 text-ink-soft hover:bg-canvas",
@@ -325,7 +325,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
                     type="button"
                     onClick={() => setNormal("K")}
                     className={cn(
-                      "flex items-center justify-center rounded-xl border text-xs font-medium transition-all",
+                      "flex items-center justify-center rounded-xl border text-xs font-medium transition-colors",
                       normal === "K"
                         ? "border-terra/60 bg-terra/10 text-terra font-semibold"
                         : "border-rule bg-canvas/40 text-ink-soft hover:bg-canvas",

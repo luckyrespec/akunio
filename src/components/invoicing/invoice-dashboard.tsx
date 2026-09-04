@@ -1,17 +1,25 @@
 "use client";
 
 import * as React from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { Plus, Receipt, TrendingDown, Clock, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InvoiceList, type InvoiceRow } from "./invoice-list";
 import { AgingSummary, type AgingItem } from "./aging-summary";
-import { CreateInvoiceDialog, type ContactOption } from "./create-invoice-dialog";
 import { RecordPaymentDialog, type PaymentTargetInvoice } from "./record-payment-dialog";
-import { Money } from "@/core/money/money";
 import { useRouter } from "next/navigation";
 import { formatWhatsAppReminder } from "@/core/invoicing/whatsapp";
 
 import { PageHeader } from "@/components/page-header";
+import Link from "next/link";
+
+export interface ContactOption {
+  id: string;
+  name: string;
+  type: string;
+  paymentTermsDays: number;
+}
+import { Reveal, Stagger, StaggerItem, AnimatedNumber } from "@/components/motion";
 
 interface InvoiceDashboardProps {
   invoices: InvoiceRow[];
@@ -37,8 +45,6 @@ export function InvoiceDashboard({
 }: InvoiceDashboardProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = React.useState<"PIUTANG" | "UTANG" | "AGING">("PIUTANG");
-  const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
-  const [createDialogType, setCreateDialogType] = React.useState<"INVOICE" | "BILL">("INVOICE");
   const [paymentDialogOpen, setPaymentDialogOpen] = React.useState(false);
   const [paymentTarget, setPaymentTarget] = React.useState<PaymentTargetInvoice | null>(null);
 
@@ -68,11 +74,6 @@ export function InvoiceDashboard({
       .filter((inv) => inv.status === "OVERDUE")
       .reduce((sum, inv) => sum + (inv.totalMinor - inv.amountPaidMinor), 0n);
   }, [salesInvoices]);
-
-  function handleOpenCreate(type: "INVOICE" | "BILL") {
-    setCreateDialogType(type);
-    setCreateDialogOpen(true);
-  }
 
   function handleOpenPayment(inv: InvoiceRow) {
     setPaymentTarget({
@@ -107,101 +108,141 @@ export function InvoiceDashboard({
         actions={
           <div className="flex items-center gap-2">
             <Button
-              onClick={() => handleOpenCreate("INVOICE")}
-              className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs"
+              asChild
+              className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]"
             >
-              <Plus className="size-4 mr-1.5" />
-              Buat Faktur Penjualan
+              <Link href="/faktur/baru?tipe=invoice">
+                <Plus data-icon="inline-start" />
+                Buat Faktur Penjualan
+              </Link>
             </Button>
 
             <Button
+              asChild
               variant="outline"
-              onClick={() => handleOpenCreate("BILL")}
-              className="border-rule text-ink hover:bg-canvas text-xs h-9 rounded-xl"
+              className="border-rule text-ink hover:bg-canvas text-xs h-9 rounded-xl transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]"
             >
-              <Plus className="size-4 mr-1.5" />
-              Catat Tagihan Vendor
+              <Link href="/faktur/baru?tipe=bill">
+                <Plus data-icon="inline-start" />
+                Catat Tagihan Vendor
+              </Link>
             </Button>
           </div>
         }
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
+      <Stagger className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StaggerItem className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-soft">Total Piutang Beredar</span>
             <Receipt className="size-4 text-terra" />
           </div>
-          <div className="mt-2 text-2xl font-display font-semibold text-ink">
-            {Money.fromMinor(totalArMinor).formatIdr()}
+          <div className="mt-2 text-2xl font-display font-semibold text-ink tnum">
+            <AnimatedNumber minor={totalArMinor} />
           </div>
           <div className="mt-1 text-[11px] text-ink-soft">Dari {salesInvoices.length} faktur penjualan</div>
-        </div>
+        </StaggerItem>
 
-        <div className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
+        <StaggerItem className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-soft">Piutang Jatuh Tempo (Overdue)</span>
             <Clock className="size-4 text-destructive" />
           </div>
-          <div className="mt-2 text-2xl font-display font-semibold text-destructive">
-            {Money.fromMinor(overdueArMinor).formatIdr()}
+          <div className="mt-2 text-2xl font-display font-semibold text-destructive tnum">
+            <AnimatedNumber minor={overdueArMinor} />
           </div>
           <div className="mt-1 text-[11px] text-ink-soft">Perlu penagihan segera</div>
-        </div>
+        </StaggerItem>
 
-        <div className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
+        <StaggerItem className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-soft">Total Utang Usaha (Bills)</span>
             <TrendingDown className="size-4 text-purple-600" />
           </div>
-          <div className="mt-2 text-2xl font-display font-semibold text-ink">
-            {Money.fromMinor(totalApMinor).formatIdr()}
+          <div className="mt-2 text-2xl font-display font-semibold text-ink tnum">
+            <AnimatedNumber minor={totalApMinor} />
           </div>
           <div className="mt-1 text-[11px] text-ink-soft">Dari {purchaseBills.length} tagihan pemasok</div>
-        </div>
-      </div>
+        </StaggerItem>
+      </Stagger>
 
       {/* Tabs Switcher */}
-      <div className="flex items-center gap-1.5 border-b border-rule pb-2">
+      <div className="flex items-center gap-1.5 border-b border-rule pb-2" role="tablist">
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === "PIUTANG"}
           onClick={() => setActiveTab("PIUTANG")}
-          className={`rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${
+          className={`relative rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${
             activeTab === "PIUTANG"
-              ? "bg-terra text-white shadow-2xs"
+              ? "text-white"
               : "text-ink-soft hover:text-ink hover:bg-canvas"
           }`}
         >
-          Piutang (Faktur Penjualan)
+          {activeTab === "PIUTANG" && (
+            <motion.span
+              layoutId="faktur-tab-pill"
+              transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+              className="absolute inset-0 rounded-lg bg-terra shadow-2xs"
+            />
+          )}
+          <span className="relative z-10">Piutang (Faktur Penjualan)</span>
         </button>
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === "UTANG"}
           onClick={() => setActiveTab("UTANG")}
-          className={`rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${
+          className={`relative rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${
             activeTab === "UTANG"
-              ? "bg-terra text-white shadow-2xs"
+              ? "text-white"
               : "text-ink-soft hover:text-ink hover:bg-canvas"
           }`}
         >
-          Utang (Tagihan Pembelian)
+          {activeTab === "UTANG" && (
+            <motion.span
+              layoutId="faktur-tab-pill"
+              transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+              className="absolute inset-0 rounded-lg bg-terra shadow-2xs"
+            />
+          )}
+          <span className="relative z-10">Utang (Tagihan Pembelian)</span>
         </button>
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === "AGING"}
           onClick={() => setActiveTab("AGING")}
-          className={`rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${
+          className={`relative rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${
             activeTab === "AGING"
-              ? "bg-terra text-white shadow-2xs"
+              ? "text-white"
               : "text-ink-soft hover:text-ink hover:bg-canvas"
           }`}
         >
-          Analisis Umur Piutang (Aging)
+          {activeTab === "AGING" && (
+            <motion.span
+              layoutId="faktur-tab-pill"
+              transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+              className="absolute inset-0 rounded-lg bg-terra shadow-2xs"
+            />
+          )}
+          <span className="relative z-10">Analisis Umur Piutang (Aging)</span>
         </button>
       </div>
 
       {/* Tab Contents */}
+      <Reveal delay={0.08}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+        >
       {activeTab === "PIUTANG" && (
         <InvoiceList invoices={salesInvoices} onOpenPayment={handleOpenPayment} />
       )}
@@ -221,18 +262,11 @@ export function InvoiceDashboard({
           onSendReminder={handleSendReminderFromAging}
         />
       )}
+        </motion.div>
+      </AnimatePresence>
+      </Reveal>
 
       {/* Dialogs */}
-      <CreateInvoiceDialog
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
-        defaultType={createDialogType}
-        contactsList={contacts}
-        onSuccess={() => {
-          router.refresh();
-        }}
-      />
-
       <RecordPaymentDialog
         open={paymentDialogOpen}
         onOpenChange={setPaymentDialogOpen}

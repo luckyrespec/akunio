@@ -449,7 +449,7 @@ export function NewEntryForm({
                 onChange={(e) => setMemo(e.target.value)}
                 placeholder="Contoh: Pembayaran tagihan internet & listrik kantor bulan ini..."
                 className={cn(
-                  "w-full bg-paper transition-all resize-y text-xs sm:text-sm leading-relaxed p-2.5",
+                  "w-full bg-paper transition-colors resize-y text-xs sm:text-sm leading-relaxed p-2.5",
                   isMemoExpanded ? "min-h-[160px]" : "min-h-[72px]"
                 )}
               />

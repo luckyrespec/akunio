@@ -30,7 +30,7 @@ export function HitlTool({
           onMouseEnter={() => setOpen(true)}
           onMouseLeave={() => setOpen(false)}
           className={cn(
-            "group flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all shadow-2xs",
+            "group flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors shadow-2xs",
             allowAll
               ? "border-amber-600/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
               : "border-emerald-600/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20",

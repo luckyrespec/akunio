@@ -2,12 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { motion } from "motion/react";
 import { Plus, ArrowLeftRight, CheckCircle2, Clock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Money } from "@/core/money/money";
 import { CreateSessionDialog, type BankAccountOption } from "./create-session-dialog";
 import { PageHeader } from "@/components/page-header";
+import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 
 export interface ReconciliationSessionRow {
   id: string;
@@ -45,7 +47,7 @@ export function ReconciliationDashboard({
         actions={
           <Button
             onClick={() => setDialogOpen(true)}
-            className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs"
+            className="bg-terra hover:bg-terra/90 text-white text-xs h-9 rounded-xl shadow-2xs transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]"
           >
             <Plus className="size-4 mr-1.5" />
             Mulai Rekonsiliasi Baru
@@ -54,8 +56,8 @@ export function ReconciliationDashboard({
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
+      <Stagger className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StaggerItem className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-soft">Akun Bank Aktif</span>
             <ArrowLeftRight className="size-4 text-terra" />
@@ -64,9 +66,9 @@ export function ReconciliationDashboard({
             {bankAccounts.length} Akun
           </div>
           <div className="mt-1 text-[11px] text-ink-soft">Terdaftar pada bagan akun (COA)</div>
-        </div>
+        </StaggerItem>
 
-        <div className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
+        <StaggerItem className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-soft">Sesi Sedang Berlangsung</span>
             <Clock className="size-4 text-blue-600" />
@@ -75,9 +77,9 @@ export function ReconciliationDashboard({
             {inProgressCount} Sesi
           </div>
           <div className="mt-1 text-[11px] text-ink-soft">Perlu diselesaikan / dicocokkan</div>
-        </div>
+        </StaggerItem>
 
-        <div className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
+        <StaggerItem className="rounded-xl border border-rule bg-paper p-4 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-soft">Sesi Selesai (Terkunci)</span>
             <CheckCircle2 className="size-4 text-emerald-600" />
@@ -86,10 +88,11 @@ export function ReconciliationDashboard({
             {completedCount} Sesi
           </div>
           <div className="mt-1 text-[11px] text-ink-soft">Rekonsiliasi seimbang dan diaudit</div>
-        </div>
-      </div>
+        </StaggerItem>
+      </Stagger>
 
       {/* Sessions Table */}
+      <Reveal delay={0.08}>
       <div className="rounded-xl border border-rule bg-paper shadow-2xs overflow-hidden">
         <div className="px-4 py-3 border-b border-rule flex items-center justify-between">
           <div>
@@ -100,7 +103,14 @@ export function ReconciliationDashboard({
 
         {sessions.length === 0 ? (
           <div className="p-12 text-center text-xs text-ink-soft">
-            <FileText className="size-8 mx-auto mb-2 text-ink-soft/40" />
+            <motion.span
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+              className="inline-block"
+            >
+              <FileText className="size-8 mx-auto mb-2 text-ink-soft/40" />
+            </motion.span>
             <p>Belum ada sesi rekonsiliasi bank yang dibuat.</p>
             <Button
               variant="outline"
@@ -178,6 +188,7 @@ export function ReconciliationDashboard({
           </div>
         )}
       </div>
+      </Reveal>
 
       {/* Dialog */}
       <CreateSessionDialog

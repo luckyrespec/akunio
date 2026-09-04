@@ -71,7 +71,7 @@ export function Tool({
     <ToolContext.Provider value={{ isOpen, setIsOpen, state }}>
       <div
         className={cn(
-          "my-2 rounded-2xl border border-rule bg-canvas/60 text-ink overflow-hidden transition-all shadow-2xs",
+          "my-2 rounded-2xl border border-rule bg-canvas/60 text-ink overflow-hidden transition-colors shadow-2xs",
           className,
         )}
         {...props}

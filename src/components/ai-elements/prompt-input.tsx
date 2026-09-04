@@ -58,7 +58,7 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={cn(
-            "relative flex flex-col w-full rounded-3xl border border-rule bg-paper p-3 md:p-3.5 shadow-sm transition-all focus-within:border-terra/70 focus-within:ring-2 focus-within:ring-terra/15",
+            "relative flex flex-col w-full rounded-3xl border border-rule bg-paper p-3 md:p-3.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-terra/70 focus-within:ring-2 focus-within:ring-terra/15",
             isDragging && "border-dashed border-terra ring-2 ring-terra/30 bg-terra/5",
             className,
           )}
@@ -67,7 +67,7 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
           {/* Drop Zone Overlay */}
           {isDragging && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-3xl bg-paper/90 backdrop-blur-xs border-2 border-dashed border-terra animate-in fade-in-0">
-              <UploadCloud className="size-8 text-terra animate-bounce mb-1" />
+              <UploadCloud className="size-8 text-terra mb-1" />
               <p className="font-display font-semibold text-xs text-ink">Lepaskan berkas di sini untuk melampirkan</p>
               <p className="text-[10px] text-ink-soft">Mendukung gambar (PNG, JPG) dan dokumen PDF</p>
             </div>
@@ -199,7 +199,7 @@ export const PromptInputButton = React.forwardRef<
       ref={ref}
       type="button"
       className={cn(
-        "flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all shadow-2xs",
+        "flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors shadow-2xs",
         active
           ? "border-terra/40 bg-terra/10 text-terra"
           : "border-rule/70 bg-canvas/60 text-ink-soft hover:bg-canvas hover:text-ink",
@@ -239,7 +239,7 @@ export const PromptInputSubmit = React.forwardRef<
       type="button"
       size="icon"
       variant="destructive"
-      className={cn("size-8 rounded-full shadow-2xs transition-transform active:scale-95", className)}
+      className={cn("size-8 rounded-full shadow-2xs transition-transform active:scale-[0.98]", className)}
       onClick={onStop}
       aria-label="Hentikan jawaban"
       {...props}
@@ -252,7 +252,7 @@ export const PromptInputSubmit = React.forwardRef<
       type="button"
       size="icon"
       className={cn(
-        "size-8 rounded-full bg-terra text-white shadow-2xs transition-transform hover:bg-terra/90 active:scale-95 disabled:opacity-35 disabled:hover:bg-terra",
+        "size-8 rounded-full bg-terra text-white shadow-2xs transition-transform hover:bg-terra/90 active:scale-[0.98] disabled:opacity-35 disabled:hover:bg-terra",
         className,
       )}
       onClick={onClick}

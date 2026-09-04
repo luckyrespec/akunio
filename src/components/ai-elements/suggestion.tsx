@@ -52,12 +52,12 @@ export function Suggestion({
         type="button"
         onClick={() => onClick?.(valueToPass)}
         className={cn(
-          "group flex w-full items-start gap-3 rounded-2xl border border-rule bg-paper p-3.5 text-left text-xs shadow-2xs transition-all duration-200 ease-out hover:border-terra/70 hover:shadow-xs hover:bg-canvas/50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra/30",
+          "group flex w-full items-start gap-3 rounded-2xl border border-rule bg-paper p-3.5 text-left text-xs shadow-2xs transition-[transform,box-shadow,border-color] duration-200 ease-out hover:border-terra/70 hover:shadow-xs hover:bg-canvas/50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra/30",
           className
         )}
       >
         {icon && (
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-canvas text-terra shadow-2xs group-hover:scale-105 transition-transform duration-200">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-canvas text-terra shadow-2xs [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-105 transition-transform duration-200">
             {icon}
           </div>
         )}

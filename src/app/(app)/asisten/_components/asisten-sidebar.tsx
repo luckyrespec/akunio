@@ -75,7 +75,7 @@ export function AsistenSidebar({
   return (
     <aside
       className={cn(
-        "relative flex h-full flex-col border-r border-rule bg-paper transition-all duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] shrink-0",
+        "relative flex h-full flex-col border-r border-rule bg-paper transition-[transform,border-color] duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] shrink-0",
         sidebarOpen ? "w-64 md:w-72" : "w-0 -translate-x-full overflow-hidden border-r-0 md:w-0",
       )}
     >
@@ -155,7 +155,7 @@ export function AsistenSidebar({
               <div
                 key={t.id}
                 className={cn(
-                  "group relative flex items-center justify-between rounded-xl px-2.5 py-2 text-xs transition-all",
+                  "group relative flex items-center justify-between rounded-xl px-2.5 py-2 text-xs transition-colors",
                   isActive
                     ? "bg-canvas font-medium text-ink shadow-2xs"
                     : "text-ink-soft hover:bg-canvas/60 hover:text-ink",

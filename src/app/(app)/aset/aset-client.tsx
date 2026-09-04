@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useState } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
+import { Reveal, Stagger, StaggerItem, AnimatedNumber } from "@/components/motion";
 import {
   Building2,
   Plus,
@@ -16,7 +18,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CreateAssetDialog } from "./create-asset-dialog";
 import { RunDepreciationDialog } from "./run-depreciation-dialog";
 import { Money } from "@/core/money/money";
 import { PageHeader } from "@/components/page-header";
@@ -43,7 +44,6 @@ export function AsetClient({
   openPeriods: PeriodOption[];
 }) {
   const [assets, setAssets] = useState(initialAssets);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [runDepDialogOpen, setRunDepDialogOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
 
@@ -70,25 +70,25 @@ export function AsetClient({
             <Button
               variant="outline"
               onClick={() => setRunDepDialogOpen(true)}
-              className="border-terra/40 text-terra hover:bg-terra/10 transition-colors text-xs h-9 rounded-xl"
+              className="border-terra/40 text-terra hover:bg-terra/10 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98] text-xs h-9 rounded-xl"
             >
               <Play className="size-4 mr-1.5" />
               Jalankan Penyusutan
             </Button>
 
-            <Button
-              onClick={() => setCreateDialogOpen(true)}
-              className="bg-terra text-white hover:bg-terra/90 transition-colors text-xs h-9 rounded-xl shadow-2xs"
-            >
-              <Plus className="size-4 mr-1.5" />
-              Tambah Aset
-            </Button>
+            <Link href="/aset/baru">
+              <Button className="bg-terra text-white hover:bg-terra/90 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98] text-xs h-9 rounded-xl shadow-2xs">
+                <Plus data-icon="inline-start" />
+                Tambah Aset
+              </Button>
+            </Link>
           </div>
         }
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StaggerItem>
         <Card className="border-rule bg-paper">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-semibold text-ink-soft uppercase tracking-wider flex items-center justify-between">
@@ -97,13 +97,15 @@ export function AsetClient({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold font-mono text-ink">
-              {Money.formatIdr(totalCostMinor)}
+            <div className="text-xl font-bold font-mono text-ink tnum">
+              <AnimatedNumber minor={totalCostMinor} />
             </div>
             <p className="text-[11px] text-ink-soft mt-1">Harga historis seluruh aset</p>
           </CardContent>
         </Card>
+        </StaggerItem>
 
+        <StaggerItem>
         <Card className="border-rule bg-paper">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-semibold text-ink-soft uppercase tracking-wider flex items-center justify-between">
@@ -118,7 +120,9 @@ export function AsetClient({
             <p className="text-[11px] text-ink-soft mt-1">Sedang aktif disusutkan</p>
           </CardContent>
         </Card>
+        </StaggerItem>
 
+        <StaggerItem>
         <Card className="border-rule bg-paper">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-semibold text-ink-soft uppercase tracking-wider flex items-center justify-between">
@@ -134,7 +138,9 @@ export function AsetClient({
             <p className="text-[11px] text-ink-soft mt-1">Masa manfaat berakhir</p>
           </CardContent>
         </Card>
+        </StaggerItem>
 
+        <StaggerItem>
         <Card className="border-rule bg-paper">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-semibold text-ink-soft uppercase tracking-wider flex items-center justify-between">
@@ -150,28 +156,49 @@ export function AsetClient({
             <p className="text-[11px] text-ink-soft mt-1">Telah dihapus/dijual</p>
           </CardContent>
         </Card>
-      </div>
+        </StaggerItem>
+      </Stagger>
 
       {/* Filter Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs" role="tablist">
         {["ALL", "KENDARAAN", "MESIN_PERALATAN", "INVENTARIS_KANTOR", "BANGUNAN", "TANAH"].map(
           (cat) => (
             <button
               key={cat}
+              role="tab"
+              aria-selected={categoryFilter === cat}
               onClick={() => setCategoryFilter(cat)}
-              className={`px-3 py-1.5 rounded-full font-medium transition-all ${
+              className={`relative px-3 py-1.5 rounded-full font-medium transition-colors ${
                 categoryFilter === cat
-                  ? "bg-ink text-paper shadow-xs dark:bg-terra dark:text-white"
+                  ? "text-paper dark:text-white"
                   : "bg-canvas border border-rule text-ink hover:bg-paper"
               }`}
             >
+              {categoryFilter === cat && (
+                <motion.span
+                  layoutId="aset-cat-pill"
+                  transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+                  className="absolute inset-0 rounded-full bg-ink shadow-xs dark:bg-terra"
+                />
+              )}
+              <span className="relative z-10">
               {cat === "ALL" ? "Semua Kategori" : cat.replace(/_/g, " ")}
+              </span>
             </button>
           ),
         )}
       </div>
 
       {/* Table */}
+      <Reveal delay={0.08}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.div
+          key={categoryFilter}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+        >
       <div className="overflow-hidden rounded-xl border border-rule bg-paper shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -255,15 +282,11 @@ export function AsetClient({
           </table>
         </div>
       </div>
+        </motion.div>
+      </AnimatePresence>
+      </Reveal>
 
       {/* Dialogs */}
-      <CreateAssetDialog
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
-        accounts={accounts}
-        onSuccess={(newAsset) => setAssets((prev) => [newAsset, ...prev])}
-      />
-
       <RunDepreciationDialog
         open={runDepDialogOpen}
         onOpenChange={setRunDepDialogOpen}

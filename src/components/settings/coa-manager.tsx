@@ -274,7 +274,7 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cari kode atau nama akun..."
-            className="h-7.5 w-full rounded-xl border border-rule bg-canvas/60 pl-8 pr-3 text-xs text-ink placeholder:text-ink-soft/60 focus:outline-none focus:ring-1 focus:ring-terra transition-all"
+            className="h-7.5 w-full rounded-xl border border-rule bg-canvas/60 pl-8 pr-3 text-xs text-ink placeholder:text-ink-soft/60 focus:outline-none focus:ring-1 focus:ring-terra transition-[border-color,box-shadow]"
           />
         </div>
       </div>
@@ -351,7 +351,7 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
                               <button
                                 type="button"
                                 onClick={() => toggleCollapse(a.code)}
-                                className="flex size-5 shrink-0 items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-paper transition-all cursor-pointer"
+                                className="flex size-5 shrink-0 items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-paper transition-colors cursor-pointer"
                                 aria-label={isCollapsed ? "Buka sub-akun" : "Tutup sub-akun"}
                                 title={isCollapsed ? "Buka sub-akun" : "Tutup sub-akun"}
                               >

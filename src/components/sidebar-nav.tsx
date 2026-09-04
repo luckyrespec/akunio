@@ -95,7 +95,7 @@ export function SidebarNav({
             }}
             title={!isDrawer && collapsed ? "Asisten AI Nara" : undefined}
             className={cn(
-              "group relative flex items-center gap-3 rounded-2xl transition-all duration-200 overflow-hidden",
+              "group relative flex items-center gap-3 rounded-2xl transition-[color,background-color,border-color,box-shadow] duration-200 overflow-hidden",
               !isDrawer && collapsed
                 ? "justify-center p-2.5 border"
                 : "p-3 border",
@@ -112,13 +112,13 @@ export function SidebarNav({
             {/* Glowing Icon Container */}
             <div
               className={cn(
-                "relative flex size-9 shrink-0 items-center justify-center rounded-xl transition-all duration-300",
+                "relative flex size-9 shrink-0 items-center justify-center rounded-xl transition-[transform,background-color,border-color] duration-300",
                 isAsistenActive
                   ? "bg-terra text-white shadow-xs shadow-terra/30"
                   : "bg-canvas border border-rule group-hover:border-terra/40 group-hover:bg-terra/10 text-terra",
               )}
             >
-              <Sparkles className={cn("size-4 transition-transform group-hover:scale-110", isAsistenActive && "animate-pulse")} />
+              <Sparkles className="size-4 transition-transform [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-110" />
               {/* Online pulse dot */}
               <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-paper" />
             </div>
@@ -163,7 +163,7 @@ export function SidebarNav({
                 }}
                 title={!isDrawer && collapsed ? item.label : undefined}
                 className={cn(
-                  "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-all",
+                  "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors",
                   !isDrawer && collapsed && "justify-center px-2 py-2.5",
                   active
                     ? "bg-canvas text-terra font-semibold border border-rule shadow-2xs"
@@ -199,10 +199,9 @@ export function SidebarNav({
       {/* Desktop Sidebar (lg and above) */}
       <aside
         className={cn(
-          "hidden lg:flex shrink-0 flex-col justify-between overflow-hidden border-r border-rule bg-paper py-6 h-screen sticky top-0 transition-[width,padding] duration-[240ms]",
+          "hidden lg:flex shrink-0 flex-col justify-between overflow-hidden border-r border-rule bg-paper py-6 h-screen sticky top-0",
           collapsed ? "w-[4.25rem] px-2.5" : "w-64 px-4 pr-5",
         )}
-        style={{ transitionTimingFunction: "var(--ease-out-soft, cubic-bezier(0.22,1,0.36,1))" }}
       >
         {navContent(false)}
       </aside>
