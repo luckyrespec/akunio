@@ -1,15 +1,16 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { CheckCircle2 } from "lucide-react";
 import { acceptDraftAction, rejectDraftAction } from "@/server/actions/ai.actions";
-import { diffDraftVsEdited } from "@/core/ai/diff";
 import { Money } from "@/core/money/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AccountSelect } from "@/components/account-select";
+import { PageActionButton, PageActions } from "@/components/page-actions";
 
 export interface ReviewDraftLine {
   accountCode: string;
@@ -54,6 +55,9 @@ export function ReviewClient({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [postedNumber, setPostedNumber] = useState<string | null>(null);
+  const [confirmTolak, setConfirmTolak] = useState(false);
+
   const [dateISO, setDateISO] = useState(draft.dateISO);
   const [memo, setMemo] = useState(draft.memo);
   const [rows, setRows] = useState<Row[]>(() =>
@@ -74,35 +78,112 @@ export function ReviewClient({
       d += dv ?? 0n;
       c += cv ?? 0n;
     }
-    return { d, c, balanced: !invalid && d > 0n && d === c };
+    return { d, c, invalid, balanced: !invalid && d > 0n && d === c };
   }, [rows]);
 
   const allHaveAccounts = rows.every((r) => r.accountId !== "");
 
-  const diff = useMemo(
-    () => diffDraftVsEdited(
-      {
-        lines: draft.lines.map(({ accountCode, debitText, creditText }) => ({
-          accountCode, debitText, creditText,
+  const initialSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        dateISO: draft.dateISO,
+        memo: draft.memo,
+        rows: draft.lines.map((l) => ({
+          accountId: l.accountId ?? "",
+          debitText: l.debitText,
+          creditText: l.creditText,
         })),
-      },
-      rows.map(({ accountId, debitText, creditText }) => ({
-        accountCode: accountId, debitText, creditText,
+      }),
+    [draft],
+  );
+  const isDirty =
+    JSON.stringify({
+      dateISO,
+      memo,
+      rows: rows.map(({ accountId, debitText, creditText }) => ({
+        accountId,
+        debitText,
+        creditText,
       })),
-    ),
-    [rows, draft.lines],
+    }) !== initialSnapshot;
+
+  useEffect(() => {
+    if (!isDirty || postedNumber) return;
+    const guard = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [isDirty, postedNumber]);
+
+  const codeById = useMemo(
+    () => new Map(accounts.map((a) => [a.id, a.code ?? ""])),
+    [accounts],
   );
 
-  const hasDiff = diff.changed > 0 || diff.added > 0 || diff.removed > 0;
+  // Diff jujur sejajar indeks: baris edited membawa accountId (uuid),
+  // draf asli membawa accountCode — pencocokan kode mentah selalu gagal
+  // dan menandai semua baris dihapus+ditambah. Selesaikan uuid ke kode dulu,
+  // lalu sandingkan per posisi. Baris yang belum disentuh tapi akunnya masih
+  // kosong dilaporkan sebagai NEEDS_ACCOUNT, bukan CHANGED.
+  const diff = useMemo(() => {
+    type State = "SAME" | "CHANGED" | "ADDED" | "REMOVED" | "NEEDS_ACCOUNT";
+    const out: Array<{ state: State; accountCode: string; debitText: string; creditText: string }> = [];
+    let changed = 0, added = 0, removed = 0, needsAccount = 0;
+    draft.lines.forEach((o, i) => {
+      const e = rows[i];
+      if (!e) {
+        removed++;
+        out.push({ state: "REMOVED", accountCode: o.accountCode, debitText: o.debitText, creditText: o.creditText });
+        return;
+      }
+      const eCode = codeById.get(e.accountId) ?? e.accountId;
+      const amountsSame = e.debitText === o.debitText && e.creditText === o.creditText;
+      if (!eCode && amountsSame) {
+        needsAccount++;
+        out.push({ state: "NEEDS_ACCOUNT", accountCode: o.accountCode, debitText: e.debitText, creditText: e.creditText });
+        return;
+      }
+      const same = eCode === o.accountCode && amountsSame;
+      if (!same) changed++;
+      out.push({
+        state: same ? "SAME" : "CHANGED",
+        accountCode: eCode || o.accountCode,
+        debitText: e.debitText,
+        creditText: e.creditText,
+      });
+    });
+    rows.slice(draft.lines.length).forEach((e) => {
+      added++;
+      const eCode = codeById.get(e.accountId) ?? "";
+      out.push({ state: "ADDED", accountCode: eCode, debitText: e.debitText, creditText: e.creditText });
+    });
+    return { changed, added, removed, needsAccount, rows: out };
+  }, [rows, draft.lines, codeById]);
+
+  const hasDiff = diff.changed > 0 || diff.added > 0 || diff.removed > 0 || diff.needsAccount > 0;
+  const diffSummary = [
+    diff.changed > 0 ? `${diff.changed} diubah` : null,
+    diff.added > 0 ? `${diff.added} ditambah` : null,
+    diff.removed > 0 ? `${diff.removed} dihapus` : null,
+    diff.needsAccount > 0 ? `${diff.needsAccount} perlu dilengkapi` : null,
+  ]
+    .filter((s): s is string => s !== null)
+    .join(" · ");
 
   function update(key: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
 
   function tolak() {
+    if (!confirmTolak) {
+      setConfirmTolak(true);
+      return;
+    }
+    setConfirmTolak(false);
     startTransition(async () => {
       await rejectDraftAction(draftId);
-      router.push("/jurnal?tab=draft");
+      router.push("/jurnal");
     });
   }
 
@@ -116,11 +197,48 @@ export function ReviewClient({
         })),
       });
       if (!res.ok) { setError(res.error ?? "Gagal memposting."); return; }
-      router.push("/jurnal?tab=draft");
+      setPostedNumber(res.number ?? "");
     });
   }
 
   const canPost = !pending && totals.balanced && allHaveAccounts;
+
+  if (postedNumber) {
+    return (
+      <div className="mx-auto w-full max-w-lg rounded-2xl border border-rule bg-paper p-8 text-center shadow-xs">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-debit/10 text-debit">
+          <CheckCircle2 className="size-6" />
+        </div>
+        <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+          Terposting &amp; Terkunci
+        </p>
+        <p className="tnum mt-1 font-display text-3xl font-semibold tracking-tight text-ink">
+          {postedNumber}
+        </p>
+        <p className="tnum mt-1 text-xs text-ink-soft">
+          {Money.fromMinor(totals.d).formatIdr()} · koreksi hanya via jurnal pembalik
+        </p>
+        <div className="rule-double mx-auto mt-4 max-w-[220px]" />
+        <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+          <Button
+            type="button"
+            onClick={() => router.push("/jurnal")}
+            className="bg-terra text-xs text-white hover:bg-terra/90"
+          >
+            Lihat Jurnal Umum
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push("/asisten")}
+            className="text-xs"
+          >
+            Kembali ke Asisten
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-6 grid gap-8 md:grid-cols-2">
@@ -147,8 +265,9 @@ export function ReviewClient({
           </div>
         )}
         {draft.lines.some((l) => l.confidence < 0.7 || l.unresolved) && (
-          <p className="text-xs text-ink-soft">
-            Baris dengan garis terracotta butuh pemeriksaan (keyakinan &lt; 70% atau akun belum cocok).
+          <p className="text-xs text-ink-soft leading-relaxed">
+            Garis terracotta berarti akun belum dipilih dan wajib dilengkapi. Garis amber berarti
+            keyakinan di bawah 70% — periksa sebelum posting.
           </p>
         )}
       </div>
@@ -171,22 +290,23 @@ export function ReviewClient({
         <div className="space-y-3 sm:hidden">
           {rows.map((r, i) => {
             const line = draft.lines[i];
-            const needsCheck = line && (line.confidence < 0.7 || line.unresolved);
+            const blocked = !r.accountId || line?.unresolved === true;
+            const needsCheck = blocked || (line != null && line.confidence < 0.7);
             return (
               <div
                 key={r.key}
                 className={`rounded-xl border border-rule bg-canvas/30 p-3.5 space-y-3 ${
-                  needsCheck ? "border-terra/40 bg-terra/5" : ""
+                  needsCheck ? (blocked ? "border-terra/40 bg-terra/5" : "border-amber-500/40 bg-amber-500/5") : ""
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-ink-soft">Baris #{i + 1}</span>
                   {needsCheck && (
                     <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="border-terra/30 text-terra bg-terra/5 text-[10px]">
-                        perlu cek
+                      <Badge variant="outline" className={`text-[11px] ${blocked ? "border-terra/30 text-terra bg-terra/5" : "border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/5"}`}>
+                        {blocked ? "pilih akun" : "perlu cek"}
                       </Badge>
-                      <span className="text-xs text-terra font-semibold">{Math.round((line?.confidence ?? 0) * 100)}%</span>
+                      <span className={`text-xs font-semibold ${blocked ? "text-terra" : "text-amber-700 dark:text-amber-400"}`}>{Math.round((line?.confidence ?? 0) * 100)}%</span>
                     </div>
                   )}
                 </div>
@@ -246,10 +366,11 @@ export function ReviewClient({
             <tbody className="divide-y divide-rule/60">
               {rows.map((r, i) => {
                 const line = draft.lines[i];
-                const needsCheck = line && (line.confidence < 0.7 || line.unresolved);
+                const blocked = !r.accountId || line?.unresolved === true;
+                const needsCheck = blocked || (line && line.confidence < 0.7);
                 return (
                   <tr key={r.key}
-                      className={`transition-colors hover:bg-canvas/30 ${needsCheck ? "bg-terra/5 border-l-4 border-l-terra" : ""}`}>
+                      className={`transition-colors hover:bg-canvas/30 ${needsCheck ? (blocked ? "bg-terra/5 shadow-[inset_2px_0_0_var(--color-terra)]" : "bg-amber-500/5 shadow-[inset_2px_0_0_var(--color-amber-500)]") : ""}`}>
                     <td className="px-3 py-2.5">
                       <AccountSelect
                         accounts={accounts}
@@ -259,12 +380,12 @@ export function ReviewClient({
                       />
                       {needsCheck && (
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline" className="border-terra/30 text-terra bg-terra/5 text-[10px]">
-                            periksa
+                          <Badge variant="outline" className={`text-[11px] ${blocked ? "border-terra/30 text-terra bg-terra/5" : "border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/5"}`}>
+                            {blocked ? "pilih akun" : "periksa"}
                           </Badge>
-                          <span className="text-xs text-terra font-medium">{Math.round(line.confidence * 100)}%</span>
+                          <span className={`text-xs font-medium ${blocked ? "text-terra" : "text-amber-700 dark:text-amber-400"}`}>{Math.round((line?.confidence ?? 0) * 100)}%</span>
                           {line?.reason && (
-                            <span className="text-xs text-ink-soft truncate max-w-[200px]">{line.reason}</span>
+                            <span className="text-xs leading-relaxed text-ink-soft">{line.reason}</span>
                           )}
                         </div>
                       )}
@@ -296,31 +417,40 @@ export function ReviewClient({
           <div className="flex items-center justify-between sm:justify-start gap-3 tnum">
             <div>
               <span className="text-xs uppercase text-ink-soft">Debit: </span>
-              <span className="font-semibold text-ink">{Money.fromMinor(totals.d).formatIdr()}</span>
+              <span className="text-base font-bold text-ink">{Money.fromMinor(totals.d).formatIdr()}</span>
             </div>
             <span className="text-rule">|</span>
             <div>
               <span className="text-xs uppercase text-ink-soft">Kredit: </span>
-              <span className="font-semibold text-ink">{Money.fromMinor(totals.c).formatIdr()}</span>
+              <span className="text-base font-bold text-ink">{Money.fromMinor(totals.c).formatIdr()}</span>
             </div>
           </div>
-          <Badge className={`font-medium ${totals.balanced ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border border-terra/20 bg-terra/10 text-terra"}`}>
-            {totals.balanced ? "✓ Seimbang" : "Belum seimbang"}
+          <Badge className={`inline-flex items-center gap-1 font-medium ${totals.balanced ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border border-terra/20 bg-terra/10 text-terra"}`}>
+            {totals.balanced && <CheckCircle2 className="size-3" />}
+            {totals.invalid ? "Nominal tak valid" : totals.balanced ? "Seimbang" : "Belum seimbang"}
           </Badge>
         </div>
+        {!totals.balanced && (
+          <p className="text-xs text-ink-soft leading-relaxed">
+            {totals.invalid
+              ? "Ada nominal yang bukan angka rupiah — perbaiki penulisannya."
+              : "Lengkapi akun tiap baris dan pastikan total debit sama dengan kredit untuk memposting."}
+          </p>
+        )}
 
         {hasDiff && (
           <div className="rounded-xl border border-rule bg-paper p-4 text-sm shadow-xs">
             <p className="font-medium text-ink">
-              Perubahan Anda vs draft AI ({diff.changed} diubah · {diff.added} ditambah · {diff.removed} dihapus)
+              Perubahan Anda vs draft AI ({diffSummary})
             </p>
             <ul className="mt-2 space-y-1 text-xs text-ink-soft">
               {diff.rows.filter((r) => r.state !== "SAME").map((r, i) => (
                 <li key={i} className="flex items-center gap-2">
                   <span className={`inline-block size-1.5 rounded-full ${r.state === "CHANGED" ? "bg-amber-500" : r.state === "ADDED" ? "bg-emerald-500" : "bg-terra"}`} />
                   {r.state === "CHANGED" && `Diubah: ${r.accountCode}`}
-                  {r.state === "ADDED" && `Ditambah: ${r.accountCode}`}
+                  {r.state === "ADDED" && (r.accountCode ? `Ditambah: ${r.accountCode}` : "Baris baru (akun belum dipilih)")}
                   {r.state === "REMOVED" && `Dihapus: ${r.accountCode}`}
+                  {r.state === "NEEDS_ACCOUNT" && `Lengkapi akun: ${r.accountCode}`}
                 </li>
               ))}
             </ul>
@@ -329,11 +459,28 @@ export function ReviewClient({
 
         {error && <p className="text-sm font-medium text-destructive">{error}</p>}
 
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" disabled={pending} onClick={tolak}>Tolak</Button>
-          <Button disabled={!canPost} onClick={posting} className="bg-terra text-white hover:bg-terra/90 shadow-sm">
-            {pending ? "Memposting..." : "Posting"}
-          </Button>
+        <div className="flex flex-col items-stretch justify-end gap-2 sm:items-end">
+          {confirmTolak && (
+            <p className="text-xs text-ink-soft">
+              Draft yang ditolak tidak bisa dikembalikan. Klik Tolak sekali lagi untuk lanjut.
+            </p>
+          )}
+          <PageActions className="justify-end">
+            <PageActionButton
+              variant="secondary"
+              disabled={pending}
+              onClick={() => {
+                tolak();
+                window.setTimeout(() => setConfirmTolak(false), 6000);
+              }}
+              className={confirmTolak ? "border-destructive/50 text-destructive hover:text-destructive" : ""}
+            >
+              {confirmTolak ? "Klik lagi untuk menolak" : "Tolak"}
+            </PageActionButton>
+            <PageActionButton variant="primary" loading={pending} disabled={!canPost} onClick={posting}>
+              {pending ? "Memposting..." : "Posting"}
+            </PageActionButton>
+          </PageActions>
         </div>
       </div>
     </div>

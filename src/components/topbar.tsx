@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Search, PanelLeft } from "lucide-react";
+import { IconSearch, IconLayoutSidebar } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/command-palette";
 
@@ -22,7 +22,9 @@ const LABELS: Record<string, string> = {
 
 function breadcrumb(pathname: string) {
   const segs = pathname.split("/").filter(Boolean);
-  return segs.map((s) => LABELS[s] ?? s).join(" / ");
+  return segs
+    .map((s) => LABELS[s] ?? (/^[0-9a-f-]{8,}$/i.test(s) ? "Detail" : s))
+    .join(" / ");
 }
 
 export function Topbar({
@@ -59,7 +61,7 @@ export function Topbar({
             onClick={onOpenMobile}
             aria-label="Buka menu navigasi"
           >
-            <PanelLeft className="size-5" />
+            <IconLayoutSidebar className="size-5" />
           </Button>
         )}
         {onToggleSidebar && (
@@ -70,7 +72,7 @@ export function Topbar({
             onClick={onToggleSidebar}
             aria-label="Toggle sidebar"
           >
-            <PanelLeft className="size-4" />
+            <IconLayoutSidebar className="size-4" />
           </Button>
         )}
 
@@ -79,19 +81,19 @@ export function Topbar({
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={() => setOpen(true)}
-            className="hidden items-center gap-2 rounded-full border border-rule bg-canvas px-3 py-1.5 text-sm text-ink-soft transition-colors hover:bg-paper sm:flex"
+            className="hidden items-center gap-2 rounded-full border border-rule bg-canvas px-3 py-1.5 text-sm text-ink-soft transition-colors hover:bg-paper focus-ring sm:flex"
             aria-label="Buka pencarian"
           >
-            <Search className="size-3.5" />
+            <IconSearch className="size-3.5" />
             <span className="hidden lg:inline">Cari jurnal, akun…</span>
-            <span className="ml-1 hidden rounded bg-paper px-1.5 py-0.5 text-[10px] leading-none lg:inline">⌘K</span>
+            <span className="ml-1 hidden rounded bg-paper px-1.5 py-0.5 text-[11px] leading-none lg:inline">⌘K</span>
           </button>
           <button
             onClick={() => setOpen(true)}
-            className="inline-flex size-8 items-center justify-center rounded-full border border-rule bg-canvas text-ink-soft sm:hidden"
+            className="inline-flex size-8 items-center justify-center rounded-full border border-rule bg-canvas text-ink-soft focus-ring sm:hidden"
             aria-label="Cari"
           >
-            <Search className="size-4" />
+            <IconSearch className="size-4" />
           </button>
         </div>
       </header>

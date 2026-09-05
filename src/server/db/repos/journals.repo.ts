@@ -184,6 +184,14 @@ export async function getPostedEntry(
   return entry;
 }
 
+/** Ambil satu entri beserta barisnya tanpa memandang status (untuk panel terkait temuan). */
+export async function getEntryWithLines(
+  q: Queryable, orgId: string, entryId: string,
+): Promise<EntryView | null> {
+  const rows = await assemble(q, and(eq(journalEntries.orgId, orgId), eq(journalEntries.id, entryId)));
+  return rows[0] ?? null;
+}
+
 export interface EntryDocument {
   id: string;
   fileName: string | null;

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
@@ -26,7 +27,10 @@ export default async function ReviewPage({
   if (status !== "PENDING") {
     return (
       <section className="max-w-2xl">
-        <Link href="/jurnal?tab=draft" className="text-xs text-ink-soft underline">← Draft AI</Link>
+        <Link href="/jurnal" className="inline-flex items-center gap-1 text-xs text-ink-soft underline">
+          <ArrowLeft className="size-3" />
+          Jurnal Umum
+        </Link>
         <div className="mt-2">
           <PageHeader title="Draft sudah diproses" eyebrow="Jurnal AI" />
         </div>
@@ -72,9 +76,15 @@ export default async function ReviewPage({
 
   return (
     <section>
-      <Link href="/jurnal?tab=draft" className="text-xs text-ink-soft underline">← Draft AI</Link>
+      <Link href="/jurnal" className="inline-flex items-center gap-1 text-xs text-ink-soft underline">
+        <ArrowLeft className="size-3" />
+        Jurnal Umum
+      </Link>
       <div className="mt-2">
-        <PageHeader title="Review Draft Asisten" eyebrow="Jurnal AI" />
+        <PageHeader
+          title="Review Draft Asisten"
+          eyebrow={`Draf AI · keyakinan ${Math.round(reviewDraft.overallConfidence * 100)}%`}
+        />
       </div>
       <ReviewClient
         draftId={data.draft.id}

@@ -2,8 +2,8 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FilePlus2, Loader2, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CheckCircle2, FilePlus2 } from "lucide-react";
+import { PageActionButton, PageActions } from "@/components/page-actions";
 import {
   generateAdjustmentDraftAction,
   postOpnameAdjustmentAction,
@@ -25,18 +25,16 @@ export function GenerateDraftButton({ opnameId }: { opnameId: string }) {
   };
 
   return (
-    <Button
-      onClick={handleGenerate}
-      disabled={isPending}
-      className="bg-[var(--color-tinta)] text-[var(--color-paper)] hover:opacity-90"
-    >
-      {isPending ? (
-        <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-      ) : (
-        <FilePlus2 className="w-4 h-4 mr-1.5" />
-      )}
-      Buat Draf Jurnal Penyesuaian
-    </Button>
+    <PageActions>
+      <PageActionButton
+        variant="primary"
+        loading={isPending}
+        icon={<FilePlus2 />}
+        onClick={handleGenerate}
+      >
+        Buat Draf Jurnal Penyesuaian
+      </PageActionButton>
+    </PageActions>
   );
 }
 
@@ -57,17 +55,15 @@ export function PostOpnameButton({ opnameId }: { opnameId: string }) {
   };
 
   return (
-    <Button
-      onClick={handlePost}
-      disabled={isPending}
-      className="bg-terra text-white hover:bg-terra/90"
-    >
-      {isPending ? (
-        <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-      ) : (
-        <CheckCircle2 className="w-4 h-4 mr-1.5" />
-      )}
-      Posting & Selesaikan Opname
-    </Button>
+    <PageActions>
+      <PageActionButton
+        variant="primary"
+        loading={isPending}
+        icon={<CheckCircle2 />}
+        onClick={handlePost}
+      >
+        Posting & Selesaikan Opname
+      </PageActionButton>
+    </PageActions>
   );
 }
