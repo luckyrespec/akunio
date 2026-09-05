@@ -20,6 +20,9 @@ import { CoaManager, type AccountItem } from "@/components/settings/coa-manager"
 import { HitlPolicySelector } from "@/components/settings/hitl-policy-selector";
 import { PeriodActions } from "@/components/settings/period-actions";
 import { InventorySettingsTab, type InventorySettingsData } from "@/components/settings/inventory-settings";
+import { TaxSettingsTab } from "@/components/settings/tax-settings-tab";
+import { DEFAULT_TAX_SETTINGS, type TaxSettings } from "@/core/tax/pph-final";
+import { IconTax } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +55,7 @@ interface SettingsClientProps {
   accounts: AccountItem[];
   periods: PeriodItem[];
   inventorySettings?: InventorySettingsData | null;
+  taxSettings?: TaxSettings | null;
   members: MemberItem[];
   userRole?: string;
 }
@@ -68,6 +72,12 @@ const TABS = [
     label: "Periode Fiskal",
     description: "Kelola tahun buku & tutup periode",
     icon: Calendar,
+  },
+  {
+    id: "pajak",
+    label: "Perpajakan UMKM",
+    description: "PPh Final 0,5%, PPN & status wajib pajak",
+    icon: IconTax,
   },
   {
     id: "persediaan",
@@ -102,6 +112,7 @@ export function SettingsClient({
   accounts,
   periods,
   inventorySettings,
+  taxSettings,
   members,
   userRole,
 }: SettingsClientProps) {
@@ -291,6 +302,16 @@ export function SettingsClient({
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB 3: PERPAJAKAN UMKM */}
+        {activeTab === "pajak" && (
+          <div className="animate-in fade-in-50 duration-200">
+            <TaxSettingsTab
+              initialSettings={taxSettings ?? DEFAULT_TAX_SETTINGS}
+              userRole={userRole}
+            />
           </div>
         )}
 

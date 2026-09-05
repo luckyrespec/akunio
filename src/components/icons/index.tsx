@@ -38,6 +38,15 @@ export const IconReceipt = createIcon(() => (
   </>
 ));
 
+export const IconTax = createIcon(() => (
+  <>
+    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
+    <path d="M15 9.5 9 15.5" />
+    <circle cx="9.5" cy="10" r=".75" fill="currentColor" />
+    <circle cx="14.5" cy="15" r=".75" fill="currentColor" />
+  </>
+));
+
 export const IconInventory = createIcon(() => (
   <>
     <path d="m7 16.5-5-3 5-3 5 3V19l-5 3z" />

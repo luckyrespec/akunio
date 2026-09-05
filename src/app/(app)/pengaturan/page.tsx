@@ -6,6 +6,7 @@ import { user } from "@/server/db/schema/auth";
 import { listAccounts } from "@/server/db/repos/accounts.repo";
 import { listPeriods } from "@/server/db/repos/periods.repo";
 import { getInventorySettings } from "@/server/db/repos/inventory.repo";
+import { getTaxSettings } from "@/server/db/repos/tax.repo";
 import { PageHeader } from "@/components/page-header";
 import { SettingsClient } from "@/components/settings/settings-client";
 
@@ -19,13 +20,14 @@ export default async function PengaturanPage() {
     const accounts = await listAccounts(tx, ctx.orgId);
     const periods = await listPeriods(tx, ctx.orgId);
     const invSettings = await getInventorySettings(tx, ctx.orgId);
+    const taxSettings = await getTaxSettings(tx, ctx.orgId);
     const members = await tx
       .select({ email: user.email, role: memberships.role })
       .from(memberships)
       .innerJoin(user, eq(user.id, memberships.userId))
       .where(eq(memberships.orgId, ctx.orgId))
       .orderBy(memberships.createdAt);
-    return { accounts, periods, members, invSettings };
+    return { accounts, periods, members, invSettings, taxSettings };
   });
 
   return (
@@ -69,6 +71,7 @@ export default async function PengaturanPage() {
             }
           : null
       }
+      taxSettings={data.taxSettings}
       members={data.members.map((m) => ({
         email: m.email,
         role: m.role as "OWNER" | "ACCOUNTANT" | "VIEWER",

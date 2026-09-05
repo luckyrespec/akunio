@@ -15,6 +15,7 @@ import {
   IconClosing,
   IconDoctor,
   IconBookOpen,
+  IconTax,
   IconSettings,
   IconClose,
 } from "@/components/icons";
@@ -67,6 +68,7 @@ const NAVIGATION_GROUPS: NavGroup[] = [
     title: "Laporan & Evaluasi",
     items: [
       { href: "/laporan", label: "Laporan Keuangan", icon: IconReports },
+      { href: "/pajak", label: "Pajak & SPT", icon: IconTax, match: (p: string) => p.startsWith("/pajak") },
       { href: "/tutup-buku", label: "Tutup Buku", icon: IconClosing },
       { href: "/temuan", label: "Diagnosa & Anomali", icon: IconDoctor },
       { href: "/aturan", label: "Standar SAK EMKM", icon: IconBookOpen, match: (p: string) => p.startsWith("/aturan") },
