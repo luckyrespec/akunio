@@ -10,7 +10,7 @@ BEGIN
                            'journal_entries','journal_lines','journal_seq_counters','audit_log',
                            'documents','ai_drafts','journal_documents',
                             'tenant_chunks','chat_threads','onboarding_messages','org_profiles','ai_findings','ai_proposals',
-                           'contacts','invoices','bank_reconciliations',
+                           'contacts','invoices','bank_reconciliations','kas_bank_entries','kas_bank_seq_counters',
                            'fixed_assets','asset_depreciation_lines','asset_disposals',
                            'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames',
                            'tax_summaries']

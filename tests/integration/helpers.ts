@@ -22,6 +22,8 @@ export async function truncateAll(): Promise<void> {
   const admin = new Pool({ connectionString: guardTestDb(process.env.DATABASE_URL!) });
   await admin.query(`
     TRUNCATE tax_summaries, audit_log, journal_lines, journal_entries, journal_seq_counters,
+              kas_bank_entries, kas_bank_seq_counters,
+              bank_statement_lines, bank_reconciliations,
               accounts, fiscal_periods, memberships, organizations,
               org_profiles, onboarding_messages CASCADE
   `);
