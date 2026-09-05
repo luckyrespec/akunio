@@ -6,6 +6,7 @@ import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import { resolveFinding, dismissFinding, createProposal } from "@/server/db/repos/findings.repo";
 import { resolveRelatedRefs } from "@/app/(app)/temuan/finding-meta";
+import type { AccountProposal, CorrectionFrame } from "@/server/doctor/builders";
 import { createDraft } from "@/server/db/repos/drafts.repo";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 
@@ -182,71 +183,67 @@ export async function getFindingRelatedAction(findingId: string) {
   }
 }
 
+// Format minor → teks rupiah ala draf ("7.500.000", desimal ",50" bila ada).
+// Sejalan dengan Money.parseIdr saat review menerima draf.
+function formatMinorIdr(minor: bigint): string {
+  const neg = minor < 0n;
+  const v = neg ? -minor : minor;
+  const grouped = (v / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const frac = v % 100n;
+  const body = frac === 0n ? grouped : `${grouped},${frac.toString().padStart(2, "0")}`;
+  return `${neg ? "-" : ""}${body}`;
+}
+
+// Induk usulan akun baru per digit depan — dipakai bila kode bingkai tak ada
+// di COA org. Ini usulan untuk ditelaah (Task 8 yang mengeksekusi), bukan postingan.
+const PROPOSAL_HEADER_BY_DIGIT: Record<
+  string,
+  { type: AccountProposal["type"]; normal: "D" | "K"; parentCode: string }
+> = {
+  "1": { type: "ASET", normal: "D", parentCode: "1000" },
+  "2": { type: "LIABILITAS", normal: "K", parentCode: "2000" },
+  "3": { type: "EKUITAS", normal: "K", parentCode: "3000" },
+  "4": { type: "PENDAPATAN", normal: "K", parentCode: "4000" },
+  "5": { type: "BEBAN", normal: "D", parentCode: "5000" },
+};
+
+// Bab SAK EMKM per tipe temuan untuk fallback kata kunci tanpa embedding.
+const SAK_BAB_BY_TYPE: Record<string, string[]> = {
+  duplicates: ["Bab7"],
+  abnormalBalances: ["Bab2", "Bab3", "Bab4"],
+  missingReceipts: ["Bab2", "Bab6"],
+  oddDates: ["Bab2"],
+  ratioAnomalies: ["Bab2"],
+};
+
 export async function proposeCorrectionAction(findingId: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const { getFinding } = await import("@/server/db/repos/findings.repo");
-    const finding = await getFinding(db, ctx.orgId, findingId);
-    if (!finding) throw new Error("TEMUAN_TIDAK_DITEMUKAN");
+    const result = await withOrg(ctx.orgId, async (tx) => {
+      const { getFinding, createProposal } = await import("@/server/db/repos/findings.repo");
+      const { createDraft } = await import("@/server/db/repos/drafts.repo");
+      const { appendAudit } = await import("@/server/db/repos/audit.repo");
+      const { getActiveSakSource, isSakSection } = await import("@/server/db/repos/sak.repo");
+      const { resolveDraftAccounts } = await import("@/core/ai/map-accounts");
+      const { validateCitations } = await import("@/server/doctor/citations");
+      const { generateCorrectionNarration } = await import("@/server/ai/correction-narrator");
+      const {
+        buildDuplicateCorrection,
+        buildAbnormalCorrection,
+        buildMissingReceiptCorrection,
+        buildOddDateCorrection,
+        buildRatioSummary,
+      } = await import("@/server/doctor/builders");
+      const { accounts: accountsTable } = await import("@/server/db/schema/org");
+      const { eq: eqAcc, sql: drizzleSql } = await import("drizzle-orm");
 
-    const todayISO = new Date().toISOString().slice(0, 10);
-    const ev = (finding.evidence as Record<string, unknown>) ?? {};
+      const finding = await getFinding(tx, ctx.orgId, findingId);
+      if (!finding) throw new Error("TEMUAN_TIDAK_DITEMUKAN");
+      const ev = (finding.evidence as Record<string, unknown> | null) ?? {};
+      const findingType = finding.type;
+      const todayISO = new Date().toISOString().slice(0, 10);
 
-    // Generate proposal lines & standard citations based on finding type
-    let memo = "Koreksi Penyesuaian Saldo (Doctor AI)";
-    let ifrsCitation = "SAK EMKM Bab 10 (Koreksi Kesalahan & Penyesuaian)";
-    let explanation = "Draft jurnal penyesuaian otomatis untuk menyeimbangkan pos pembukuan.";
-    let lines = [
-      { accountCode: "1110", debitText: "100.000", creditText: "", confidence: 0.85, reason: "Penyesuaian akun kas/aset" },
-      { accountCode: "3100", debitText: "", creditText: "100.000", confidence: 0.85, reason: "Penyeimbang ekuitas modal pemilik" },
-    ];
-
-    if (finding.type === "abnormalBalances" && typeof ev.code === "string") {
-      memo = `Penyesuaian Saldo Berlawanan Akun ${ev.code}`;
-      ifrsCitation = "SAK EMKM Bab 3 (Penyajian Wajar Laporan Keuangan)";
-      explanation = `Koreksi reklasifikasi saldo abnormal pada akun ${ev.code} agar sesuai posisi saldo normal.`;
-      lines = [
-        { accountCode: ev.code, debitText: "500.000", creditText: "", confidence: 0.9, reason: `Reklasifikasi ke akun ${ev.code}` },
-        { accountCode: "3100", debitText: "", creditText: "500.000", confidence: 0.85, reason: "Penyeimbang modal/laba ditahan" },
-      ];
-    } else if (finding.type === "duplicates") {
-      memo = `Pembalik Transaksi Duplikat: ${ev.memo || "Jurnal Ganda"}`;
-      ifrsCitation = "PSAK 25 / SAK ETAP Bab 9 (Koreksi Kesalahan Pencatatan)";
-      explanation = "Jurnal pembalik (reversal) untuk membatalkan entri transaksi yang tercatat ganda.";
-      lines = [
-        { accountCode: "5100", debitText: "", creditText: "250.000", confidence: 0.92, reason: "Pembalik beban tercatat ganda" },
-        { accountCode: "1110", debitText: "250.000", creditText: "", confidence: 0.92, reason: "Pengembalian kas keluar ganda" },
-      ];
-    } else if (finding.type === "missingReceipts") {
-      memo = `Reklasifikasi Beban Belum Terverifikasi Bukti: ${ev.memo || "Transaksi"}`;
-      ifrsCitation = "SAK EMKM Bab 4 (Keandalan Bukti Transaksi Pengeluaran)";
-      explanation = "Pencatatan sementara ke beban ditangguhkan hingga dokumen bukti fisik diunggah.";
-      lines = [
-        { accountCode: "1180", debitText: "1.000.000", creditText: "", confidence: 0.85, reason: "Uang muka/biaya dibayar di muka sementara" },
-        { accountCode: "5100", debitText: "", creditText: "1.000.000", confidence: 0.85, reason: "Reklasifikasi dari beban operasional langsung" },
-      ];
-    } else if (finding.type === "oddDates") {
-      memo = `Penyesuaian Pisah Batas (Cut-Off Periode): ${ev.dateISO || todayISO}`;
-      ifrsCitation = "SAK EMKM Bab 2 (Asas Akrual & Batas Waktu Pelaporan)";
-      explanation = "Penyesuaian tanggal transaksi agar masuk ke dalam periode akuntansi yang sedang aktif.";
-    }
-
-    const draft = {
-      dateISO: todayISO,
-      memo,
-      lines,
-      overallConfidence: 0.88,
-      explanation,
-    };
-
-    // Selesaikan kode akun usulan ke COA aktual org. Tanpa ini semua baris
-    // tersimpan unresolved (termasuk kode valid seperti 5100) dan pengguna
-    // tak bisa menemukan kode fiktif seperti 1180 di COA mereka.
-    // Kode yang memang ada di COA kustom org tetap ter-resolve otomatis.
-    const { resolveDraftAccounts } = await import("@/core/ai/map-accounts");
-    const { accounts: accountsTable } = await import("@/server/db/schema/org");
-    const { eq: eqAcc } = await import("drizzle-orm");
-    const mapping = await db.transaction(async (tx) => {
+      // COA org + peta tipe per kode (untuk substitusi R5).
       const accRows = await tx
         .select()
         .from(accountsTable)
@@ -254,24 +251,235 @@ export async function proposeCorrectionAction(findingId: string) {
       const leaves = accRows.filter(
         (a) => !accRows.some((c) => c.parentCode === a.code),
       );
-      return resolveDraftAccounts(
-        { lines: lines.map((l) => ({ accountCode: l.accountCode })) },
+      const typeByCode = new Map(accRows.map((a) => [a.code, a.type]));
+
+      function requireEntryId(): string {
+        const id = ev.entryId;
+        if (typeof id !== "string" || id.length === 0) throw new Error("EVIDENCE_TIDAK_VALID");
+        return id;
+      }
+
+      async function requireFindingEntry() {
+        const { getEntryWithLines } = await import("@/server/db/repos/journals.repo");
+        const entry = await getEntryWithLines(tx, ctx.orgId, requireEntryId());
+        if (!entry) throw new Error("JURNAL_TIDAK_DITEMUKAN");
+        return entry;
+      }
+
+      // Bingkai koreksi per tipe — nominal SELALU dari bukti/entri/saldo aktual,
+      // tak ada angka template. Memo draf diambil dari frame.memo (R4).
+      let frame: CorrectionFrame;
+      if (findingType === "duplicates") {
+        const entry = await requireFindingEntry();
+        frame = buildDuplicateCorrection({
+          id: entry.id,
+          memo: entry.memo,
+          lines: entry.lines.map((l) => ({
+            accountCode: l.accountCode,
+            debitMinor: l.debitMinor,
+            creditMinor: l.creditMinor,
+          })),
+        });
+      } else if (findingType === "oddDates") {
+        const entry = await requireFindingEntry();
+        const { listPeriods } = await import("@/server/db/repos/periods.repo");
+        const periods = await listPeriods(tx, ctx.orgId);
+        const open =
+          periods.find((p) => p.status === "OPEN" && todayISO >= p.startsOn && todayISO <= p.endsOn)
+          ?? periods.find((p) => p.status === "OPEN");
+        if (!open) throw new Error("PERIODE_TIDAK_DITEMUKAN");
+        frame = buildOddDateCorrection(
+          { id: entry.id, number: entry.number, entryDate: entry.entryDate },
+          { startsOn: open.startsOn, endsOn: open.endsOn },
+        );
+      } else if (findingType === "missingReceipts") {
+        const entry = await requireFindingEntry();
+        let amountMinor: bigint | null = null;
+        try {
+          const { resolveEvidenceAmounts } = await import("@/core/doctor/evidence");
+          const resolved = resolveEvidenceAmounts(ev);
+          if (resolved.amountMinor > 0n) amountMinor = resolved.amountMinor;
+        } catch {
+          amountMinor = null;
+        }
+        if (amountMinor === null) {
+          amountMinor = entry.lines.reduce((s, l) => s + l.debitMinor, 0n);
+        }
+        if (amountMinor <= 0n) throw new Error("KOREKSI_NOMINAL_TIDAK_VALID");
+        // Akun penampung harus kode nyata COA org (1600 lalu 1200); bila tak
+        // ada, lempar agar alur proposal akun baru (Task 8) yang menangani.
+        const suspenseCode = typeByCode.has("1600")
+          ? "1600"
+          : typeByCode.has("1200")
+            ? "1200"
+            : null;
+        if (!suspenseCode) throw new Error("AKUN_PENAMPUNG_TIDAK_ADA");
+        frame = buildMissingReceiptCorrection(amountMinor, suspenseCode);
+        // R5: kredit placeholder (net-nol) WAJIB diganti akun beban asal dari
+        // entri temuan — baris creditMinor terbesar bertipe BEBAN. Bila entri
+        // tak memuat baris beban, blokir pola needs-account (accountId kosong
+        // + alasan): review menahan posting sampai pengguna memilih.
+        const source = [...entry.lines]
+          .filter((l) => typeByCode.get(l.accountCode) === "BEBAN")
+          .sort((a, b) =>
+            b.creditMinor > a.creditMinor ? 1 : b.creditMinor < a.creditMinor ? -1 : 0,
+          )[0];
+        if (source) {
+          frame = {
+            ...frame,
+            lines: [frame.lines[0], { ...frame.lines[1], accountCode: source.accountCode }],
+          };
+        } else {
+          frame = {
+            ...frame,
+            lines: [
+              frame.lines[0],
+              {
+                ...frame.lines[1],
+                accountCode: "",
+                memo: `Pilih akun beban asal dari entri temuan ${entry.number} — jurnal tidak memuat baris beban`,
+              },
+            ],
+          };
+        }
+      } else if (findingType === "abnormalBalances") {
+        const code = typeof ev.code === "string" && ev.code.length > 0 ? ev.code : null;
+        if (!code) throw new Error("EVIDENCE_TIDAK_VALID");
+        const { listAccountsWithBalances } = await import("@/server/db/repos/ledger.repo");
+        const balances = await listAccountsWithBalances(tx, ctx.orgId);
+        const target = balances.find((b) => b.code === code);
+        if (!target) throw new Error("AKUN_TIDAK_DITEMUKAN");
+        // Saldo abnormal berarti negatif di kedua sisi normal; saldo yang sudah
+        // pulih berarti temuan basi — jangan buat draf buta.
+        if (target.balanceMinor >= 0n) throw new Error("TEMUAN_SUDAH_SELESAI");
+        frame = buildAbnormalCorrection(code, -target.balanceMinor, target.normal);
+      } else if (findingType === "ratioAnomalies") {
+        const { resolveEvidenceAmounts } = await import("@/core/doctor/evidence");
+        const resolved = resolveEvidenceAmounts(ev);
+        if (resolved.amountMinor <= 0n) throw new Error("KOREKSI_NOMINAL_TIDAK_VALID");
+        const rawAvg: unknown = ev.avg;
+        let avgMinor = 0n;
+        if (typeof rawAvg === "string" && /^-?\d+$/.test(rawAvg.trim())) {
+          avgMinor = BigInt(rawAvg.trim());
+        } else if (typeof rawAvg === "bigint") {
+          avgMinor = rawAvg;
+        } else if (typeof rawAvg === "number" && Number.isInteger(rawAvg)) {
+          avgMinor = BigInt(rawAvg);
+        }
+        if (avgMinor < 0n) throw new Error("EVIDENCE_TIDAK_VALID");
+        frame = buildRatioSummary({
+          curTotMinor: resolved.amountMinor,
+          avgMinor,
+          topCodes: resolved.codes,
+        });
+      } else {
+        throw new Error("TIPE_TEMUAN_TIDAK_DIDUKUNG");
+      }
+
+      // Retrieve sitasi SAK: embedding bila ada API key, else fallback kata
+      // kunci per Bab. Tanpa chunk — atau tanpa dokumen SAK aktif — kembalikan
+      // SAK_BELUM_TERSEDIA, BUKAN draf asal.
+      const queryText = `${findingType} ${frame.memo}`;
+      let sakHits: Array<{ id: string; section: string; content: string }> = [];
+      if (process.env.AI_MOCK !== "1" && process.env.GEMINI_API_KEY) {
+        const { embed } = await import("@/server/ai/embeddings");
+        const { hybridSearch } = await import("@/server/db/repos/rag-search");
+        const hits = await hybridSearch(ctx.orgId, await embed(queryText), queryText, 4);
+        sakHits = hits
+          .filter((h) => isSakSection(h.section ?? ""))
+          .map((h) => ({ id: h.id, section: h.section as string, content: h.content }));
+      } else {
+        const babs = SAK_BAB_BY_TYPE[findingType] ?? ["Bab2"];
+        const ors = babs.map((b) => drizzleSql`section LIKE ${`SAK-EMKM-${b}%`}`);
+        const whereSql = ors.length === 1
+          ? ors[0]
+          : drizzleSql`(${drizzleSql.join(ors, drizzleSql` OR `)})`;
+        const res = await tx.execute(
+          drizzleSql`SELECT id, section, content FROM ifrs_chunks WHERE ${whereSql} LIMIT 4`,
+        );
+        const rows = (res as unknown as {
+          rows: Array<{ id: string; section: string; content: string }>;
+        }).rows ?? [];
+        sakHits = rows.filter((r) => isSakSection(r.section));
+      }
+      const sakSource = await getActiveSakSource(tx);
+      if (sakHits.length === 0 || !sakSource) {
+        throw new Error("SAK_BELUM_TERSEDIA: jalankan ingest dokumen");
+      }
+
+      // Narasi → validasi sitasi (menunjuk dokumen aktif + Bab ter-retrieve).
+      const frameSummary = (
+        frame.lines.length > 0
+          ? `strategi ${frame.strategy}; ` + frame.lines.map((l) =>
+            `${l.accountCode || "(akun belum dipilih)"} D ${
+              l.debitMinor > 0n ? formatMinorIdr(l.debitMinor) : "nihil"
+            } K ${l.creditMinor > 0n ? formatMinorIdr(l.creditMinor) : "nihil"}`,
+          ).join("; ")
+          : `${frame.strategy}: ${frame.memo}`
+      ).slice(0, 400);
+      const narration = await generateCorrectionNarration({
+        findingType,
+        frameSummary,
+        chunks: sakHits.map((h) => ({ id: h.id, section: h.section, content: h.content })),
+        docId: sakSource.docId,
+      });
+      const checked = validateCitations(
+        narration,
+        sakHits.map((h) => ({ id: h.id, section: h.section })),
+        sakSource.docId,
+      );
+      if (!checked.ok) throw new Error(`SITASI_TIDAK_VALID: ${checked.reason}`);
+
+      // Selesaikan kode → ID terhadap akun leaf; kode tak terpetakan menjadi
+      // AccountProposal (Task 8). Keyakinan jujur: 1.0 terpetakan / 0.45 usulan,
+      // overall = rata-rata baris.
+      const mapping = resolveDraftAccounts(
+        { lines: frame.lines.map((l) => ({ accountCode: l.accountCode })) },
         leaves.map((a) => ({ id: a.id, code: a.code, name: a.name })),
       );
-    });
-    // Jujurkan keyakinan baris yang tak terpetakan: bukan 85%, dan beri alasan
-    // yang menyebut kode yang hilang agar pengguna tahu harus memilih pengganti.
-    const honestLines = lines.map((l, i) => {
-      const m = mapping.lines[i];
-      if (m && !m.unresolved) return l;
-      return {
-        ...l,
-        confidence: Math.min(l.confidence, 0.45),
-        reason: `${l.reason} (kode ${l.accountCode} tidak ada di COA — pilih akun pengganti)`,
-      };
-    });
+      const accountProposals: AccountProposal[] = [];
+      const draftLines = frame.lines.map((l, i) => {
+        const debitText = l.debitMinor > 0n ? formatMinorIdr(l.debitMinor) : "";
+        const creditText = l.creditMinor > 0n ? formatMinorIdr(l.creditMinor) : "";
+        if (l.accountCode === "") {
+          return { accountCode: "", debitText, creditText, confidence: 0.45, reason: l.memo };
+        }
+        const m = mapping.lines[i];
+        if (m && !m.unresolved) {
+          return { accountCode: l.accountCode, debitText, creditText, confidence: 1.0, reason: l.memo };
+        }
+        const header = PROPOSAL_HEADER_BY_DIGIT[l.accountCode.trim()[0] ?? ""]
+          ?? { type: "ASET" as const, normal: "D" as const, parentCode: "1000" };
+        accountProposals.push({
+          code: l.accountCode,
+          name: `Akun ${l.accountCode}`,
+          type: header.type,
+          normal: header.normal,
+          parentCode: header.parentCode,
+          reason: `Dibutuhkan oleh koreksi temuan ${findingType} — ${l.memo}`,
+        });
+        return {
+          accountCode: l.accountCode,
+          debitText,
+          creditText,
+          confidence: 0.45,
+          reason: `${l.memo} (kode ${l.accountCode} tidak ada di COA — pilih akun pengganti)`,
+        };
+      });
+      const overallConfidence = draftLines.length === 0
+        ? 0
+        : draftLines.reduce((s, l) => s + l.confidence, 0) / draftLines.length;
 
-    const result = await db.transaction(async (tx) => {
+      const draft = {
+        dateISO: todayISO,
+        memo: frame.memo,
+        lines: draftLines,
+        overallConfidence,
+        explanation: narration.explanation,
+      };
+      const firstBab = narration.citations[0]?.bab ?? "?";
+      const ifrsCitation = `SAK EMKM Bab ${firstBab} (${sakSource.docId})`;
+
       const proposal = await createProposal(tx, ctx.orgId, findingId, draft, ifrsCitation);
       const aiDraft = await createDraft(tx, {
         orgId: ctx.orgId,
@@ -279,16 +487,16 @@ export async function proposeCorrectionAction(findingId: string) {
         inputText: `Koreksi temuan ${finding.type} (#${findingId.slice(0, 8)})`,
         draft: {
           ...draft,
-          lines: honestLines,
           findingId,
           proposalId: proposal.id,
           ifrsCitation,
-          mapping: {
-            lines: mapping.lines,
-            warnings: mapping.warnings,
-          },
+          mapping: { lines: mapping.lines, warnings: mapping.warnings },
+          accountProposals,
+          citations: narration.citations,
+          sakDocId: sakSource.docId,
+          sakVersion: sakSource.version,
         },
-        model: "doctor",
+        model: "doctor-sak",
       });
       await appendAudit(tx, {
         orgId: ctx.orgId,
@@ -300,7 +508,11 @@ export async function proposeCorrectionAction(findingId: string) {
       });
       return { proposal, aiDraft };
     });
-    revalidatePath("/temuan");
+    // Best-effort di luar request scope (pola baku: settings.actions.ts) —
+    // vitest tak punya static generation store.
+    try {
+      revalidatePath("/temuan");
+    } catch {}
     return { ok: true, draftId: result.aiDraft.id };
   } catch (e) {
     if (isRedirectError(e)) throw e;
