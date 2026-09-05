@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { DraftEntrySchema, type DraftEntry } from "./schema";
 import { buildDraftPrompt, type PromptAccount } from "./prompt";
+import { STORE_INTERACTIONS } from "./interaction-memory";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
@@ -25,8 +26,8 @@ const createJournalDraftTool = {
           type: "object",
           properties: {
             accountCode: { type: "string", description: "Kode akun dari daftar" },
-            debitText: { type: "string", description: "Nominal debit format Indonesia, kosong jika nol" },
-            creditText: { type: "string", description: "Nominal kredit format Indonesia, kosong jika nol" },
+            debitText: { type: "string", description: "Nominal debit format Indonesia, WAJIB string kosong bila nol (jangan '0')" },
+            creditText: { type: "string", description: "Nominal kredit format Indonesia, WAJIB string kosong bila nol (jangan '0')" },
             confidence: { type: "number", description: "0 sampai 1" },
             reason: { type: "string", description: "Alasan singkat Bahasa Indonesia" },
           },
@@ -46,6 +47,7 @@ export interface JournalChatInput {
   accounts: PromptAccount[];
   todayISO: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
+  previousInteractionId?: string | null;
 }
 
 export interface JournalChatResult {
@@ -83,12 +85,14 @@ export async function journalChat(input: JournalChatInput): Promise<JournalChatR
   });
 
   const historyText = (input.history ?? [])
-    .slice(-6)
+    .slice(-12)
     .map((m) => `${m.role}: ${m.content}`)
     .join("\n");
 
+  // ATURAN KONTEKS: pesan singkat/konfirmasi ("ok catatkan ya") WAJIB diartikan
+  // dari Riwayat di atas — jangan minta ulang detail yang sudah ada.
   const userContent: GenaiContent[] = [
-    { type: "text", text: `${systemPrompt}\n\nRiwayat:\n${historyText}\n\nPesan user: ${input.message}` },
+    { type: "text", text: `${systemPrompt}\n\nRiwayat:\n${historyText}\n\nAturan: jika pesan user singkat atau hanya konfirmasi, ambil detail (nominal, akun, aset) dari Riwayat. Jangan jawab generik "sebutkan detail".\n\nPesan user: ${input.message}` },
   ];
   if (input.document) {
     const type = input.document.mime === "application/pdf" ? "document" : "image";
@@ -104,7 +108,8 @@ export async function journalChat(input: JournalChatInput): Promise<JournalChatR
   const interaction = await ai.interactions.create({
     model: MODEL,
     input: inputSteps,
-    store: false,
+    store: STORE_INTERACTIONS,
+    ...(input.previousInteractionId ? { previous_interaction_id: input.previousInteractionId } : {}),
     tools: [createJournalDraftTool as never],
   });
 

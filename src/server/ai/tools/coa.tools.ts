@@ -98,8 +98,8 @@ export const coaHandlers: Record<string, ToolHandler> = {
       });
       await appendAudit(tx, {
         orgId,
-        actor: "nara",
-        action: "NARA_CREATE_ACCOUNT",
+        actor: "akunio",
+        action: "AKUNIO_CREATE_ACCOUNT",
         subjectType: "account",
         subjectId: acc.id,
         data: { code, name, type },
@@ -123,8 +123,8 @@ export const coaHandlers: Record<string, ToolHandler> = {
       const upd = await updateAccount(tx, orgId, target.id, { name, parentCode });
       await appendAudit(tx, {
         orgId,
-        actor: "nara",
-        action: "NARA_UPDATE_ACCOUNT",
+        actor: "akunio",
+        action: "AKUNIO_UPDATE_ACCOUNT",
         subjectType: "account",
         subjectId: upd.id,
         data: { code: upd.code, name: upd.name },
@@ -146,8 +146,8 @@ export const coaHandlers: Record<string, ToolHandler> = {
       const upd = await setAccountArchived(tx, orgId, target.id, archive ? new Date() : null);
       await appendAudit(tx, {
         orgId,
-        actor: "nara",
-        action: archive ? "NARA_ARCHIVE_ACCOUNT" : "NARA_RESTORE_ACCOUNT",
+        actor: "akunio",
+        action: archive ? "AKUNIO_ARCHIVE_ACCOUNT" : "AKUNIO_RESTORE_ACCOUNT",
         subjectType: "account",
         subjectId: upd.id,
         data: { code: upd.code },

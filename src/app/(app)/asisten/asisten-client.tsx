@@ -93,6 +93,7 @@ export default function AsistenClient({
     handleSendMessage,
     handleStopStreaming,
     handleToolDecision,
+    restorePendingFromMessages,
   } = useNaraStreamChat({
     activeThreadId,
     setActiveThreadId,
@@ -135,14 +136,17 @@ export default function AsistenClient({
         if (data.thread?.modelPreset) {
           setModelPreset(data.thread.modelPreset as ModelPreset);
         }
-        setMessages(data.messages ?? []);
+        const loaded = data.messages ?? [];
+        setMessages(loaded);
+        // Pulihkan kartu persetujuan milik thread ini bila ada yang belum diputuskan.
+        restorePendingFromMessages(activeThreadId, loaded);
       } catch (err) {
         console.error("Gagal memuat pesan sesi", err);
       }
     }
 
     loadThread();
-  }, [activeThreadId, currentView, setMessages]);
+  }, [activeThreadId, currentView, setMessages, restorePendingFromMessages]);
 
   // Load library files when switching to library view
   const fetchLibraryFiles = React.useCallback(async () => {
@@ -343,7 +347,7 @@ export default function AsistenClient({
                 </Button>
               )}
               <MessageSquare className="size-4 text-terra shrink-0" />
-              <span className="font-display text-xs md:text-sm font-semibold text-ink truncate max-w-md">
+              <span className="text-xs md:text-sm font-semibold text-ink truncate max-w-md">
                 {threads.find((t) => t.id === activeThreadId)?.title || "Percakapan Baru"}
               </span>
             </div>
@@ -399,7 +403,7 @@ export default function AsistenClient({
                 emptyState={
                   <ConversationEmptyState
                     icon={<Sparkles className="size-10 text-terra" />}
-                    title="Ada yang bisa Nara bantu hari ini?"
+                    title="Ada yang bisa Akunio bantu hari ini?"
                     description="Konsultasikan pembukuan, minta ringkasan laporan keuangan, atau catat transaksi langsung dari foto nota."
                   >
                     <Suggestions className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-left mt-4 w-full">
@@ -545,7 +549,7 @@ export default function AsistenClient({
                           />
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Pilih Model AI (Nara Kilat / Nara Analis)</TooltipContent>
+                      <TooltipContent side="top">Pilih Model AI (Akunio Kilat / Akunio Analis)</TooltipContent>
                     </Tooltip>
                   </PromptInputTools>
 

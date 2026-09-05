@@ -44,6 +44,18 @@ export function BackgroundBeams({ className }: { className?: string }) {
               }}
             />
           ))}
+          {/* Titik transaksi berjalan di sepanjang garis — deklaratif SMIL,
+              murah (tanpa JS per-frame), ikut mati saat reduced-motion. */}
+          {[0, 3, 6, 9, 12].map((i, k) => (
+            <circle key={`dot-${i}`} r="3.5" fill="var(--color-terra)" opacity="0.85">
+              <animateMotion
+                dur={`${7 + k * 1.3}s`}
+                begin={`${-k * 2.1}s`}
+                repeatCount="indefinite"
+                path={paths[i]}
+              />
+            </circle>
+          ))}
         </svg>
       )}
     </div>

@@ -47,6 +47,58 @@ export interface PendingApproval {
   toolName: string;
   args: Record<string, unknown>;
   explanation: string;
+  /** Thread asal permintaan — keputusan (setuju/tolak) selalu dikirim ke thread ini. */
+  threadId?: string | null;
+}
+
+const LOCAL_THREAD_KEY = "__local__";
+function pendingKey(threadId: string | null | undefined): string {
+  return threadId ?? LOCAL_THREAD_KEY;
+}
+
+type StoredInvocation = {
+  callId?: string;
+  toolName: string;
+  status: string;
+  args?: unknown;
+};
+
+/**
+ * Cari permintaan persetujuan yang belum diputuskan dari riwayat pesan DB.
+ * Invokasi yang callId-nya sudah ada keputusan (approved/rejected/failed)
+ * di pesan berikutnya dianggap selesai dan diabaikan.
+ */
+export function findPendingInMessages(
+  messages: Array<{ toolInvocations?: StoredInvocation[] | null }>,
+): PendingApproval | null {
+  const pending = new Map<string, { toolName: string; args: Record<string, unknown>; order: number }>();
+  let order = 0;
+  for (const m of messages) {
+    for (const inv of m.toolInvocations ?? []) {
+      order += 1;
+      if (!inv.callId) continue;
+      if (inv.status === "pending_approval") {
+        pending.set(inv.callId, {
+          toolName: inv.toolName,
+          args: (inv.args as Record<string, unknown>) ?? {},
+          order,
+        });
+      } else if (inv.status === "approved" || inv.status === "rejected" || inv.status === "failed") {
+        pending.delete(inv.callId);
+      }
+    }
+  }
+  let best: { callId: string; toolName: string; args: Record<string, unknown>; order: number } | null = null;
+  for (const [callId, v] of pending) {
+    if (!best || v.order > best.order) best = { callId, ...v };
+  }
+  if (!best) return null;
+  return {
+    callId: best.callId,
+    toolName: best.toolName,
+    args: best.args,
+    explanation: `Akunio membutuhkan konfirmasi Anda untuk menjalankan '${best.toolName}'.`,
+  };
 }
 
 interface UseNaraStreamChatOptions {
@@ -74,7 +126,51 @@ export function useNaraStreamChat({
   const [streamingSuggestions, setStreamingSuggestions] = React.useState<string[]>([]);
   const [streamingTools, setStreamingTools] = React.useState<StreamingToolItem[]>([]);
   const [streamingQueue, setStreamingQueue] = React.useState<BatchItemData[] | null>(null);
-  const [pendingApproval, setPendingApproval] = React.useState<PendingApproval | null>(null);
+  // Persetujuan HITL wajib terikat ke thread asalnya — bukan state global —
+  // agar kartu konfirmasi tidak bocor ke session lain saat user berpindah thread.
+  const [pendingMap, setPendingMap] = React.useState<Record<string, PendingApproval>>({});
+  const pendingApproval = pendingMap[pendingKey(activeThreadId)] ?? null;
+  // Thread yang sedang dilihat user (cermin prop) vs thread milik stream yang berjalan.
+  const viewThreadRef = React.useRef<string | null>(activeThreadId);
+  React.useEffect(() => {
+    viewThreadRef.current = activeThreadId;
+  }, [activeThreadId]);
+
+  const setPendingForThread = React.useCallback(
+    (threadId: string | null, approval: PendingApproval | null) => {
+      const key = pendingKey(threadId);
+      setPendingMap((prev) => {
+        if (!approval) {
+          if (!(key in prev)) return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+        return { ...prev, [key]: { ...approval, threadId } };
+      });
+    },
+    [],
+  );
+
+  const setPendingApproval = React.useCallback(
+    (approval: PendingApproval | null) => {
+      setPendingForThread(viewThreadRef.current, approval);
+    },
+    [setPendingForThread],
+  );
+
+  /** Pulihkan kartu persetujuan dari pesan DB (mis. setelah reload) bila thread belum punya yang aktif. */
+  const restorePendingFromMessages = React.useCallback(
+    (threadId: string | null, loaded: MessageItem[]) => {
+      setPendingMap((prev) => {
+        if (prev[pendingKey(threadId)]) return prev;
+        const found = findPendingInMessages(loaded);
+        if (!found) return prev;
+        return { ...prev, [pendingKey(threadId)]: { ...found, threadId } };
+      });
+    },
+    [],
+  );
   const [allowAllForSession, setAllowAllForSession] = React.useState(
     initialHitlPolicy === "autonomous",
   );
@@ -183,7 +279,10 @@ export function useNaraStreamChat({
       setIsStreaming(true);
       setStreamingReasoning("");
       setStreamingText("");
-      setPendingApproval(null);
+      // Giliran baru menggantikan persetujuan pending di thread ini saja.
+      setPendingForThread(activeThreadId, null);
+      // Thread pemilik stream ini (bisa berubah null -> id baru via event init).
+      let streamThreadId: string | null = activeThreadId;
 
       const userMessage: MessageItem = {
         id: `temp-${Date.now()}`,
@@ -249,6 +348,7 @@ export function useNaraStreamChat({
               const data = JSON.parse(jsonStr);
 
               if (data.type === "init" && data.threadId) {
+                streamThreadId = data.threadId;
                 if (!activeThreadId) {
                   if (setActiveThreadId) setActiveThreadId(data.threadId);
                   const smartTitle = data.title || prompt.split(/\s+/).slice(0, 3).join(" ") || "Percakapan Baru";
@@ -281,7 +381,8 @@ export function useNaraStreamChat({
                   args: data.args,
                 });
                 setStreamingTools([...accumulatedTools]);
-                setPendingApproval({
+                // Ikat ke thread pemilik stream — jangan pernah ke thread yang sedang dilihat.
+                setPendingForThread(streamThreadId, {
                   callId: data.callId,
                   toolName: data.toolName,
                   args: data.args,
@@ -296,6 +397,9 @@ export function useNaraStreamChat({
               } else if (data.type === "error") {
                 setErrorBanner(data.message);
               } else if (data.type === "done") {
+                // Jangan tempel pesan ke tampilan bila user sudah pindah thread —
+                // pesan sudah tersimpan di DB di thread yang benar.
+                if (streamThreadId !== viewThreadRef.current) continue;
                 setMessages((prev) => [
                   ...prev,
                   {
@@ -340,12 +444,16 @@ export function useNaraStreamChat({
       allowAllForSession,
       setActiveThreadId,
       onThreadCreated,
+      setPendingForThread,
     ],
   );
 
   const handleToolDecision = React.useCallback(
     async (approved: boolean, allowAll = false) => {
-      if (!pendingApproval || !activeThreadId) return;
+      if (!pendingApproval) return;
+      // Selalu eksekusi di thread asal permintaan — bukan thread yang sedang dilihat.
+      const decisionThreadId = pendingApproval.threadId ?? activeThreadId;
+      if (!decisionThreadId) return;
 
       setConfirmingLoading(true);
       try {
@@ -353,7 +461,7 @@ export function useNaraStreamChat({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            threadId: activeThreadId,
+            threadId: decisionThreadId,
             callId: pendingApproval.callId,
             toolName: pendingApproval.toolName,
             args: pendingApproval.args,
@@ -371,20 +479,23 @@ export function useNaraStreamChat({
           setAllowAllForSession(true);
         }
 
-        if (data.message) {
-          setMessages((prev) => [...prev, data.message]);
-        } else if (!approved) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `rej-${Date.now()}`,
-              role: "assistant",
-              content: `Tindakan ${pendingApproval.toolName} dibatalkan.`,
-              createdAt: new Date().toISOString(),
-            },
-          ]);
+        // Hanya tempel pesan balasan bila user masih melihat thread yang sama.
+        if (decisionThreadId === viewThreadRef.current) {
+          if (data.message) {
+            setMessages((prev) => [...prev, data.message]);
+          } else if (!approved) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `rej-${Date.now()}`,
+                role: "assistant",
+                content: `Tindakan ${pendingApproval.toolName} dibatalkan.`,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+          }
         }
-        setPendingApproval(null);
+        setPendingForThread(decisionThreadId, null);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Gagal memproses persetujuan.";
         setErrorBanner(msg);
@@ -392,7 +503,7 @@ export function useNaraStreamChat({
         setConfirmingLoading(false);
       }
     },
-    [pendingApproval, activeThreadId],
+    [pendingApproval, activeThreadId, setPendingForThread],
   );
 
   return {
@@ -411,6 +522,8 @@ export function useNaraStreamChat({
     streamingQueue,
     pendingApproval,
     setPendingApproval,
+    setPendingForThread,
+    restorePendingFromMessages,
     allowAllForSession,
     setAllowAllForSession,
     confirmingLoading,

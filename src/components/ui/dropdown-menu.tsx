@@ -236,7 +236,7 @@ function DropdownMenuShortcut({
   return (
     <span
       data-slot="dropdown-menu-shortcut"
-      className={cn("ml-auto text-[10px] tracking-widest text-ink-soft", className)}
+      className={cn("ml-auto text-[11px] tracking-widest text-ink-soft", className)}
       {...props}
     />
   );

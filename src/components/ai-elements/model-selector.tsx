@@ -35,7 +35,7 @@ export function ModelSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const currentLabel = value === "deep" ? "Nara Analis" : "Nara Kilat";
+  const currentLabel = value === "deep" ? "Akunio Analis" : "Akunio Kilat";
   const CurrentIcon = value === "deep" ? Brain : Zap;
 
   return (
@@ -62,13 +62,13 @@ export function ModelSelector({
               setIsOpen(false);
             }}
             className={cn(
-              "flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left text-xs transition-colors hover:bg-canvas",
+              "flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left text-xs transition-colors hover:bg-canvas focus-ring",
               value === "fast" && "bg-canvas font-medium border border-rule/60",
             )}
           >
             <Zap className="mt-0.5 size-4 text-amber-600 shrink-0" />
             <div>
-              <div className="font-semibold text-ink">Nara Kilat (Flash)</div>
+              <div className="font-semibold text-ink">Akunio Kilat (Flash)</div>
               <div className="text-[11px] text-ink-soft">Eksekusi cepat untuk tugas dan pencarian rutin</div>
             </div>
           </button>
@@ -80,13 +80,13 @@ export function ModelSelector({
               setIsOpen(false);
             }}
             className={cn(
-              "flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left text-xs transition-colors hover:bg-canvas",
+              "flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left text-xs transition-colors hover:bg-canvas focus-ring",
               value === "deep" && "bg-canvas font-medium border border-rule/60",
             )}
           >
             <Brain className="mt-0.5 size-4 text-purple-600 shrink-0" />
             <div>
-              <div className="font-semibold text-ink">Nara Analis (Deep Thinking)</div>
+              <div className="font-semibold text-ink">Akunio Analis (Deep Thinking)</div>
               <div className="text-[11px] text-ink-soft">Penalaran bertahap untuk audit & rekonsiliasi kompleks</div>
             </div>
           </button>

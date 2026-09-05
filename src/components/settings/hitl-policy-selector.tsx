@@ -18,6 +18,7 @@ export function HitlPolicySelector({
 
   const handleSelect = async (val: Policy) => {
     if (saving || val === selected) return;
+    const previous = selected;
     setSelected(val);
     setSaving(true);
     setMsg(null);
@@ -28,6 +29,7 @@ export function HitlPolicySelector({
       }
       setMsg("Kebijakan AI berhasil diperbarui.");
     } catch (err) {
+      setSelected(previous);
       setMsg(err instanceof Error ? err.message : "Terjadi kesalahan.");
     } finally {
       setSaving(false);
@@ -39,10 +41,10 @@ export function HitlPolicySelector({
       <div>
         <h3 className="font-display text-base font-semibold text-ink flex items-center gap-2">
           <ShieldCheck className="size-4 text-terra" />
-          <span>Kebijakan Persetujuan & Otomatisasi AI (Nara)</span>
+          <span>Kebijakan Persetujuan & Otomatisasi AI (Akunio)</span>
         </h3>
         <p className="mt-1 text-xs text-ink-soft">
-          Atur tingkat izin otomatisasi untuk pencatatan transaksi yang dieksekusi oleh Asisten AI (Nara) di seluruh aplikasi.
+          Atur tingkat izin otomatisasi untuk pencatatan transaksi yang dieksekusi oleh Asisten AI (Akunio) di seluruh aplikasi.
         </p>
       </div>
 
@@ -63,7 +65,7 @@ export function HitlPolicySelector({
             <ShieldCheck className="size-4 text-emerald-600" />
           </div>
           <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">
-            (Rekomendasi) Pembacaan data berjalan instan. Setiap transaksi mutasi atau posting jurnal wajib Anda setujui.
+            (Rekomendasi) AI boleh membaca data dan menyiapkan draf, tetapi setiap posting jurnal selalu bertanya dulu.
           </p>
         </button>
 
@@ -83,7 +85,7 @@ export function HitlPolicySelector({
             <ShieldAlert className="size-4 text-amber-600" />
           </div>
           <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">
-            Semua tindakan pembacaan maupun penulisan memerlukan persetujuan manual pengguna sebelum dijalankan.
+            AI selalu bertanya dulu — termasuk untuk sekadar membaca laporan — sebelum menjalankan apa pun.
           </p>
         </button>
 
@@ -103,7 +105,7 @@ export function HitlPolicySelector({
             <Zap className="size-4 text-purple-600" />
           </div>
           <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">
-            Seluruh transaksi langsung diposting secara otonom tanpa jeda konfirmasi (mode cepat).
+            AI dapat memposting jurnal ke buku besar tanpa bertanya dulu. Hanya untuk yang benar-benar percaya.
           </p>
         </button>
       </div>

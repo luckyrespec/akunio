@@ -413,17 +413,17 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
 
                             {/* Cash/Bank/Contra badges */}
                             {a.isCash && (
-                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 shrink-0 font-medium">
+                              <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 shrink-0 font-medium">
                                 Kas
                               </Badge>
                             )}
                             {a.isBank && (
-                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-500/15 shrink-0 font-medium">
+                              <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5 border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-500/15 shrink-0 font-medium">
                                 Bank
                               </Badge>
                             )}
                             {a.contra && (
-                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-rose-500/40 text-rose-700 dark:text-rose-300 bg-rose-500/15 shrink-0 font-medium">
+                              <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5 border-rose-500/40 text-rose-700 dark:text-rose-300 bg-rose-500/15 shrink-0 font-medium">
                                 Kontra
                               </Badge>
                             )}
@@ -434,7 +434,7 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <span
                             className={cn(
-                              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-mono border",
+                              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-mono border",
                               a.level === 1
                                 ? "bg-ink text-paper border-ink font-bold"
                                 : a.level === 2
@@ -448,7 +448,7 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
 
                         {/* Kategori Type */}
                         <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className={cn("inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold border", meta.badgeBg)}>
+                          <span className={cn("inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold border", meta.badgeBg)}>
                             <Icon className="size-3 shrink-0" />
                             <span>{meta.label}</span>
                           </span>
@@ -459,7 +459,7 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
                           <Badge
                             variant="outline"
                             className={cn(
-                              "text-[10px] font-mono font-semibold px-2 py-0.5 border",
+                              "text-[11px] font-mono font-semibold px-2 py-0.5 border",
                               a.normal === "D"
                                 ? "border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-500/15"
                                 : "border-purple-500/40 text-purple-700 dark:text-purple-300 bg-purple-500/15",
@@ -487,11 +487,11 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
                         {/* Status */}
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           {isArchived ? (
-                            <Badge variant="outline" className="border-rule text-ink-soft text-[10px]">
+                            <Badge variant="outline" className="border-rule text-ink-soft text-[11px]">
                               Diarsipkan
                             </Badge>
                           ) : (
-                            <Badge className="border border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold">
+                            <Badge className="border border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold">
                               Aktif
                             </Badge>
                           )}

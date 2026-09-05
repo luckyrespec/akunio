@@ -2,15 +2,15 @@
 
 import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { IconDesktop, IconMoon, IconSun } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 
 const ORDER = ["system", "light", "dark"] as const;
 
-const META: Record<(typeof ORDER)[number], { label: string; Icon: typeof Sun }> = {
-  system: { label: "Sistem", Icon: Monitor },
-  light: { label: "Terang", Icon: Sun },
-  dark: { label: "Gelap", Icon: Moon },
+const META: Record<(typeof ORDER)[number], { label: string; Icon: typeof IconSun }> = {
+  system: { label: "Sistem", Icon: IconDesktop },
+  light: { label: "Terang", Icon: IconSun },
+  dark: { label: "Gelap", Icon: IconMoon },
 };
 
 const emptySubscribe = () => () => {};

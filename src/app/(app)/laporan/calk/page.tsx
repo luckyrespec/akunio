@@ -65,6 +65,7 @@ export default async function CalkPage({
       options={data.options.map((p) => ({ name: p.name }))}
       periodDateRange={{ startsOn: data.period.startsOn, endsOn: data.period.endsOn }}
       isBalanced={bs.isBalanced}
+      hideTableHeader={true}
     >
       <div className="space-y-8 text-xs sm:text-sm text-ink leading-relaxed">
         {/* BAB 1: INFORMASI UMUM ENTITAS */}

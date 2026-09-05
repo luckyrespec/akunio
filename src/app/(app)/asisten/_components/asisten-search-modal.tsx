@@ -54,7 +54,7 @@ export function AsistenSearchModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-ink-soft hover:bg-canvas hover:text-ink"
+            className="rounded-lg p-1 text-ink-soft hover:bg-canvas hover:text-ink focus-ring"
             aria-label="Tutup pencarian"
           >
             <X className="size-4" />
@@ -81,7 +81,7 @@ export function AsistenSearchModal({
                     onSelectThread(t.id);
                     onClose();
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs text-ink hover:bg-canvas transition-colors text-left"
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs text-ink hover:bg-canvas transition-colors focus-ring text-left"
                 >
                   <MessageSquare className="size-4 text-ink-soft shrink-0" />
                   <span className="truncate flex-1 font-medium">{t.title}</span>

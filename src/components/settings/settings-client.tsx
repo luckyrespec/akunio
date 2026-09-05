@@ -14,10 +14,12 @@ import {
   Mail,
   UserCheck,
   Sparkles,
+  Boxes,
 } from "lucide-react";
 import { CoaManager, type AccountItem } from "@/components/settings/coa-manager";
 import { HitlPolicySelector } from "@/components/settings/hitl-policy-selector";
 import { PeriodActions } from "@/components/settings/period-actions";
+import { InventorySettingsTab, type InventorySettingsData } from "@/components/settings/inventory-settings";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +51,7 @@ interface SettingsClientProps {
   organization: OrganizationInfo;
   accounts: AccountItem[];
   periods: PeriodItem[];
+  inventorySettings?: InventorySettingsData | null;
   members: MemberItem[];
   userRole?: string;
 }
@@ -67,9 +70,15 @@ const TABS = [
     icon: Calendar,
   },
   {
+    id: "persediaan",
+    label: "Kebijakan Persediaan",
+    description: "Metode valuasi HPP & pencatatan stok",
+    icon: Boxes,
+  },
+  {
     id: "agent",
     label: "Kebijakan Agent AI",
-    description: "Otorisasi transaksi & otomasi Nara",
+    description: "Otorisasi transaksi & otomasi Akunio",
     icon: Bot,
   },
   {
@@ -92,6 +101,7 @@ export function SettingsClient({
   organization,
   accounts,
   periods,
+  inventorySettings,
   members,
   userRole,
 }: SettingsClientProps) {
@@ -132,7 +142,7 @@ export function SettingsClient({
 
         {/* Sidemenu Nav Items */}
         <nav className="p-2 space-y-1 flex-1 overflow-y-auto">
-          <div className="px-3 py-2 text-[10px] font-semibold text-ink-soft uppercase tracking-wider">
+          <div className="px-3 py-2 text-[11px] font-semibold text-ink-soft uppercase tracking-wider">
             Menu Pengaturan
           </div>
 
@@ -221,7 +231,7 @@ export function SettingsClient({
                               </div>
                               <span className="font-mono font-bold text-xs">{p.name}</span>
                               {parseInt(p.name.slice(5), 10) > 12 && (
-                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10">
+                                <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5 border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10">
                                   {parseInt(p.name.slice(5), 10) === 13 ? "Periode Penyesuaian" : "Periode Audit"}
                                 </Badge>
                               )}
@@ -232,17 +242,17 @@ export function SettingsClient({
                           </td>
                           <td className="px-4 py-3">
                             {p.status === "OPEN" ? (
-                              <Badge className="border border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[10px] gap-1 font-semibold">
+                              <Badge className="border border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[11px] gap-1 font-semibold">
                                 <Unlock className="size-2.5" />
                                 <span>Terbuka (Open)</span>
                               </Badge>
                             ) : p.status === "CLOSED" ? (
-                              <Badge variant="secondary" className="border border-rule text-ink-soft text-[10px] gap-1">
+                              <Badge variant="secondary" className="border border-rule text-ink-soft text-[11px] gap-1">
                                 <Lock className="size-2.5" />
                                 <span>Ditutup (Closed)</span>
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="border border-rule text-ink-soft text-[10px] gap-1">
+                              <Badge variant="outline" className="border border-rule text-ink-soft text-[11px] gap-1">
                                 <Lock className="size-2.5" />
                                 <span>Terkunci (Locked)</span>
                               </Badge>
@@ -284,6 +294,20 @@ export function SettingsClient({
           </div>
         )}
 
+        {/* TAB PERSADAAN: KEBIJAKAN PERSEDIAAN */}
+        {activeTab === "persediaan" && (
+          <InventorySettingsTab
+            settings={inventorySettings ?? null}
+            accounts={accounts.map((a) => ({
+              id: a.id,
+              code: a.code,
+              name: a.name,
+              type: a.type,
+            }))}
+            canEdit={canEdit}
+          />
+        )}
+
         {/* TAB 3: KEBIJAKAN AGENT AI */}
         {activeTab === "agent" && (
           <div className="space-y-6 animate-in fade-in-50 duration-200">
@@ -291,10 +315,10 @@ export function SettingsClient({
               <div>
                 <h2 className="font-display text-base font-bold text-ink flex items-center gap-2">
                   <Bot className="size-5 text-terra" />
-                  <span>Kebijakan Otorisasi Nara AI (Human-in-The-Loop)</span>
+                  <span>Kebijakan Otorisasi Akunio AI (Human-in-The-Loop)</span>
                 </h2>
                 <p className="mt-0.5 text-xs text-ink-soft">
-                  Atur tingkat otonomi dan batas verifikasi sebelum Nara AI membuat draf atau memposting jurnal ke buku besar.
+                  Atur tingkat otonomi dan batas verifikasi sebelum Akunio AI membuat draf atau memposting jurnal ke buku besar.
                 </p>
               </div>
             </div>
@@ -329,7 +353,7 @@ export function SettingsClient({
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium text-xs text-ink truncate">{m.email}</p>
-                        <p className="text-[10px] text-ink-soft mt-0.5 flex items-center gap-1">
+                        <p className="text-[11px] text-ink-soft mt-0.5 flex items-center gap-1">
                           <Mail className="size-3 text-ink-soft" />
                           <span>Terverifikasi</span>
                         </p>
@@ -339,11 +363,11 @@ export function SettingsClient({
                     <Badge
                       variant="outline"
                       className={cn(
-                        "text-[10px] font-mono px-2.5 py-0.5",
+                        "text-[11px] font-mono px-2.5 py-0.5",
                         m.role === "OWNER"
                           ? "border-terra/40 text-terra bg-terra/10 font-bold"
                           : m.role === "ACCOUNTANT"
-                          ? "border-blue-500/30 text-blue-700 bg-blue-50/50"
+                          ? "border-blue-500/30 text-blue-700 bg-blue-50/50 dark:text-blue-300 dark:bg-blue-500/15"
                           : "border-rule text-ink-soft bg-canvas",
                       )}
                     >
@@ -391,7 +415,7 @@ export function SettingsClient({
               </div>
 
               <div className="pt-4 border-t border-rule/60 text-[11px] text-ink-soft">
-                <span className="font-mono text-[10px] text-ink-soft">ID Organisasi: {organization.id}</span>
+                <span className="font-mono text-[11px] text-ink-soft">ID Organisasi: {organization.id}</span>
               </div>
             </div>
           </div>

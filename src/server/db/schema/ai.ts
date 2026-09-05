@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, integer, jsonb, timestamp, index,
+  pgTable, uuid, text, integer, jsonb, timestamp, index, uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { organizations } from "./org";
 import { journalEntries } from "./journal";
@@ -42,4 +42,27 @@ export const aiDrafts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("ai_drafts_org_status_idx").on(t.orgId, t.status)],
+);
+
+// Lampiran data dukung yang ditautkan ke entri jurnal (posting manual maupun AI).
+export const journalDocuments = pgTable(
+  "journal_documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    entryId: uuid("entry_id")
+      .notNull()
+      .references(() => journalEntries.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    fileName: text("file_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("jd_entry_doc_uq").on(t.entryId, t.documentId),
+    index("jd_entry_idx").on(t.entryId),
+  ],
 );

@@ -19,7 +19,7 @@ export const ONBOARDING_STEPS = [
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
-export const REVENUE_RANGES = ["LT_10JT", "R_10_50JT", "R_50_200JT", "GT_200JT"] as const;
+export const REVENUE_RANGES = ["LT_10JT", "R_10_50JT", "R_50_200JT", "GT_200JT", "BARU_MULAI"] as const;
 export type RevenueRange = (typeof REVENUE_RANGES)[number];
 
 export const REFERRAL_SOURCES = ["TEMAN", "GOOGLE", "SOSMED", "LAINNYA"] as const;

@@ -69,7 +69,7 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-3xl bg-paper/90 backdrop-blur-xs border-2 border-dashed border-terra animate-in fade-in-0">
               <UploadCloud className="size-8 text-terra mb-1" />
               <p className="font-display font-semibold text-xs text-ink">Lepaskan berkas di sini untuk melampirkan</p>
-              <p className="text-[10px] text-ink-soft">Mendukung gambar (PNG, JPG) dan dokumen PDF</p>
+              <p className="text-[11px] text-ink-soft">Mendukung gambar (PNG, JPG) dan dokumen PDF</p>
             </div>
           )}
 

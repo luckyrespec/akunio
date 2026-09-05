@@ -19,7 +19,7 @@ export function AsistenDeleteModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
       <div className="w-full max-w-sm rounded-2xl border border-rule bg-paper p-5 shadow-xl">
-        <h4 className="font-display text-sm font-semibold text-ink">Hapus Percakapan Ini?</h4>
+        <h4 className="text-sm font-semibold text-ink">Hapus Percakapan Ini?</h4>
         <p className="mt-1 text-xs text-ink-soft leading-relaxed">
           Semua pesan dan riwayat interaksi di dalam percakapan ini akan dihapus secara permanen.
         </p>

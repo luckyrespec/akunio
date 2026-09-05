@@ -82,6 +82,13 @@ function bucketRevenue(rp: number): RevenueRange {
 export function parseRevenue(input: string): RevenueRange | null {
   const t = norm(input);
   if (!t) return null;
+  // New business without revenue yet (chip "Baru memulai usaha" or free text).
+  if (/baru mem?ulai/.test(t)) return "BARU_MULAI";
+  if (/baru (buka|jalan|jualan|dirintis|merintis)/.test(t)) return "BARU_MULAI";
+  if (/belum (ada )?(omzet|omset|penghasilan|pendapatan|jualan|mulai|berjalan|buka)/.test(t))
+    return "BARU_MULAI";
+  if (/belum (punya|dapat) (omzet|omset|penghasilan|pendapatan)/.test(t)) return "BARU_MULAI";
+  if (/^belum$/.test(t)) return "BARU_MULAI";
   // Chips first (exact chip strings from the engine).
   if (t.includes(">200")) return "GT_200JT";
   if (t.includes("50") && t.includes("200")) return "R_50_200JT";

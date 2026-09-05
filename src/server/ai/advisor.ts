@@ -7,8 +7,9 @@ import { incomeStatement } from "@/core/reports/statements";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { embed } from "./embeddings";
 import { hybridSearch } from "@/server/db/repos/rag-search";
-import { addMessage, listMessages, checkAdvisorQuota } from "@/server/db/repos/chat.repo";
+import { addMessage, listMessages, checkAdvisorQuota, getThread } from "@/server/db/repos/chat.repo";
 import { GoogleGenAI } from "@google/genai";
+import { STORE_INTERACTIONS, saveThreadInteractionId } from "./interaction-memory";
 
 export interface Citation {
   kind: string;
@@ -64,7 +65,12 @@ export async function askAdvisor(
   // Build context
   const context = hits.map((h, i) => `[${i + 1}] (${h.kind}) ${h.excerpt}`).join("\n");
   const history = await listMessages(db, threadId);
-  const lastMessages = history.slice(-6).map((m) => `${m.role}: ${m.content}`).join("\n");
+  const lastMessages = history.slice(-12).map((m) => `${m.role}: ${m.content}`).join("\n");
+  let previousInteractionId: string | null = null;
+  try {
+    const tRow = await getThread(db, orgId, threadId);
+    previousInteractionId = (tRow as { geminiInteractionId?: string | null } | null)?.geminiInteractionId ?? null;
+  } catch {}
 
   const citations: Citation[] = hits.map((h) => ({
     kind: h.kind,
@@ -81,6 +87,8 @@ export async function askAdvisor(
   const prompt = `Anda adalah advisor akuntansi untuk UMKM Indonesia (IFRS untuk SME).
 Jawab singkat dalam Bahasa Indonesia, kutip sumber [IFRS §…] untuk aturan dan [Jurnal JE-…] untuk angka.
 Jangan halusinasi angka.
+ATURAN KONTEKS (ANTI-LUPA): jika pesan user singkat/konfirmasi ("ok", "catatkan ya") tanpa detail,
+ambil detail dari Riwayat di bawah — jangan minta ulang data yang sudah ada.
 
 Konteks angka live: ${liveNumbers}
 Konteks dokumen:
@@ -94,9 +102,13 @@ Pertanyaan: ${question}`;
   const interaction = await ai.interactions.create({
     model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
     input: [{ type: "user_input", content: [{ type: "text", text: prompt }] } as never],
-    store: false,
+    store: STORE_INTERACTIONS,
+    ...(previousInteractionId ? { previous_interaction_id: previousInteractionId } : {}),
   });
   const answer = interaction.output_text ?? "Maaf, tidak ada jawaban.";
+  try {
+    if (interaction.id) await saveThreadInteractionId(orgId, threadId, interaction.id);
+  } catch {}
   // Try to parse suggestedDraft if present (look for JSON block)
   try {
     const jsonMatch = answer.match(/\{[\s\S]*"suggestedDraft"[\s\S]*\}/);

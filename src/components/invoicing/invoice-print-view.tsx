@@ -5,8 +5,9 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { formatWhatsAppReminder } from "@/core/invoicing/whatsapp";
-import { Printer, ArrowLeft, MessageSquare, LayoutTemplate } from "lucide-react";
-import { TemplateFormal, type InvoiceDetailData } from "./template-formal";
+import { Printer, ArrowLeft, MessageSquare, LayoutTemplate, CalendarDays, AlertCircle } from "lucide-react";
+import { TemplateFormal, StatusBadge, type InvoiceDetailData } from "./template-formal";
+import { Money } from "@/core/money/money";
 import { TemplateModern } from "./template-modern";
 import { Reveal } from "@/components/motion";
 
@@ -21,6 +22,14 @@ export function InvoicePrintView({ invoice }: { invoice: InvoiceDetailData }) {
   const remainingMinor = invoice.totalMinor - invoice.amountPaidMinor;
   const isPaid = invoice.status === "PAID";
   const [template, setTemplate] = React.useState<TemplateId>("formal");
+
+  const dueISO = String(invoice.dueDate).slice(0, 10);
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const diffDays = Math.round(
+    (Date.parse(`${dueISO}T00:00:00Z`) - Date.parse(`${todayISO}T00:00:00Z`)) / 86_400_000,
+  );
+  const paidPct =
+    invoice.totalMinor > 0n ? Number((invoice.amountPaidMinor * 100n) / invoice.totalMinor) : 0;
 
   React.useEffect(() => {
     try {
@@ -116,6 +125,52 @@ export function InvoicePrintView({ invoice }: { invoice: InvoiceDetailData }) {
           </div>
         </div>
       </Reveal>
+
+      {/* Status rail (layar saja, tidak ikut cetak) */}
+      <div className="rounded-2xl border border-rule bg-paper p-5 shadow-2xs print:hidden">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+              Sisa {invoice.type === "INVOICE" ? "tagihan" : "pembayaran"}
+            </p>
+            <p className="tnum mt-1 font-display text-2xl font-semibold tracking-tight text-ink">
+              {Money.fromMinor(remainingMinor > 0n ? remainingMinor : 0n).formatIdr()}
+            </p>
+          </div>
+          <StatusBadge status={invoice.status} />
+        </div>
+        <div
+          className="mt-3 h-2 overflow-hidden rounded-full bg-canvas"
+          role="progressbar"
+          aria-valuenow={Math.min(paidPct, 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Porsi terbayar"
+        >
+          <div className="h-full rounded-full bg-debit" style={{ width: `${Math.min(paidPct, 100)}%` }} />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-soft">
+          <span>
+            Terbayar {Money.fromMinor(invoice.amountPaidMinor).formatIdr()} dari{" "}
+            {Money.fromMinor(invoice.totalMinor).formatIdr()} · {invoice.payments.length} pembayaran
+          </span>
+          {!isPaid && (
+            <span className={`inline-flex items-center gap-1 font-semibold ${diffDays < 0 ? "text-destructive" : "text-ink"}`}>
+              {diffDays < 0 ? (
+                <>
+                  <AlertCircle className="size-3.5" />
+                  Terlambat {-diffDays} hari
+                </>
+              ) : (
+                <>
+                  <CalendarDays className="size-3.5 text-terra" />
+                  {diffDays === 0 ? "Jatuh tempo hari ini" : `Jatuh tempo dalam ${diffDays} hari`}
+                </>
+              )}
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Printable Invoice Document */}
       <AnimatePresence mode="popLayout" initial={false}>

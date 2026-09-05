@@ -5,7 +5,7 @@ import { isRedirectError } from "./redirect-guard";
 import { db } from "@/server/db";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import {
-  postJournalEntry, getPostedEntry, PostingError,
+  postJournalEntry, getPostedEntry, linkDocumentToEntry, PostingError,
 } from "@/server/db/repos/journals.repo";
 import { makeReversal } from "@/core/journals/validate";
 import { issueToMessage } from "@/core/journals/messages";
@@ -15,6 +15,7 @@ export interface ActionResult {
   ok: boolean;
   error?: string;
   number?: string;
+  id?: string;
 }
 
 function fail(e: unknown): ActionResult {
@@ -33,6 +34,7 @@ export async function createAndPostAction(payload: {
   dateISO: string;
   memo: string;
   lines: Array<{ accountId: string; debitText: string; creditText: string }>;
+  document?: { id: string; fileName?: string };
 }): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]); // viewer may not post
@@ -49,15 +51,23 @@ export async function createAndPostAction(payload: {
     };
     const out = await db.transaction(async (tx) => {
       const r = await postJournalEntry(tx, ctx.orgId, ctx.userEmail, entry);
+      if (payload.document) {
+        await linkDocumentToEntry(tx, {
+          orgId: ctx.orgId,
+          entryId: r.id,
+          documentId: payload.document.id,
+          fileName: payload.document.fileName,
+        });
+      }
       await appendAudit(tx, {
         orgId: ctx.orgId, actor: ctx.userEmail, action: "JOURNAL_POST",
         subjectType: "journal_entry", subjectId: r.id,
-        data: { number: r.number, memo: entry.memo },
+        data: { number: r.number, memo: entry.memo, documentId: payload.document?.id ?? null },
       });
       return r;
     });
     revalidatePath("/jurnal");
-    return { ok: true, number: out.number };
+    return { ok: true, number: out.number, id: out.id };
   } catch (e) {
     return fail(e);
   }

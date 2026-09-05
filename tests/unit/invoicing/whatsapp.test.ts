@@ -16,7 +16,7 @@ describe("WhatsApp Reminder Generator", () => {
       dueDate: "2026-09-15",
       remainingMinor: 55500000n, // Rp 555.000
     };
-    const bank = { bankName: "BCA", accountNumber: "1234567890", accountHolder: "PT Neraca" };
+    const bank = { bankName: "BCA", accountNumber: "1234567890", accountHolder: "PT Akunio" };
 
     const result = formatWhatsAppReminder(contact, invoice, bank);
     expect(result.phone).toBe("6281234567890");

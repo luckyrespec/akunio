@@ -4,7 +4,7 @@ import { signupAndVerify, walkOnboardingToDashboard } from "./helpers";
 test("daftar → onboarding chat → COA → dasbor", async ({ page }) => {
   const email = `onboard-${Date.now()}@tes.id`;
   await signupAndVerify(page, "Budi E2E", email);
-  await expect(page.getByText("Kenalan dengan Nara")).toBeVisible();
+  await expect(page.getByText("Kenalan dengan Akunio")).toBeVisible();
   await walkOnboardingToDashboard(page);
 });
 

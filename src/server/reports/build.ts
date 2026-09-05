@@ -50,6 +50,36 @@ export async function loadPeriodOrDefault(
     if (!p) throw new Error("PERIODE_TIDAK_DITEMUKAN");
     return p;
   }
+
+  // Cari periode yang aktif berdasarkan tanggal hari ini (format YYYY-MM-DD)
+  const today = new Date().toISOString().slice(0, 10);
+  const [current] = await q.select().from(fiscalPeriods)
+    .where(and(
+      eq(fiscalPeriods.orgId, orgId),
+      lte(fiscalPeriods.startsOn, today),
+      gte(fiscalPeriods.endsOn, today),
+    ))
+    .limit(1);
+  if (current) return current;
+
+  // Fallback: cari periode dengan transaksi terakhir jika hari ini tidak masuk rentang periode
+  const [latestEntry] = await q.select({ date: journalEntries.entryDate })
+    .from(journalEntries)
+    .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.status, "POSTED")))
+    .orderBy(desc(journalEntries.entryDate))
+    .limit(1);
+  if (latestEntry?.date) {
+    const [entryPeriod] = await q.select().from(fiscalPeriods)
+      .where(and(
+        eq(fiscalPeriods.orgId, orgId),
+        lte(fiscalPeriods.startsOn, latestEntry.date),
+        gte(fiscalPeriods.endsOn, latestEntry.date),
+      ))
+      .limit(1);
+    if (entryPeriod) return entryPeriod;
+  }
+
+  // Fallback terakhir: periode paling baru
   const [latest] = await q.select().from(fiscalPeriods)
     .where(eq(fiscalPeriods.orgId, orgId)).orderBy(desc(fiscalPeriods.name)).limit(1);
   if (!latest) throw new Error("PERIODE_TIDAK_DITEMUKAN");

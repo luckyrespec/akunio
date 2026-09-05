@@ -133,22 +133,22 @@ export function AgingSummary({
                     </td>
                     <td className="px-4 py-3">
                       {item.bucket === "CURRENT" && (
-                        <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-700 bg-emerald-50/50">
+                        <Badge variant="outline" className="text-[11px] border-emerald-500/30 text-emerald-700 bg-emerald-50/50">
                           Lancar
                         </Badge>
                       )}
                       {item.bucket === "1_30" && (
-                        <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 bg-amber-50/50">
+                        <Badge variant="outline" className="text-[11px] border-amber-500/30 text-amber-700 bg-amber-50/50 dark:text-amber-300 dark:bg-amber-500/15">
                           1–30 Hari
                         </Badge>
                       )}
                       {item.bucket === "31_60" && (
-                        <Badge variant="outline" className="text-[10px] border-orange-500/30 text-orange-700 bg-orange-50/50">
+                        <Badge variant="outline" className="text-[11px] border-orange-500/30 text-orange-700 bg-orange-50/50 dark:text-orange-300 dark:bg-orange-500/15">
                           31–60 Hari
                         </Badge>
                       )}
                       {item.bucket === "OVER_60" && (
-                        <Badge variant="outline" className="text-[10px] border-destructive/30 text-destructive bg-destructive/10">
+                        <Badge variant="outline" className="text-[11px] border-destructive/30 text-destructive bg-destructive/10">
                           &gt;60 Hari
                         </Badge>
                       )}

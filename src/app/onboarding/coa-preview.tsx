@@ -28,7 +28,7 @@ export function CoaPreview({
           {defs.filter((d) => !BASE_CODES.has(d.code)).length} akun khas usaha
         </Badge>
       </div>
-      <div className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
+      <div className="paper-scrollbar mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
         {TYPE_ORDER.map((t) => {
           const rows = defs.filter((d) => d.type === t);
           if (rows.length === 0) return null;
@@ -47,7 +47,7 @@ export function CoaPreview({
                       <span className="tnum text-ink-soft">{d.code}</span> · {d.name}
                     </span>
                     {!BASE_CODES.has(d.code) && (
-                      <span className="shrink-0 rounded-full border border-terra/25 bg-terra/10 px-2 py-0.5 text-[10px] font-medium text-terra">
+                      <span className="shrink-0 rounded-full border border-terra/25 bg-terra/10 px-2 py-0.5 text-[11px] font-medium text-terra">
                         khas
                       </span>
                     )}

@@ -7,8 +7,14 @@ import { incomeStatement } from "@/core/reports/statements";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { embed } from "./embeddings";
 import { hybridSearch } from "@/server/db/repos/rag-search";
-import { addMessage, listMessages, checkAssistantQuota } from "@/server/db/repos/chat.repo";
+import { addMessage, listMessages, checkAssistantQuota, getThread } from "@/server/db/repos/chat.repo";
 import { GoogleGenAI } from "@google/genai";
+import {
+  STORE_INTERACTIONS,
+  clearThreadInteractionId,
+  isStaleInteractionError,
+  saveThreadInteractionId,
+} from "./interaction-memory";
 import { DraftEntrySchema, type DraftEntry } from "./schema";
 import { buildDraftPrompt } from "./prompt";
 import { createDraft } from "@/server/db/repos/drafts.repo";
@@ -18,7 +24,7 @@ import { listEntriesWithLines } from "@/server/db/repos/journals.repo";
 import { searchJournals } from "@/server/db/repos/search.repo";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
-const ASSISTANT_NAME = process.env.ASSISTANT_NAME ?? "Nara";
+const ASSISTANT_NAME = process.env.ASSISTANT_NAME ?? "Akunio";
 
 export interface NaraCitation {
   kind: string;
@@ -41,7 +47,7 @@ type GenaiContent =
   | { type: "image"; data: string; mime_type: string }
   | { type: "document"; data: string; mime_type: string };
 
-// Tool definitions for Nara — superset of previous copilot+advisor
+// Tool definitions for Akunio — superset of previous copilot+advisor
 const createJournalDraftTool = {
   type: "function",
   name: "create_journal_draft",
@@ -58,8 +64,8 @@ const createJournalDraftTool = {
           type: "object",
           properties: {
             accountCode: { type: "string", description: "Kode akun dari daftar akun" },
-            debitText: { type: "string", description: "Nominal debit format Indonesia, kosong jika nol" },
-            creditText: { type: "string", description: "Nominal kredit format Indonesia, kosong jika nol" },
+            debitText: { type: "string", description: "Nominal debit format Indonesia, WAJIB string kosong bila nol (jangan '0')" },
+            creditText: { type: "string", description: "Nominal kredit format Indonesia, WAJIB string kosong bila nol (jangan '0')" },
             confidence: { type: "number", description: "0 sampai 1" },
             reason: { type: "string", description: "Alasan singkat Bahasa Indonesia" },
           },
@@ -193,7 +199,13 @@ export async function askNara(
   const hits = await hybridSearch(orgId, queryEmbedding, question, 6);
   const liveNumbers = await getLiveNumbers(orgId);
   const history = await listMessages(db, threadId);
-  const lastMessages = history.slice(-6).map((m) => `${m.role}: ${m.content}`).join("\n");
+  // 12 pesan terakhir + memory server-side agar "ok catatkan ya" tidak lupa objeknya.
+  const lastMessages = history.slice(-12).map((m) => `${m.role}: ${m.content}`).join("\n");
+  let previousInteractionId: string | null = null;
+  try {
+    const tRow = await getThread(db, orgId, threadId);
+    previousInteractionId = (tRow as { geminiInteractionId?: string | null } | null)?.geminiInteractionId ?? null;
+  } catch {}
   const context = hits.map((h, i) => `[${i + 1}] (${h.kind}) ${h.excerpt}`).join("\n");
 
   // Load accounts for prompt
@@ -216,10 +228,14 @@ export async function askNara(
   const ai = new GoogleGenAI({ apiKey });
 
   // Build system instruction + user prompt
-  const systemInstruction = `Anda adalah Asisten Akuntansi AI untuk UMKM Indonesia (IFRS untuk SME). 
+  const systemInstruction = `Anda adalah ${ASSISTANT_NAME}, Asisten Akuntansi AI untuk UMKM Indonesia (IFRS untuk SME).
+- Nama kamu adalah ${ASSISTANT_NAME}. Jika pengguna bertanya siapa namamu, siapa kamu, atau menyebut nama "Nara", tegaskan bahwa namamu adalah ${ASSISTANT_NAME} dan jangan pernah mengaku bernama Nara.
 - Jawab singkat dalam Bahasa Indonesia, ramah, tuntas.
 - Selalu kutip sumber [IFRS §…] untuk aturan dan [Jurnal JE-…] untuk angka bila relevan.
 - Jangan halusinasi angka — gunakan live numbers dan hasil tool.
+- ATURAN KONTEKS (ANTI-LUPA, WAJIB): jika pesan user singkat/konfirmasi ("ok", "ya", "catatkan ya", "lanjutkan") tanpa nominal,
+  WAJIB ambil detail dari Riwayat di atas (mis. aset laptop Rp10.000.000 + Garis Lurus 48 bulan). Jangan minta ulang detail yang sudah ada;
+  hanya tanyakan field yang benar-benar belum ada (sumber dana/tanggal) sambil menyebut kembali data yang sudah diketahui.
 - Jika user ingin mencatat transaksi, WAJIB panggil create_journal_draft. Draft akan direview user sebelum posting — jangan janji posting otomatis.
 - Jika user tanya laporan/saldo/riwayat, panggil tool yang sesuai (search_journals, get_report, list_accounts, list_drafts, list_journals) lalu jawab berdasarkan hasilnya.
 - Jika tidak perlu tool, jawab langsung dari konteks.`;
@@ -255,16 +271,40 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
 
   let interaction: unknown;
   try {
-    interaction = await ai.interactions.create({
-      model: MODEL,
-      input: inputSteps,
-      store: false,
-      tools: ALL_TOOLS,
-    });
+    const memoryParams = previousInteractionId
+      ? { store: STORE_INTERACTIONS, previous_interaction_id: previousInteractionId }
+      : { store: STORE_INTERACTIONS };
+    try {
+      interaction = await ai.interactions.create({
+        model: MODEL,
+        input: inputSteps,
+        ...memoryParams,
+        tools: ALL_TOOLS,
+      });
+    } catch (e) {
+      if (previousInteractionId && isStaleInteractionError(e)) {
+        console.warn("previous_interaction_id basi, ulangi tanpa chaining", e);
+        await clearThreadInteractionId(orgId, threadId);
+        interaction = await ai.interactions.create({
+          model: MODEL,
+          input: inputSteps,
+          store: STORE_INTERACTIONS,
+          tools: ALL_TOOLS,
+        });
+      } else {
+        throw e;
+      }
+    }
   } catch (e) {
-    console.error("nara interactions.create failed", e);
+    console.error("akunio interactions.create failed", e);
     throw new Error("AI_TIDAK_TERSEDIA");
   }
+
+  // Simpan id interaksi untuk chaining turn berikutnya dalam thread yang sama.
+  try {
+    const newId = (interaction as unknown as { id?: string }).id;
+    if (newId) await saveThreadInteractionId(orgId, threadId, newId);
+  } catch {}
 
   const steps = (interaction as unknown as { steps?: Array<{ type: string; name?: string; arguments?: unknown }> }).steps ?? [];
   const calls = steps.filter((s) => s.type === "function_call" && s.name);
@@ -293,7 +333,7 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
             const docRow = await db.transaction((tx) => createDocumentRow(tx, { orgId, storageKey, mime: doc.mime, sizeBytes: buffer.length }));
             documentId = docRow.id;
           } catch (e) {
-            console.warn("nara document persist failed", e);
+            console.warn("akunio document persist failed", e);
           }
         }
         // Persist draft as PENDING for human review
@@ -313,11 +353,11 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
             // Use same tx for audit if possible; appendAudit uses advisory lock, but tx is fine
             await appendAudit(tx, {
               orgId,
-              actor: "nara",
-              action: "NARA_DRAFT_CREATE",
+              actor: "akunio",
+              action: "AKUNIO_DRAFT_CREATE",
               subjectType: "ai_draft",
               subjectId: d.id,
-              data: { via: "nara", tool: "create_journal_draft", overallConfidence: parsed.overallConfidence },
+              data: { via: "akunio", tool: "create_journal_draft", overallConfidence: parsed.overallConfidence },
             });
           } catch {}
           return d;
@@ -412,12 +452,16 @@ Tugas: Jawab user dalam Bahasa Indonesia natural, ringkas, gunakan angka dari to
       const synth = await ai.interactions.create({
         model: MODEL,
         input: [{ type: "user_input", content: [{ type: "text", text: synthPrompt }] } as never],
-        store: false,
+        store: STORE_INTERACTIONS,
       });
       const synthText = (synth as unknown as { output_text?: string }).output_text;
       if (synthText) answer = synthText;
+      try {
+        const synthId = (synth as unknown as { id?: string }).id;
+        if (synthId) await saveThreadInteractionId(orgId, threadId, synthId);
+      } catch {}
     } catch (e) {
-      console.warn("nara synthesis failed", e);
+      console.warn("akunio synthesis failed", e);
       if (!answer) answer = toolResults.map((tr) => `${tr.tool}: ${JSON.stringify(tr.result).slice(0, 500)}`).join("\n");
     }
   }

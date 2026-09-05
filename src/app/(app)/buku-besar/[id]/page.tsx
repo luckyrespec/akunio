@@ -171,7 +171,7 @@ export default async function AccountLedgerDetailPage({
                       )}
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] uppercase text-ink-soft mr-1">Saldo:</span>
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-ink-soft mr-1">Saldo:</span>
                       <span className="font-bold text-ink">
                         {Money.fromMinor(r.balanceMinor).formatIdr()}
                       </span>
@@ -248,7 +248,7 @@ export default async function AccountLedgerDetailPage({
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-rule bg-canvas/70 font-semibold">
-                    <td colSpan={3} className="px-4 py-3.5 text-right uppercase text-[10px] tracking-wider text-ink-soft">
+                    <td colSpan={3} className="px-4 py-3.5 text-right uppercase text-[11px] tracking-wider text-ink-soft">
                       Total & Saldo Akhir
                     </td>
                     <td className="px-4 py-3.5 text-right font-mono text-emerald-600 dark:text-emerald-400">

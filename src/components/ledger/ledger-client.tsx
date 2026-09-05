@@ -46,37 +46,37 @@ const TYPE_META = {
   ASET: {
     label: "Aset",
     icon: Coins,
-    color: "text-emerald-600 dark:text-emerald-300",
-    bg: "bg-emerald-500/10 border-emerald-500/30",
-    badgeBg: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+    color: "text-ink-soft",
+    bg: "bg-canvas border-rule",
+    badgeBg: "bg-canvas text-ink-soft border-rule",
   },
   LIABILITAS: {
     label: "Liabilitas",
     icon: CreditCard,
-    color: "text-amber-600 dark:text-amber-300",
-    bg: "bg-amber-500/10 border-amber-500/30",
-    badgeBg: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+    color: "text-ink-soft",
+    bg: "bg-canvas border-rule",
+    badgeBg: "bg-canvas text-ink-soft border-rule",
   },
   EKUITAS: {
     label: "Ekuitas",
     icon: Scale,
-    color: "text-purple-600 dark:text-purple-300",
-    bg: "bg-purple-500/10 border-purple-500/30",
-    badgeBg: "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30",
+    color: "text-ink-soft",
+    bg: "bg-canvas border-rule",
+    badgeBg: "bg-canvas text-ink-soft border-rule",
   },
   PENDAPATAN: {
     label: "Pendapatan",
     icon: TrendingUp,
-    color: "text-sky-600 dark:text-sky-300",
-    bg: "bg-sky-500/10 border-sky-500/30",
-    badgeBg: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+    color: "text-ink-soft",
+    bg: "bg-canvas border-rule",
+    badgeBg: "bg-canvas text-ink-soft border-rule",
   },
   BEBAN: {
     label: "Beban",
     icon: TrendingDown,
-    color: "text-rose-600 dark:text-rose-300",
-    bg: "bg-rose-500/10 border-rose-500/30",
-    badgeBg: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
+    color: "text-ink-soft",
+    bg: "bg-canvas border-rule",
+    badgeBg: "bg-canvas text-ink-soft border-rule",
   },
 } as const;
 
@@ -230,7 +230,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
               Total Mutasi Debit
             </span>
-            <p className="mt-1 font-mono text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400">
+            <p className="mt-1 font-mono text-sm sm:text-base font-bold text-debit">
               {Money.fromMinor(summary.totalDebit).formatIdr()}
             </p>
           </div>
@@ -239,7 +239,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
               Total Mutasi Kredit
             </span>
-            <p className="mt-1 font-mono text-sm sm:text-base font-bold text-terra">
+            <p className="mt-1 font-mono text-sm sm:text-base font-bold text-credit">
               {Money.fromMinor(summary.totalCredit).formatIdr()}
             </p>
           </div>
@@ -274,7 +274,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
               type="button"
               onClick={() => setSelectedType("ALL")}
               className={cn(
-                "relative h-7.5 rounded-xl px-3 text-xs font-medium transition-colors shrink-0",
+                "relative h-7.5 rounded-xl px-3 text-xs font-medium transition-colors focus-ring shrink-0",
                 selectedType === "ALL" ? "text-paper font-semibold" : "text-ink-soft hover:text-ink hover:bg-canvas/50",
               )}
             >
@@ -298,7 +298,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
                   type="button"
                   onClick={() => setSelectedType(t)}
                   className={cn(
-                    "relative flex items-center gap-1.5 h-7.5 rounded-xl px-3 text-xs font-medium transition-colors shrink-0",
+                    "relative flex items-center gap-1.5 h-7.5 rounded-xl px-3 text-xs font-medium transition-colors focus-ring shrink-0",
                     isSelected ? "text-paper font-semibold" : "text-ink-soft hover:text-ink hover:bg-canvas/50",
                   )}
                 >
@@ -323,7 +323,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
               <button
                 type="button"
                 onClick={expandAll}
-                className="rounded-lg px-2.5 py-1 text-ink-soft hover:text-ink hover:bg-paper transition-colors font-medium"
+                className="rounded-lg px-2.5 py-1 text-ink-soft hover:text-ink hover:bg-paper transition-colors font-medium focus-ring"
               >
                 Buka Semua
               </button>
@@ -331,7 +331,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
               <button
                 type="button"
                 onClick={collapseAll}
-                className="rounded-lg px-2.5 py-1 text-ink-soft hover:text-ink hover:bg-paper transition-colors font-medium"
+                className="rounded-lg px-2.5 py-1 text-ink-soft hover:text-ink hover:bg-paper transition-colors font-medium focus-ring"
               >
                 Tutup Semua
               </button>
@@ -341,7 +341,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
               type="button"
               onClick={() => setOnlyWithTransactions((prev) => !prev)}
               className={cn(
-                "h-7.5 rounded-xl border px-2.5 text-xs font-medium transition-colors flex items-center gap-1.5 shrink-0",
+                "h-7.5 rounded-xl border px-2.5 text-xs font-medium transition-colors focus-ring flex items-center gap-1.5 shrink-0",
                 onlyWithTransactions
                   ? "border-terra/40 bg-terra/10 text-terra font-semibold"
                   : "border-rule bg-canvas/60 text-ink-soft hover:text-ink hover:bg-paper",
@@ -434,7 +434,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
                                 <button
                                   type="button"
                                   onClick={() => toggleCollapse(a.code)}
-                                  className="flex size-5 shrink-0 items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-paper transition-colors cursor-pointer"
+                                  className="flex size-5 shrink-0 items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-paper transition-colors cursor-pointer focus-ring"
                                   aria-label={isCollapsed ? "Buka sub-akun" : "Tutup sub-akun"}
                                   title={isCollapsed ? "Buka sub-akun" : "Tutup sub-akun"}
                                 >
@@ -498,7 +498,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
 
                           {/* Category Badge */}
                           <td className="px-3 py-2.5 whitespace-nowrap">
-                            <Badge variant="outline" className={cn("text-[10px] py-0 px-2 font-medium", meta.badgeBg)}>
+                            <Badge variant="outline" className={cn("text-[11px] py-0 px-2 font-medium", meta.badgeBg)}>
                               {meta.label}
                             </Badge>
                           </td>
@@ -513,7 +513,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
                           {/* Total Debit */}
                           <td className="px-4 py-2.5 text-right font-mono text-ink">
                             {dMinor > 0n ? (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                              <span className="text-debit font-medium">
                                 {Money.fromMinor(dMinor).formatIdr()}
                               </span>
                             ) : (
@@ -524,7 +524,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
                           {/* Total Kredit */}
                           <td className="px-4 py-2.5 text-right font-mono text-ink">
                             {cMinor > 0n ? (
-                              <span className="text-terra font-medium">
+                              <span className="text-credit font-medium">
                                 {Money.fromMinor(cMinor).formatIdr()}
                               </span>
                             ) : (
@@ -541,7 +541,7 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
                           <td className="px-3 py-2.5 text-center whitespace-nowrap">
                             <span
                               className={cn(
-                                "rounded-full px-2 py-0.5 text-[10px] font-medium font-mono",
+                                "rounded-full px-2 py-0.5 text-[11px] font-medium font-mono",
                                 a.transactionCount > 0
                                   ? "bg-canvas text-ink border border-rule/70"
                                   : "text-ink-soft/40",
@@ -580,10 +580,10 @@ export function LedgerClient({ accounts }: LedgerClientProps) {
             </span>
             <div className="flex items-center gap-4 font-mono text-[11px]">
               <span>
-                Debit: <strong className="text-emerald-600 dark:text-emerald-400">{Money.fromMinor(summary.totalDebit).formatIdr()}</strong>
+                Debit: <strong className="text-debit">{Money.fromMinor(summary.totalDebit).formatIdr()}</strong>
               </span>
               <span>
-                Kredit: <strong className="text-terra">{Money.fromMinor(summary.totalCredit).formatIdr()}</strong>
+                Kredit: <strong className="text-credit">{Money.fromMinor(summary.totalCredit).formatIdr()}</strong>
               </span>
             </div>
           </div>

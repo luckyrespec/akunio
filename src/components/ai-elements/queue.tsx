@@ -83,7 +83,7 @@ export function QueueSectionLabel({
       <div className="flex items-center gap-1.5">
         {icon}
         {count !== undefined && (
-          <span className="rounded bg-ink/10 px-1.5 py-0.5 text-[10px] font-medium text-ink/80">
+          <span className="rounded bg-ink/10 px-1.5 py-0.5 text-[11px] font-medium text-ink/80">
             {count}
           </span>
         )}
@@ -153,7 +153,7 @@ export function QueueItemIndicator({
   return (
     <span
       className={cn(
-        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px]",
+        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[11px]",
         completed
           ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
           : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400",

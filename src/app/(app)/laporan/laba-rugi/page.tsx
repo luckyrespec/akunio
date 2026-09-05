@@ -12,6 +12,7 @@ import {
   StatementShell,
   ReportRowView,
   ReportSectionHeader,
+  ReportEmptyState,
 } from "@/components/statement-parts";
 
 export default async function LabaRugiPage({
@@ -56,7 +57,7 @@ export default async function LabaRugiPage({
         <section className="space-y-2">
           <ReportSectionHeader title="PENDAPATAN USAHA" />
           {is.revenueRows.length === 0 ? (
-            <p className="pl-6 text-xs italic text-ink-soft/70">Tidak ada pendapatan usaha pada periode ini.</p>
+            <ReportEmptyState message="Tidak ada pendapatan usaha pada periode ini." actionHref="/faktur/baru?tipe=invoice" actionLabel="Buat Faktur Penjualan" />
           ) : (
             is.revenueRows.map((r) => (
               <ReportRowView
@@ -81,7 +82,7 @@ export default async function LabaRugiPage({
         <section className="space-y-2">
           <ReportSectionHeader title="BEBAN POKOK PENJUALAN" />
           {is.cogsRows.length === 0 ? (
-            <p className="pl-6 text-xs italic text-ink-soft/70">Tidak ada beban pokok penjualan tercatat.</p>
+            <ReportEmptyState message="Tidak ada beban pokok penjualan tercatat." actionHref="/faktur/baru?tipe=bill" actionLabel="Catat Tagihan Pembelian" />
           ) : (
             is.cogsRows.map((r) => (
               <ReportRowView
@@ -116,7 +117,7 @@ export default async function LabaRugiPage({
         <section className="space-y-2">
           <ReportSectionHeader title="BEBAN OPERASIONAL" />
           {is.operatingExpenseRows.length === 0 ? (
-            <p className="pl-6 text-xs italic text-ink-soft/70">Tidak ada beban operasional pada periode ini.</p>
+            <ReportEmptyState message="Tidak ada beban operasional pada periode ini." actionHref="/jurnal/baru" actionLabel="Catat Beban Operasional" />
           ) : (
             is.operatingExpenseRows.map((r) => (
               <ReportRowView

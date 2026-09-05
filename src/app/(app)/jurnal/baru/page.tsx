@@ -2,8 +2,8 @@ import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { listAccounts } from "@/server/db/repos/accounts.repo";
 import { NewEntryForm } from "@/components/journal/new-entry-form";
-import { PageHeader } from "@/components/page-header";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 export default async function JurnalBaruPage() {
   const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
@@ -11,17 +11,13 @@ export default async function JurnalBaruPage() {
   const leaves = rows.filter((a) => !rows.some((c) => c.parentCode === a.code));
 
   return (
-    <section className="mx-auto w-full max-w-7xl space-y-6">
+    <section className="w-full space-y-6">
       <div className="mb-2">
-        <Link href="/jurnal" className="inline-flex items-center text-xs font-medium text-ink-soft hover:text-terra transition-colors">
-          ← Kembali ke Jurnal Umum
+        <Link href="/jurnal" className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft hover:text-terra transition-colors">
+          <ArrowLeft className="size-3.5" />
+          Kembali ke Jurnal Umum
         </Link>
       </div>
-
-      <PageHeader
-        title="Tulis Jurnal Baru"
-        eyebrow="Pastikan jumlah total Debit dan Kredit seimbang sebelum memposting transaksi."
-      />
 
       <NewEntryForm
         accounts={leaves.map((a) => ({

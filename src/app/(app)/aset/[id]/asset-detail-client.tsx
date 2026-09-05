@@ -68,7 +68,7 @@ export function AssetDetailClient({
             Kembali ke Daftar Aset
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-serif font-bold text-ink tracking-tight">
+            <h1 className="font-display text-2xl font-semibold text-ink tracking-tight">
               {currentAsset.name}
             </h1>
             <Badge
@@ -144,7 +144,7 @@ export function AssetDetailClient({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold font-mono text-terra">
+            <div className="text-xl font-bold font-mono text-ink">
               {Money.formatIdr(currentBookValueMinor)}
             </div>
             <p className="text-[11px] text-ink-soft mt-0.5">Nilai aset di neraca saat ini</p>
@@ -238,8 +238,8 @@ export function AssetDetailClient({
                             variant="outline"
                             className={
                               item.status === "POSTED"
-                                ? "border-emerald-500/30 text-emerald-700 bg-emerald-500/10 text-[10px]"
-                                : "border-rule text-ink-soft bg-canvas/60 text-[10px]"
+                                ? "border-emerald-500/30 text-emerald-700 bg-emerald-500/10 text-[11px]"
+                                : "border-rule text-ink-soft bg-canvas/60 text-[11px]"
                             }
                           >
                             {item.status === "POSTED" ? "Terposting" : "Terjadwal"}

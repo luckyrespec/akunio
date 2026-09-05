@@ -2,11 +2,16 @@
 
 import * as React from "react";
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Loader2, Sparkles, Scale, ReceiptText, Info } from "lucide-react";
+import { Loader2, Sparkles, Scale, ReceiptText, Info, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +24,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
 import { AnimatedNumber, Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { Money } from "@/core/money/money";
 import { calculateDepreciationSchedule } from "@/core/assets/depreciation";
@@ -125,6 +131,7 @@ export function AsetBaruClient({ accounts }: { accounts: AccountOption[] }) {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ id: string; name: string } | null>(null);
 
   const isTanah = category === "TANAH";
   const costMinor = tryParseIdr(acquisitionCostText);
@@ -182,7 +189,20 @@ export function AsetBaruClient({ accounts }: { accounts: AccountOption[] }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await submitWithMode("save");
+  };
+
+  function resetForm() {
+    setName("");
+    setAcquisitionCostText("");
+    setSalvageValueText("");
+    setNotes("");
     setError(null);
+  }
+
+  const submitWithMode = async (mode: "save" | "save-new") => {
+    setError(null);
+    setFlash(null);
     setLoading(true);
     try {
       const res = await createAssetWithAcquisitionAction({
@@ -206,7 +226,13 @@ export function AsetBaruClient({ accounts }: { accounts: AccountOption[] }) {
         setError(res.error || "Gagal menyimpan aset.");
         return;
       }
-      router.push(`/aset/${res.data.asset.id}`);
+      if (mode === "save-new") {
+        setFlash({ id: res.data.asset.id, name });
+        resetForm();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        router.push(`/aset/${res.data.asset.id}`);
+      }
     } catch (err: any) {
       setError(err.message || "Terjadi kesalahan sistem.");
     } finally {
@@ -216,6 +242,85 @@ export function AsetBaruClient({ accounts }: { accounts: AccountOption[] }) {
 
   return (
     <form onSubmit={handleSubmit}>
+      <PageHeader
+        title="Tambah Aset Tetap"
+        eyebrow="Daftarkan aset, atur penyusutan SAK EMKM, dan otomatis catat jurnal perolehan."
+        actions={
+          <div className="flex items-center gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/aset")}
+              className="h-9 px-4 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink-soft hover:text-ink transition-colors shadow-xs"
+            >
+              Batal
+            </Button>
+
+            <div className="flex items-stretch shadow-xs rounded-xl overflow-hidden">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={loading}
+                className="h-9 rounded-l-xl rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-none"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Daftarkan Aset"
+                )}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={loading}
+                    aria-label="Opsi penyimpanan lainnya"
+                    className="h-9 rounded-l-none rounded-r-xl border-l border-l-white/25 px-2.5 bg-terra text-white hover:bg-terra/90 shadow-none disabled:transform-none"
+                  >
+                    <ChevronDown className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-48 rounded-xl border-rule bg-paper shadow-md">
+                  <DropdownMenuItem
+                    onClick={() => void submitWithMode("save")}
+                    className="text-xs font-medium cursor-pointer py-2"
+                  >
+                    Daftarkan Aset
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => void submitWithMode("save-new")}
+                    className="text-xs font-medium cursor-pointer py-2"
+                  >
+                    Daftarkan &amp; Tambah Lagi
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        }
+      />
+
+      {flash?.id && (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-debit/25 bg-debit/10 px-4 py-3 text-xs">
+          <span className="text-ink">
+            Aset <strong className="font-semibold">{flash.name}</strong> terdaftar. Formulir sudah dikosongkan untuk aset berikutnya.
+          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] border-rule bg-paper" onClick={() => router.push(`/aset/${flash.id}`)}>
+              Lihat Detail
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setFlash(null)}>
+              Tutup
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
         <Stagger className="flex flex-col gap-6" staggerDelay={0.07}>
           {/* Section 1 — Informasi Aset */}
@@ -539,22 +644,6 @@ export function AsetBaruClient({ accounts }: { accounts: AccountOption[] }) {
               </CardContent>
             </Card>
           </StaggerItem>
-
-          <div className="flex items-center justify-end gap-2.5">
-            <Link href="/aset">
-              <Button type="button" variant="outline" disabled={loading}>
-                Batal
-              </Button>
-            </Link>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-terra text-white shadow-xs hover:bg-terra/90 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]"
-            >
-              {loading && <Loader2 data-icon="inline-start" className="animate-spin" />}
-              Daftarkan Aset
-            </Button>
-          </div>
         </Stagger>
 
         {/* Panel pratinjau live */}
@@ -562,7 +651,7 @@ export function AsetBaruClient({ accounts }: { accounts: AccountOption[] }) {
           <div className="flex flex-col gap-4">
             <Card className="border-rule bg-paper shadow-xs">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 font-display text-sm text-ink">
+                <CardTitle className="flex items-center gap-2 text-sm text-ink">
                   <Scale className="size-4 text-terra" />
                   Pratinjau Jurnal
                 </CardTitle>
@@ -625,7 +714,7 @@ export function AsetBaruClient({ accounts }: { accounts: AccountOption[] }) {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] text-ink-soft">Tanggal: {acquisitionDate || "—"}</span>
-                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-700">
+                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[11px] text-emerald-700">
                           Seimbang
                         </Badge>
                       </div>
@@ -637,7 +726,7 @@ export function AsetBaruClient({ accounts }: { accounts: AccountOption[] }) {
 
             <Card className="border-rule bg-paper shadow-xs">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 font-display text-sm text-ink">
+                <CardTitle className="flex items-center gap-2 text-sm text-ink">
                   <ReceiptText className="size-4 text-terra" />
                   Ringkasan Penyusutan
                 </CardTitle>
@@ -657,10 +746,10 @@ export function AsetBaruClient({ accounts }: { accounts: AccountOption[] }) {
                       )}
                     </span>
                     <div className="mt-1 flex flex-wrap gap-1.5">
-                      <Badge variant="outline" className="border-rule text-[10px] text-ink-soft">
+                      <Badge variant="outline" className="border-rule text-[11px] text-ink-soft">
                         {CATEGORY_LABEL[category]}
                       </Badge>
-                      <Badge variant="outline" className="border-rule text-[10px] text-ink-soft">
+                      <Badge variant="outline" className="border-rule text-[11px] text-ink-soft">
                         {depreciationMethod === "STRAIGHT_LINE" ? "Garis Lurus" : "Saldo Menurun"}
                       </Badge>
                     </div>

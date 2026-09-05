@@ -82,6 +82,12 @@ export function movementByCode(aggs: AccountAggregate[], code: string): bigint {
   return found ? signed(found.meta, found) : 0n;
 }
 
+export function movementByPrefix(aggs: AccountAggregate[], prefix: string): bigint {
+  return aggs
+    .filter((x) => x.meta.code.startsWith(prefix))
+    .reduce((sum, x) => sum + signed(x.meta, x), 0n);
+}
+
 export interface CashFlowInput {
   netIncomeMinor: bigint;
   deltaPiutangMinor: bigint;

@@ -34,7 +34,7 @@ export function TemplateModern({ invoice }: { invoice: InvoiceDetailData }) {
 
         {/* Recipient */}
         <div className="mt-4 rounded-xl bg-canvas/60 px-4 py-3 text-xs">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
             {invoice.type === "INVOICE" ? "Ditagihkan kepada" : "Diterima dari"}
           </span>
           <p className="mt-1 font-display text-sm font-semibold text-ink">{invoice.contact.name}</p>
@@ -62,7 +62,7 @@ export function TemplateModern({ invoice }: { invoice: InvoiceDetailData }) {
                   <td className="py-2.5 pr-2 font-medium text-ink">
                     {item.description}
                     {parseFloat(item.taxRatePercent) > 0 && (
-                      <span className="ml-1.5 rounded bg-terra/10 px-1.5 py-0.5 text-[10px] font-semibold text-terra">
+                      <span className="ml-1.5 rounded bg-terra/10 px-1.5 py-0.5 text-[11px] font-semibold text-terra">
                         PPN {item.taxRatePercent}%
                       </span>
                     )}

@@ -24,6 +24,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   evaluatePeriodReadinessAction,
   executePeriodCloseAction,
   reopenPeriodAction,
@@ -61,6 +68,7 @@ export function TutupBukuClient({
   const [checklist, setChecklist] = useState<PreClosingChecklistResult | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmKind, setConfirmKind] = useState<null | "close" | "reopen">(null);
 
   // Accounts for Year-end close
   const reAccounts = accounts.filter((a) => a.type === "EKUITAS" && a.code.startsWith("32"));
@@ -108,10 +116,6 @@ export function TutupBukuClient({
   };
 
   const handleClosePeriod = async () => {
-    if (!confirm(`Konfirmasi penutupan buku untuk periode ${selectedPeriodName}? Transaksi pada periode ini akan dikunci permanen.`)) {
-      return;
-    }
-
     setLoading(true);
     setActionError(null);
     setActionSuccess(null);
@@ -149,9 +153,6 @@ export function TutupBukuClient({
 
   const handleReopenPeriod = async () => {
     if (!selectedPeriod) return;
-    if (!confirm(`Buka kembali periode ${selectedPeriodName}? Hanya pemilik (Owner) yang memiliki wewenang ini.`)) {
-      return;
-    }
 
     setLoading(true);
     setActionError(null);
@@ -241,7 +242,7 @@ export function TutupBukuClient({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-serif font-bold text-lg text-ink">
+                  <h3 className="font-display text-lg font-semibold text-ink tracking-tight">
                     Periode {selectedPeriodName}
                   </h3>
                   <Badge
@@ -271,7 +272,7 @@ export function TutupBukuClient({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleReopenPeriod}
+                  onClick={() => setConfirmKind("reopen")}
                   disabled={loading}
                   className="text-xs text-ink-soft hover:text-ink"
                 >
@@ -280,7 +281,7 @@ export function TutupBukuClient({
                 </Button>
               ) : (
                 <Button
-                  onClick={handleClosePeriod}
+                  onClick={() => setConfirmKind("close")}
                   disabled={loading || evaluating || !checklist?.isReady}
                   className="bg-terra text-white hover:bg-terra/90 text-xs shadow-xs"
                 >
@@ -300,16 +301,41 @@ export function TutupBukuClient({
 
       {/* Stepper Wizard / Pre-closing Checklist */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-serif font-bold text-base text-ink">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-base font-semibold text-ink tracking-tight">
             Checklist Pra-Penutupan Buku
           </h2>
-          {evaluating && (
-            <span className="text-xs text-ink-soft flex items-center gap-1">
-              <Loader2 className="size-3 animate-spin" />
-              Mengevaluasi kesiapan data...
-            </span>
-          )}
+          <div className="flex items-center gap-2.5">
+            {evaluating && (
+              <span className="text-xs text-ink-soft flex items-center gap-1">
+                <Loader2 className="size-3 animate-spin" />
+                Mengevaluasi kesiapan data...
+              </span>
+            )}
+            {checklist && (
+              <span className="flex items-center gap-2 text-[11px] font-semibold text-ink-soft">
+                <span className="tnum">
+                  {Object.values(checklist.items).filter((i) => i.passed).length} dari{" "}
+                  {Object.values(checklist.items).length} siap
+                </span>
+                <span
+                  className="h-1.5 w-24 overflow-hidden rounded-full bg-ink/10"
+                  role="progressbar"
+                  aria-label="Kesiapan penutupan"
+                  aria-valuenow={Object.values(checklist.items).filter((i) => i.passed).length}
+                  aria-valuemin={0}
+                  aria-valuemax={Object.values(checklist.items).length}
+                >
+                  <span
+                    className={`block h-full rounded-full ${checklist.isReady ? "bg-debit" : "bg-terra"}`}
+                    style={{
+                      width: `${(Object.values(checklist.items).filter((i) => i.passed).length / Object.values(checklist.items).length) * 100}%`,
+                    }}
+                  />
+                </span>
+              </span>
+            )}
+          </div>
         </div>
 
         {checklist ? (
@@ -341,7 +367,7 @@ export function TutupBukuClient({
                     </div>
                   </div>
                   {checklist.items.bankReconciliation.passed ? (
-                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[10px]">
+                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[11px]">
                       Selesai
                     </Badge>
                   ) : (
@@ -384,11 +410,11 @@ export function TutupBukuClient({
                     </div>
                   </div>
                   {checklist.items.pendingDrafts.passed ? (
-                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[10px]">
+                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[11px]">
                       Bersih
                     </Badge>
                   ) : (
-                    <Link href="/jurnal?tab=draft">
+                    <Link href="/asisten">
                       <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5">
                         Tinjau Draf
                         <ArrowRight className="size-3 ml-1" />
@@ -427,7 +453,7 @@ export function TutupBukuClient({
                     </div>
                   </div>
                   {checklist.items.depreciationPosted.passed ? (
-                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[10px]">
+                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[11px]">
                       Terposting
                     </Badge>
                   ) : (
@@ -476,7 +502,7 @@ export function TutupBukuClient({
                     </div>
                   </div>
                   {checklist.items.unpostedInvoices.passed ? (
-                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[10px]">
+                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[11px]">
                       Lengkap
                     </Badge>
                   ) : (
@@ -519,7 +545,7 @@ export function TutupBukuClient({
                     </div>
                   </div>
                   {checklist.items.trialBalance.passed ? (
-                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[10px]">
+                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[11px]">
                       Klop (Rp 0)
                     </Badge>
                   ) : (
@@ -574,6 +600,71 @@ export function TutupBukuClient({
           </CardContent>
         </Card>
       )}
+
+      {/* Dialog konfirmasi tutup / buka periode */}
+      <Dialog open={confirmKind !== null} onOpenChange={(o) => !o && setConfirmKind(null)}>
+        <DialogContent className="border-rule bg-paper sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold text-ink">
+              {confirmKind === "close"
+                ? `Kunci periode ${selectedPeriodName}?`
+                : `Buka kembali periode ${selectedPeriodName}?`}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-xs leading-relaxed text-ink-soft">
+            {confirmKind === "close" ? (
+              <>
+                <p>
+                  Transaksi pada periode ini akan <strong className="text-ink">dikunci permanen</strong>.
+                  Koreksi setelahnya hanya bisa lewat jurnal pembalik di periode berjalan.
+                </p>
+                {isYearEnd && (
+                  <p>
+                    Penutupan Desember juga menolkan akun Pendapatan &amp; Beban dan memindahkan
+                    laba/rugi bersih ke akun Laba Ditahan yang dipilih di atas.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p>
+                Pembukaan kembali <strong className="text-ink">dicatat di jejak audit</strong> dan
+                hanya boleh dilakukan Owner. Transaksi yang sudah terkunci menjadi bisa diubah
+                selama periode terbuka.
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              onClick={() => setConfirmKind(null)}
+              className="text-xs"
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={loading}
+              onClick={() => {
+                const run = confirmKind === "close" ? handleClosePeriod : handleReopenPeriod;
+                setConfirmKind(null);
+                void run();
+              }}
+              className={
+                confirmKind === "close"
+                  ? "bg-terra text-xs text-white hover:bg-terra/90"
+                  : "text-xs"
+              }
+            >
+              {loading && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}
+              {confirmKind === "close" ? "Ya, Kunci Periode" : "Ya, Buka Kembali"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

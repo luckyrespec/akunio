@@ -6,16 +6,16 @@ async function signup(page: import("@playwright/test").Page) {
   await walkOnboardingToDashboard(page, { businessName: "Koperasi AI E2E" });
 }
 
-test("Nara answers a question via streaming chat", async ({ page }) => {
+test("Akunio answers a question via streaming chat", async ({ page }) => {
   // Live-AI smoke for the unified /asisten UI (agent-first redesign retired
   // the m2 inline "Draft Jurnal" card; tool-approval flows are covered by
-  // integration tests in tests/integration/nara-*.test.ts).
+  // integration tests in tests/integration/nara-*.test.ts — tool API internal masih bernama nara).
   test.setTimeout(180_000);
   await signup(page);
   await page.goto("/asisten");
   await page.waitForSelector('body[data-asisten-ready="1"]', { timeout: 30000 });
-  // Nara chat input (controlled PromptInputTextarea: real keystrokes, not fill)
-  const input = page.getByPlaceholder(/Tanya Nara|Tanya/);
+  // Akunio chat input (controlled PromptInputTextarea: real keystrokes, not fill)
+  const input = page.getByPlaceholder(/Tanya Akunio|Tanya/);
   await input.click();
   const q = "Apa itu aset lancar dalam satu kalimat?";
   await input.pressSequentially(q, { delay: 10 });
@@ -27,16 +27,16 @@ test("Nara answers a question via streaming chat", async ({ page }) => {
   // detaches only when the live response completes.
   await expect(page.locator('[data-from="assistant"]')).not.toHaveCount(0, { timeout: 120000 });
   await expect(
-    page.getByRole("status", { name: "Nara sedang berpikir" }),
+    page.getByRole("status", { name: "Akunio sedang berpikir" }),
   ).toBeHidden({ timeout: 120000 });
 });
 
-test("sidebar shows Nara enabled and /jurnal/ai redirects", async ({ page }) => {
+test("sidebar shows Akunio enabled and /jurnal/ai redirects", async ({ page }) => {
   await signup(page);
   await page.goto("/dasbor");
   await page.getByRole("link", { name: /Asisten AI Copilot/ }).click();
   await expect(page).toHaveURL(/\/asisten/);
-  await expect(page.getByRole("heading", { name: /bisa Nara bantu/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /bisa Akunio bantu/ })).toBeVisible();
   await page.goto("/jurnal/ai");
   await expect(page).toHaveURL(/\/asisten/);
 });

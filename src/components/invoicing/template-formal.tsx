@@ -111,7 +111,7 @@ export function TemplateFormal({ invoice }: { invoice: InvoiceDetailData }) {
       {/* Invoice Info & Recipient */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 py-6 border-b border-rule text-xs">
         <div>
-          <span className="font-semibold text-ink-soft uppercase tracking-wider text-[10px]">
+          <span className="font-semibold text-ink-soft uppercase tracking-wider text-[11px]">
             {invoice.type === "INVOICE" ? "DITUJUKAN KEPADA:" : "DITERIMA DARI:"}
           </span>
           <div className="mt-2 font-display text-sm font-semibold text-ink">

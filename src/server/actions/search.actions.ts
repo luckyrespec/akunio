@@ -1,12 +1,19 @@
 "use server";
 import { db } from "@/server/db";
 import { requireContext } from "@/server/auth/guard";
-import { searchAccounts, searchJournals } from "@/server/db/repos/search.repo";
+import { searchAccounts } from "@/server/db/repos/search.repo";
+import { searchEntriesByAmount, searchEntriesWithLines } from "@/server/db/repos/journals.repo";
+import { searchAssets } from "@/server/db/repos/assets.repo";
+import { listInvoicesRepo } from "@/server/db/repos/invoices.repo";
+import { invoiceMatchesQuery, parseNominalMinor } from "@/server/search/match";
+import { Money } from "@/core/money/money";
 
 export interface GlobalSearchResult {
   pages: Array<{ href: string; label: string }>;
-  journals: Array<{ id: string; number: string; memo: string; entryDate: string }>;
+  journals: Array<{ id: string; number: string; memo: string; entryDate: string; totalText: string }>;
   accounts: Array<{ id: string; code: string; name: string }>;
+  invoices: Array<{ id: string; invoiceNumber: string; contactName: string; status: string; totalText: string }>;
+  assets: Array<{ id: string; code: string; name: string; status: string; costText: string }>;
 }
 
 const PAGES = [
@@ -24,15 +31,52 @@ const PAGES = [
 export async function searchGlobalAction(term: string): Promise<GlobalSearchResult> {
   const ctx = await requireContext();
   const q = term.trim().toLowerCase();
-  if (!q) return { pages: [], journals: [], accounts: [] };
+  const empty: GlobalSearchResult = { pages: [], journals: [], accounts: [], invoices: [], assets: [] };
+  if (!q || term.trim().length < 2) return empty;
 
   const pages = PAGES.filter((p) => p.label.toLowerCase().includes(q) || p.href.includes(q)).slice(0, 3);
+  const amountMinor = parseNominalMinor(term.trim());
 
-  const [journals, accounts] = await db.transaction(async (tx) => {
-    const j = term.length >= 2 ? await searchJournals(tx, ctx.orgId, term, 4) : [];
-    const a = term.length >= 2 ? await searchAccounts(tx, ctx.orgId, term, 4) : [];
-    return [j, a] as const;
+  const [journalHits, accounts, assets] = await db.transaction(async (tx) => {
+    // Teks: nomor + keterangan + nama/kode akun; nominal: total entri.
+    const byText = await searchEntriesWithLines(tx, ctx.orgId, term.trim(), 4, 0);
+    const byAmount = amountMinor !== null
+      ? await searchEntriesByAmount(tx, ctx.orgId, amountMinor, 4)
+      : [];
+    const seen = new Set(byText.map((e) => e.id));
+    const journals = [...byText, ...byAmount.filter((e) => !seen.has(e.id))].slice(0, 4);
+    const a = await searchAccounts(tx, ctx.orgId, term, 4);
+    const ast = await searchAssets(tx, ctx.orgId, term.trim(), amountMinor, 4);
+    return [journals, a, ast] as const;
   });
 
-  return { pages, journals, accounts };
+  const journals = journalHits.map((j) => ({
+    id: j.id,
+    number: j.number,
+    memo: j.memo,
+    entryDate: j.entryDate,
+    totalText: Money.fromMinor(j.lines.reduce((s, l) => s + l.debitMinor, 0n)).formatIdr(),
+  }));
+
+  const invoices = (await listInvoicesRepo(db, ctx.orgId))
+    .filter((inv) => invoiceMatchesQuery(inv, q, amountMinor))
+    .slice(0, 4)
+    .map((inv) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      contactName: inv.contactName,
+      status: inv.status,
+      totalText: Money.fromMinor(inv.totalMinor).formatIdr(),
+    }));
+
+  return {
+    pages,
+    journals,
+    accounts,
+    invoices,
+    assets: assets.map((a) => ({
+      ...a,
+      costText: Money.fromMinor(a.acquisitionCostMinor).formatIdr(),
+    })),
+  };
 }

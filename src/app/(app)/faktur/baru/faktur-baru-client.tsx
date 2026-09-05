@@ -5,8 +5,14 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Loader2, Plus, Trash2, FileText, Scale, ArrowRight } from "lucide-react";
+import { Loader2, Plus, Trash2, FileText, Scale, ArrowLeft, ArrowRight, ArrowUpRight, ArrowDownLeft, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
 import { AnimatedNumber, Stagger, StaggerItem } from "@/components/motion";
 import { TemplateFormal, type InvoiceDetailData } from "@/components/invoicing/template-formal";
 import { Money } from "@/core/money/money";
@@ -109,6 +116,7 @@ export function FakturBaruClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [postWarning, setPostWarning] = useState<{ id: string; message: string } | null>(null);
+  const [flash, setFlash] = useState<{ id: string; number: string } | null>(null);
 
   const isInvoice = type === "INVOICE";
 
@@ -119,6 +127,10 @@ export function FakturBaruClient({
     const first = list[0];
     setContactId(first?.id || "");
     setDueDate(dueFromTerms(issueDate, first?.paymentTermsDays || 30));
+    try {
+      const url = t === "BILL" ? "/faktur/baru?tipe=bill" : "/faktur/baru?tipe=invoice";
+      window.history.replaceState(null, "", url);
+    } catch {}
   }
 
   function handleContactChange(id: string) {
@@ -191,8 +203,20 @@ export function FakturBaruClient({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    await submitWithMode("publish");
+  }
+
+  function resetForm() {
+    setItems([emptyRow()]);
+    setNotes("");
     setError(null);
     setPostWarning(null);
+  }
+
+  async function submitWithMode(mode: "publish" | "publish-new") {
+    setError(null);
+    setPostWarning(null);
+    setFlash(null);
     if (!contactId) {
       setError("Silakan pilih mitra kontak.");
       return;
@@ -228,7 +252,13 @@ export function FakturBaruClient({
         setPostWarning({ id: res.data.invoice.id, message: res.data.postWarning });
         return;
       }
-      router.push(`/faktur/${res.data.invoice.id}`);
+      if (mode === "publish-new") {
+        setFlash({ id: res.data.invoice.id, number: res.data.invoice.invoiceNumber });
+        resetForm();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        router.push(`/faktur/${res.data.invoice.id}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal membuat faktur.");
     } finally {
@@ -238,37 +268,160 @@ export function FakturBaruClient({
 
   return (
     <form onSubmit={handleSubmit}>
-      {/* View switcher */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-ink-soft">
-          {view === "form"
-            ? "Lengkapi dokumen, lalu periksa pratinjau sebelum diterbitkan."
-            : "Periksa dokumen dan jurnal — persis seperti yang akan tersimpan."}
-        </p>
-        <div className="flex items-center rounded-lg border border-rule bg-paper p-1 shadow-xs" role="tablist" aria-label="Tampilan editor">
-          {(["form", "preview"] as const).map((v) => (
+      <PageHeader
+        title={isInvoice ? "Buat Faktur Penjualan" : "Catat Tagihan Pembelian"}
+        eyebrow="Susun rincian item, pratinjau dokumen live, dan otomatis posting ke jurnal."
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            {/* View Selector Pill */}
+            <div className="flex items-center rounded-xl border border-rule bg-paper p-1 shadow-xs" role="tablist" aria-label="Tampilan editor">
+              {(["form", "preview"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "relative rounded-lg px-3.5 py-1.5 text-xs font-medium transition-colors",
+                    view === v ? "text-terra font-semibold" : "text-ink-soft hover:text-ink",
+                  )}
+                >
+                  {view === v && (
+                    <motion.span
+                      layoutId="faktur-baru-view-pill"
+                      transition={{ duration: 0.24, ease: EASE_OUT }}
+                      className="absolute inset-0 rounded-lg bg-canvas shadow-xs"
+                    />
+                  )}
+                  <span className="relative z-10">{v === "form" ? "Formulir" : "Pratinjau"}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Actions: Batal & Terbitkan */}
+            <div className="flex items-center gap-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/faktur")}
+                className="h-9 px-4 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink-soft hover:text-ink transition-colors shadow-xs"
+              >
+                Batal
+              </Button>
+
+              <div className="flex items-stretch shadow-xs rounded-xl overflow-hidden">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={loading}
+                  className="h-9 rounded-l-xl rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-none"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                      Memproses...
+                    </>
+                  ) : (
+                    isInvoice ? "Terbitkan Faktur" : "Catat Tagihan"
+                  )}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={loading}
+                      aria-label="Opsi penerbitan lainnya"
+                      className="h-9 rounded-l-none rounded-r-xl border-l border-l-white/25 px-2.5 bg-terra text-white hover:bg-terra/90 shadow-none disabled:transform-none"
+                    >
+                      <ChevronDown className="size-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-48 rounded-xl border-rule bg-paper shadow-md">
+                    <DropdownMenuItem
+                      onClick={() => void submitWithMode("publish")}
+                      className="text-xs font-medium cursor-pointer py-2"
+                    >
+                      {isInvoice ? "Terbitkan Faktur" : "Catat Tagihan"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => void submitWithMode("publish-new")}
+                      className="text-xs font-medium cursor-pointer py-2"
+                    >
+                      {isInvoice ? "Terbitkan & Buat Lagi" : "Catat & Buat Lagi"}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          </div>
+        }
+      />
+
+      {flash?.id && (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-debit/25 bg-debit/10 px-4 py-3 text-xs">
+          <span className="text-ink">
+            Faktur <strong className="tnum font-semibold">{flash.number}</strong> terbit. Formulir sudah dikosongkan untuk faktur berikutnya.
+          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] border-rule bg-paper" onClick={() => router.push(`/faktur/${flash.id}`)}>
+              Lihat Detail
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setFlash(null)}>
+              Tutup
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Gerbang jenis dokumen — keputusan utama, selebar penuh */}
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Jenis dokumen">
+        {(
+          [
+            {
+              t: "INVOICE" as const,
+              name: "Penjualan",
+              desc: "Tagih pelanggan — menambah piutang usaha.",
+              icon: ArrowUpRight,
+              tint: "bg-terra/10 text-terra",
+            },
+            {
+              t: "BILL" as const,
+              name: "Pembelian",
+              desc: "Catat tagihan vendor — menambah utang usaha.",
+              icon: ArrowDownLeft,
+              tint: "bg-credit/10 text-credit",
+            },
+          ]
+        ).map((opt) => {
+          const selected = type === opt.t;
+          const Icon = opt.icon;
+          return (
             <button
-              key={v}
+              key={opt.t}
               type="button"
-              role="tab"
-              aria-selected={view === v}
-              onClick={() => setView(v)}
+              role="radio"
+              aria-checked={selected}
+              onClick={() => handleTypeChange(opt.t)}
               className={cn(
-                "relative rounded-md px-3.5 py-1.5 text-xs font-medium transition-colors",
-                view === v ? "text-terra font-semibold" : "text-ink-soft hover:text-ink",
+                "flex items-center gap-3 rounded-2xl border p-4 text-left shadow-2xs transition-colors",
+                selected
+                  ? "border-terra/50 bg-terra/[0.06] ring-1 ring-terra/30"
+                  : "border-rule bg-paper hover:border-terra/30 hover:bg-canvas/50",
               )}
             >
-              {view === v && (
-                <motion.span
-                  layoutId="faktur-baru-view-pill"
-                  transition={{ duration: 0.24, ease: EASE_OUT }}
-                  className="absolute inset-0 rounded-md bg-canvas shadow-xs"
-                />
-              )}
-              <span className="relative z-10">{v === "form" ? "Formulir" : "Pratinjau"}</span>
+              <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-xl", opt.tint)}>
+                <Icon className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ink">{opt.name}</span>
+                <span className="mt-0.5 block text-xs text-ink-soft">{opt.desc}</span>
+              </span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
       <AnimatePresence mode="popLayout" initial={false}>
@@ -280,38 +433,19 @@ export function FakturBaruClient({
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2, ease: EASE_OUT }}
           >
-      <div className="mx-auto w-full max-w-4xl">
+      <div className="w-full">
         <Stagger className="flex min-w-0 flex-col gap-6" staggerDelay={0.07}>
           {/* Section 1 — Pihak & tanggal */}
           <StaggerItem>
             <Card className="border-rule bg-paper shadow-xs">
               <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="font-display text-base text-ink">
-                      {isInvoice ? "Pelanggan & Tanggal" : "Pemasok & Tanggal"}
-                    </CardTitle>
-                    <CardDescription>
-                      {isInvoice ? "Kepada siapa faktur ini ditagihkan." : "Dari vendor mana tagihan ini diterima."}
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center rounded-lg border border-rule bg-canvas p-1" role="tablist" aria-label="Jenis dokumen">
-                    {(["INVOICE", "BILL"] as const).map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        role="tab"
-                        aria-selected={type === t}
-                        onClick={() => handleTypeChange(t)}
-                        className={cn(
-                          "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                          type === t ? "bg-paper text-terra font-semibold shadow-2xs" : "text-ink-soft hover:text-ink",
-                        )}
-                      >
-                        {t === "INVOICE" ? "Penjualan" : "Pembelian"}
-                      </button>
-                    ))}
-                  </div>
+                <div>
+                  <CardTitle className="font-display text-base text-ink">
+                    {isInvoice ? "Pelanggan & Tanggal" : "Pemasok & Tanggal"}
+                  </CardTitle>
+                  <CardDescription>
+                    {isInvoice ? "Kepada siapa faktur ini ditagihkan." : "Dari vendor mana tagihan ini diterima."}
+                  </CardDescription>
                 </div>
               </CardHeader>
               <CardContent>
@@ -537,11 +671,6 @@ export function FakturBaruClient({
           </StaggerItem>
 
           <div className="flex items-center justify-end gap-2.5">
-            <Link href="/faktur">
-              <Button type="button" variant="outline" disabled={loading}>
-                Batal
-              </Button>
-            </Link>
             <Button
               type="button"
               variant="outline"
@@ -551,14 +680,6 @@ export function FakturBaruClient({
             >
               <FileText data-icon="inline-start" />
               Lihat Pratinjau
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-terra text-white shadow-xs hover:bg-terra/90 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]"
-            >
-              {loading && <Loader2 data-icon="inline-start" className="animate-spin" />}
-              {isInvoice ? "Terbitkan Faktur" : "Catat Tagihan"}
             </Button>
           </div>
         </Stagger>
@@ -597,18 +718,18 @@ export function FakturBaruClient({
           )}
           <Card className="border-rule bg-paper shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center justify-between font-display text-sm text-ink">
+              <CardTitle className="flex items-center justify-between text-sm text-ink">
                 <span className="flex items-center gap-2">
                   <Scale className="size-4 text-terra" />
                   Total Tagihan
                 </span>
-                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-700">
+                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[11px] text-emerald-700">
                   Seimbang
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="tnum font-display text-2xl font-semibold tracking-tight text-terra">
+              <div className="tnum font-display text-2xl font-semibold tracking-tight text-ink">
                 <AnimatedNumber minor={totals.totalMinor} />
               </div>
               <p className="mt-1 text-[11px] text-ink-soft">
@@ -621,7 +742,7 @@ export function FakturBaruClient({
 
           <Card className="border-rule bg-paper shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="font-display text-sm text-ink">Jurnal yang Terbentuk</CardTitle>
+              <CardTitle className="text-sm text-ink">Jurnal yang Terbentuk</CardTitle>
             </CardHeader>
             <CardContent>
               {!postToLedger ? (
@@ -680,7 +801,8 @@ export function FakturBaruClient({
               {isInvoice ? "Terbitkan Faktur" : "Catat Tagihan"}
             </Button>
             <Button type="button" variant="outline" disabled={loading} onClick={() => setView("form")} className="w-full">
-              ← Kembali Edit
+              <ArrowLeft data-icon="inline-start" />
+              Kembali Edit
             </Button>
           </div>
         </div>

@@ -75,15 +75,15 @@ export function AsistenSidebar({
   return (
     <aside
       className={cn(
-        "relative flex h-full flex-col border-r border-rule bg-paper transition-[transform,border-color] duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] shrink-0",
-        sidebarOpen ? "w-64 md:w-72" : "w-0 -translate-x-full overflow-hidden border-r-0 md:w-0",
+        "relative flex h-full flex-col border-r border-rule bg-paper motion-safe:transition-[width,border-color] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)] shrink-0",
+        sidebarOpen ? "w-64 md:w-72" : "w-0 overflow-hidden border-r-0 md:w-0",
       )}
     >
       {/* Sidebar Header */}
       <div className="flex h-14 items-center justify-between px-3.5 border-b border-rule shrink-0">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-terra" />
-          <span className="font-display font-semibold text-sm text-ink tracking-tight">Nara AI</span>
+          <span className="font-display font-semibold text-sm text-ink tracking-tight">Akunio AI</span>
         </div>
 
         <div className="flex items-center gap-1">

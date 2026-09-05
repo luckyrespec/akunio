@@ -1,9 +1,9 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { accounts } from "@/server/db/schema/org";
 import { eq } from "drizzle-orm";
-import { PageHeader } from "@/components/page-header";
 import { AsetBaruClient } from "./aset-baru-client";
 
 export default async function AsetBaruPage() {
@@ -23,17 +23,13 @@ export default async function AsetBaruPage() {
     .where(eq(accounts.orgId, ctx.orgId));
 
   return (
-    <section className="mx-auto w-full max-w-7xl space-y-6">
+    <section className="w-full space-y-6">
       <div className="mb-2">
-        <Link href="/aset" className="inline-flex items-center text-xs font-medium text-ink-soft hover:text-terra transition-colors">
-          ← Kembali ke Daftar Aset
+        <Link href="/aset" className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft hover:text-terra transition-colors">
+          <ArrowLeft className="size-3.5" />
+          Kembali ke Daftar Aset
         </Link>
       </div>
-
-      <PageHeader
-        title="Tambah Aset Tetap"
-        eyebrow="Daftarkan aset, atur penyusutan SAK EMKM, dan otomatis catat jurnal perolehan."
-      />
 
       <AsetBaruClient accounts={allAccounts} />
     </section>

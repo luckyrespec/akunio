@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "better-icons": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "better-icons"
+      ],
+      "enabled": true
+    }
+  }
+}

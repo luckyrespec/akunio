@@ -81,6 +81,9 @@ export const chatThreads = pgTable(
     title: text("title").notNull(),
     modelPreset: text("model_preset").notNull().default("fast"),
     pinned: boolean("pinned").notNull().default(false),
+    // Gemini Interactions memory: last stored interaction id for this thread.
+    // Used as previous_interaction_id on the next turn (store:true).
+    geminiInteractionId: text("gemini_interaction_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

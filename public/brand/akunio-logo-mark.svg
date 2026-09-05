@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="Akunio Logo Mark">
+  <defs>
+    <linearGradient id="akunio-terra-gradient" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#b66035"/>
+      <stop offset="100%" stop-color="#914522"/>
+    </linearGradient>
+    <linearGradient id="akunio-stroke-grad" x1="12" y1="10" x2="36" y2="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fdf9f2"/>
+    </linearGradient>
+    <filter id="akunio-drop-shadow" x="0" y="2" width="48" height="48" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#5a270f" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Squircle Base Canvas dengan Sudut Modern (Paper & Ink Matte) -->
+  <rect x="3" y="3" width="42" height="42" rx="12" fill="url(#akunio-terra-gradient)"/>
+  <rect x="3.5" y="3.5" width="41" height="41" rx="11.5" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+
+  <!-- Logo Mark: Monogram 'A' bersilhuet Ledger Balance & AI Apex -->
+  <g filter="url(#akunio-drop-shadow)">
+    <!-- Kaki Kiri & Kanan Huruf A (Double-Entry Balance Stems) -->
+    <path d="M24 10.5 L13 36.5" stroke="url(#akunio-stroke-grad)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M24 10.5 L35 36.5" stroke="url(#akunio-stroke-grad)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Double Rule Ledger Mistar Penyeimbang Buku (Double-Entry Balance Crossbars) -->
+    <path d="M17.5 25.5 H30.5" stroke="url(#akunio-stroke-grad)" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M16 29.8 H32" stroke="url(#akunio-stroke-grad)" stroke-width="2.6" stroke-linecap="round"/>
+
+    <!-- Puncak Akurasi AI (Diamond Node of Balance) -->
+    <circle cx="24" cy="10.5" r="2.2" fill="#ffffff"/>
+  </g>
+</svg>

@@ -10,9 +10,13 @@ const body = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Neraca",
+  title: "Akunio — AI Accounting & Double-Entry Ledger",
   description:
-    "Pembukuan berbasis IFRS untuk organisasi kecil, dengan asisten AI.",
+    "Pembukuan berbasis IFRS & SAK EMKM untuk organisasi dan UKM, dengan asisten AI.",
+  icons: {
+    icon: "/brand/akunio-logo-mark.svg",
+    apple: "/brand/akunio-logo-mark.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

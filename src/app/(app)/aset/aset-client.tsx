@@ -4,9 +4,8 @@ import * as React from "react";
 import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Reveal, Stagger, StaggerItem, AnimatedNumber } from "@/components/motion";
+import { Reveal, AnimatedNumber } from "@/components/motion";
 import {
-  Building2,
   Plus,
   Play,
   TrendingDown,
@@ -14,10 +13,10 @@ import {
   PackageCheck,
   AlertCircle,
   ExternalLink,
+  LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RunDepreciationDialog } from "./run-depreciation-dialog";
 import { Money } from "@/core/money/money";
 import { PageHeader } from "@/components/page-header";
@@ -46,17 +45,34 @@ export function AsetClient({
   const [assets, setAssets] = useState(initialAssets);
   const [runDepDialogOpen, setRunDepDialogOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
-  // Summary KPI calculation
+  // Summary — semua dari data nyata
   const totalCostMinor = assets.reduce(
     (sum, a) => sum + BigInt(a.acquisitionCostMinor),
     0n,
   );
   const activeAssets = assets.filter((a) => a.status === "ACTIVE");
 
+  const CATEGORIES = ["KENDARAAN", "MESIN_PERALATAN", "INVENTARIS_KANTOR", "BANGUNAN", "TANAH"] as const;
+  const composition = CATEGORIES.map((cat) => {
+    const cost = assets
+      .filter((a) => a.category === cat)
+      .reduce((sum, a) => sum + BigInt(a.acquisitionCostMinor), 0n);
+    return { cat, cost };
+  }).filter((c) => c.cost > 0n);
+
+  const STATUS_SEGMENTS = [
+    { key: "ALL", label: "Semua", icon: LayoutGrid },
+    { key: "ACTIVE", label: "Aktif", icon: PackageCheck },
+    { key: "FULLY_DEPRECIATED", label: "Lunas Susut", icon: TrendingDown },
+    { key: "DISPOSED", label: "Dilepas", icon: AlertCircle },
+  ] as const;
+
   const filteredAssets = assets.filter((a) => {
-    if (categoryFilter === "ALL") return true;
-    return a.category === categoryFilter;
+    if (categoryFilter !== "ALL" && a.category !== categoryFilter) return false;
+    if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
+    return true;
   });
 
   return (
@@ -86,107 +102,115 @@ export function AsetClient({
         }
       />
 
-      {/* KPI Cards */}
-      <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StaggerItem>
-        <Card className="border-rule bg-paper">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-ink-soft uppercase tracking-wider flex items-center justify-between">
+      {/* Panel armada — nilai perolehan + komposisi kategori */}
+      <Reveal>
+        <div className="matte-card grid gap-6 rounded-2xl border border-rule bg-paper p-5 sm:p-6 lg:grid-cols-[1fr_1.2fr] lg:gap-10">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink-soft">
+              <Coins className="size-3.5" />
               Total Nilai Perolehan
-              <Coins className="size-4 text-ink-soft" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold font-mono text-ink tnum">
+            </p>
+            <p className="tnum mt-2 font-display text-3xl font-semibold tracking-tight text-ink md:text-4xl">
               <AnimatedNumber minor={totalCostMinor} />
-            </div>
-            <p className="text-[11px] text-ink-soft mt-1">Harga historis seluruh aset</p>
-          </CardContent>
-        </Card>
-        </StaggerItem>
-
-        <StaggerItem>
-        <Card className="border-rule bg-paper">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-ink-soft uppercase tracking-wider flex items-center justify-between">
-              Aset Aktif
-              <PackageCheck className="size-4 text-emerald-600" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold font-mono text-ink">
-              {activeAssets.length} <span className="text-xs font-normal text-ink-soft">unit</span>
-            </div>
-            <p className="text-[11px] text-ink-soft mt-1">Sedang aktif disusutkan</p>
-          </CardContent>
-        </Card>
-        </StaggerItem>
-
-        <StaggerItem>
-        <Card className="border-rule bg-paper">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-ink-soft uppercase tracking-wider flex items-center justify-between">
-              Lunas Susut
-              <TrendingDown className="size-4 text-ink-soft" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold font-mono text-ink">
-              {assets.filter((a) => a.status === "FULLY_DEPRECIATED").length}{" "}
-              <span className="text-xs font-normal text-ink-soft">unit</span>
-            </div>
-            <p className="text-[11px] text-ink-soft mt-1">Masa manfaat berakhir</p>
-          </CardContent>
-        </Card>
-        </StaggerItem>
-
-        <StaggerItem>
-        <Card className="border-rule bg-paper">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-ink-soft uppercase tracking-wider flex items-center justify-between">
-              Aset Dilepas / Jual
-              <AlertCircle className="size-4 text-ink-soft" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold font-mono text-ink">
-              {assets.filter((a) => a.status === "DISPOSED").length}{" "}
-              <span className="text-xs font-normal text-ink-soft">unit</span>
-            </div>
-            <p className="text-[11px] text-ink-soft mt-1">Telah dihapus/dijual</p>
-          </CardContent>
-        </Card>
-        </StaggerItem>
-      </Stagger>
-
-      {/* Filter Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs" role="tablist">
-        {["ALL", "KENDARAAN", "MESIN_PERALATAN", "INVENTARIS_KANTOR", "BANGUNAN", "TANAH"].map(
-          (cat) => (
-            <button
-              key={cat}
-              role="tab"
-              aria-selected={categoryFilter === cat}
-              onClick={() => setCategoryFilter(cat)}
-              className={`relative px-3 py-1.5 rounded-full font-medium transition-colors ${
-                categoryFilter === cat
-                  ? "text-paper dark:text-white"
-                  : "bg-canvas border border-rule text-ink hover:bg-paper"
-              }`}
+            </p>
+            <p className="mt-2 text-xs text-ink-soft">
+              {assets.length} unit terdaftar · {activeAssets.length} aktif disusutkan
+            </p>
+            <Link
+              href="/aset/baru"
+              className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-terra hover:underline"
             >
-              {categoryFilter === cat && (
-                <motion.span
-                  layoutId="aset-cat-pill"
-                  transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
-                  className="absolute inset-0 rounded-full bg-ink shadow-xs dark:bg-terra"
-                />
-              )}
-              <span className="relative z-10">
-              {cat === "ALL" ? "Semua Kategori" : cat.replace(/_/g, " ")}
-              </span>
-            </button>
-          ),
-        )}
+              <Plus className="size-3" />
+              Daftarkan aset baru
+            </Link>
+          </div>
+
+          <div className="min-w-0 lg:border-l lg:border-rule/70 lg:pl-10">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+              Komposisi per Kategori
+            </p>
+            {composition.length > 0 ? (
+              <ul className="mt-3 space-y-2.5">
+                {composition.map((c) => {
+                  const pct = totalCostMinor > 0n ? Number((c.cost * 100n) / totalCostMinor) : 0;
+                  return (
+                    <li key={c.cat}>
+                      <div className="flex items-baseline justify-between gap-3 text-xs">
+                        <span className="font-medium text-ink">{c.cat.replace(/_/g, " ")}</span>
+                        <span className="tnum shrink-0 font-semibold text-ink">
+                          {Money.formatIdr(c.cost)}
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink/10">
+                        <div className="h-full rounded-full bg-ink/70" style={{ width: `${Math.max(pct, 2)}%` }} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="mt-3 text-xs text-ink-soft">
+                Belum ada aset — daftarkan aset pertama untuk melihat komposisinya.
+              </p>
+            )}
+          </div>
+        </div>
+      </Reveal>
+
+      {/* Filter: kategori + status */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs" role="tablist" aria-label="Filter kategori">
+          {["ALL", "KENDARAAN", "MESIN_PERALATAN", "INVENTARIS_KANTOR", "BANGUNAN", "TANAH"].map(
+            (cat) => (
+              <button
+                key={cat}
+                role="tab"
+                aria-selected={categoryFilter === cat}
+                onClick={() => setCategoryFilter(cat)}
+                className={`relative px-3 py-1.5 rounded-full font-medium transition-colors focus-ring ${
+                  categoryFilter === cat
+                    ? "text-paper dark:text-white"
+                    : "bg-canvas border border-rule text-ink hover:bg-paper"
+                }`}
+              >
+                {categoryFilter === cat && (
+                  <motion.span
+                    layoutId="aset-cat-pill"
+                    transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+                    className="absolute inset-0 rounded-full bg-ink shadow-xs dark:bg-terra"
+                  />
+                )}
+                <span className="relative z-10">
+                {cat === "ALL" ? "Semua Kategori" : cat.replace(/_/g, " ")}
+                </span>
+              </button>
+            ),
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 rounded-lg border border-rule bg-canvas p-1 text-[11px]" role="tablist" aria-label="Filter status">
+          {STATUS_SEGMENTS.map((s) => {
+            const count = s.key === "ALL" ? assets.length : assets.filter((a) => a.status === s.key).length;
+            const selected = statusFilter === s.key;
+            const Icon = s.icon;
+            return (
+              <button
+                key={s.key}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setStatusFilter(s.key)}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-semibold transition-colors focus-ring ${
+                  selected ? "bg-paper text-terra shadow-2xs" : "text-ink-soft hover:text-ink"
+                }`}
+              >
+                <Icon className="size-3.5" />
+                {s.label}
+                <span className="tnum font-normal opacity-70">{count}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Table */}
@@ -246,7 +270,7 @@ export function AsetClient({
                       {Money.formatIdr(BigInt(asset.acquisitionCostMinor))}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="rounded bg-canvas px-1.5 py-0.5 border border-rule/70 text-[10px] font-mono">
+                      <span className="rounded bg-canvas px-1.5 py-0.5 border border-rule/70 text-[11px] font-mono">
                         {asset.depreciationMethod === "STRAIGHT_LINE" ? "Garis Lurus" : "Saldo Menurun"}
                       </span>
                     </td>

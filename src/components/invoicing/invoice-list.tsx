@@ -38,9 +38,10 @@ export interface InvoiceRow {
 interface InvoiceListProps {
   invoices: InvoiceRow[];
   onOpenPayment: (inv: InvoiceRow) => void;
+  emptyHint?: string;
 }
 
-export function InvoiceList({ invoices, onOpenPayment }: InvoiceListProps) {
+export function InvoiceList({ invoices, onOpenPayment, emptyHint }: InvoiceListProps) {
   const router = useRouter();
   const [postingId, setPostingId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -80,21 +81,21 @@ export function InvoiceList({ invoices, onOpenPayment }: InvoiceListProps) {
         {invoices.length === 0 ? (
           <div className="p-12 text-center text-xs text-ink-soft">
             <FileText className="size-8 mx-auto mb-2 text-ink-soft/40" />
-            <p>Belum ada data faktur atau tagihan.</p>
+            <p>{emptyHint ?? "Belum ada data faktur atau tagihan."}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-rule bg-canvas/50 text-ink-soft">
+            <table className="w-full text-left text-xs tnum">
+              <thead className="border-b border-rule bg-canvas/50 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Nomor Faktur</th>
-                  <th className="px-4 py-3 font-medium">Mitra / Kontak</th>
-                  <th className="px-4 py-3 font-medium">Tanggal</th>
-                  <th className="px-4 py-3 font-medium">Jatuh Tempo</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium text-right">Total Tagihan</th>
-                  <th className="px-4 py-3 font-medium text-right">Sisa Tagihan</th>
-                  <th className="px-4 py-3 font-medium text-right">Aksi</th>
+                  <th className="px-4 py-3">Nomor Faktur</th>
+                  <th className="px-4 py-3">Mitra / Kontak</th>
+                  <th className="px-4 py-3">Tanggal</th>
+                  <th className="px-4 py-3">Jatuh Tempo</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Total Tagihan</th>
+                  <th className="px-4 py-3 text-right">Sisa Tagihan</th>
+                  <th className="px-4 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-rule">
@@ -116,30 +117,30 @@ export function InvoiceList({ invoices, onOpenPayment }: InvoiceListProps) {
                       <td className="px-4 py-3 text-ink-soft">{inv.dueDate}</td>
                       <td className="px-4 py-3">
                         {inv.status === "PAID" && (
-                          <Badge variant="outline" className="border-emerald-500/30 text-emerald-700 bg-emerald-50/50 text-[10px]">
+                          <Badge variant="outline" className="border-emerald-500/30 text-emerald-700 bg-emerald-50/50 text-[11px]">
                             <CheckCircle2 className="size-3 mr-1" />
                             Lunas
                           </Badge>
                         )}
                         {inv.status === "PARTIALLY_PAID" && (
-                          <Badge variant="outline" className="border-amber-500/30 text-amber-700 bg-amber-50/50 text-[10px]">
+                          <Badge variant="outline" className="border-amber-500/30 text-amber-700 bg-amber-50/50 dark:text-amber-300 dark:bg-amber-500/15 text-[11px]">
                             <Clock className="size-3 mr-1" />
                             Cicil / Parsial
                           </Badge>
                         )}
                         {inv.status === "OVERDUE" && (
-                          <Badge variant="outline" className="border-destructive/30 text-destructive bg-destructive/10 text-[10px]">
+                          <Badge variant="outline" className="border-destructive/30 text-destructive bg-destructive/10 text-[11px]">
                             <AlertCircle className="size-3 mr-1" />
                             Jatuh Tempo
                           </Badge>
                         )}
                         {inv.status === "ISSUED" && (
-                          <Badge variant="outline" className="border-blue-500/30 text-blue-700 bg-blue-50/50 text-[10px]">
+                          <Badge variant="outline" className="border-blue-500/30 text-blue-700 bg-blue-50/50 dark:text-blue-300 dark:bg-blue-500/15 text-[11px]">
                             Belum Bayar
                           </Badge>
                         )}
                         {inv.status === "DRAFT" && (
-                          <Badge variant="outline" className="border-rule text-ink-soft text-[10px]">
+                          <Badge variant="outline" className="border-rule text-ink-soft text-[11px]">
                             Draft
                           </Badge>
                         )}
@@ -191,7 +192,7 @@ export function InvoiceList({ invoices, onOpenPayment }: InvoiceListProps) {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleWhatsAppReminder(inv)}
-                              className="h-7 px-2 text-emerald-600 hover:bg-emerald-50"
+                              className="h-8 px-2 text-emerald-600 hover:bg-emerald-50"
                               title="Kirim pengingat WhatsApp ke pelanggan"
                             >
                               <MessageSquare className="size-3.5" />
@@ -203,7 +204,7 @@ export function InvoiceList({ invoices, onOpenPayment }: InvoiceListProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 px-2 text-ink-soft hover:text-ink"
+                              className="h-8 px-2 text-ink-soft hover:text-ink"
                               title="Lihat & Cetak Faktur"
                             >
                               <FileText className="size-3.5" />

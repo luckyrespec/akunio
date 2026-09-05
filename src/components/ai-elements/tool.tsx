@@ -137,7 +137,7 @@ export function ToolHeader({
         </div>
         <div className="flex items-center gap-2 truncate font-medium text-ink">
           <span className="truncate">{displayName}</span>
-          <span className="font-mono text-[10px] text-ink-soft hidden sm:inline opacity-70">
+          <span className="font-mono text-[11px] text-ink-soft hidden sm:inline opacity-70">
             ({rawName})
           </span>
         </div>
@@ -239,7 +239,7 @@ export function getStatusBadge(state: ToolState) {
     case "input-streaming":
     case "pending":
       return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-amber-600/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-600/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
           <Clock className="size-2.5" />
           <span>Menyiapkan</span>
         </span>
@@ -248,7 +248,7 @@ export function getStatusBadge(state: ToolState) {
     case "input-available":
     case "running":
       return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-blue-600/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">
+        <span className="inline-flex items-center gap-1 rounded-full border border-blue-600/30 bg-blue-500/10 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-400">
           <Loader2 className="size-2.5 animate-spin" />
           <span>Memproses</span>
         </span>
@@ -257,7 +257,7 @@ export function getStatusBadge(state: ToolState) {
     case "approval-requested":
     case "awaiting-approval":
       return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-amber-600/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300">
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-600/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
           <ShieldAlert className="size-2.5 text-terra" />
           <span>Perlu Izin</span>
         </span>
@@ -266,7 +266,7 @@ export function getStatusBadge(state: ToolState) {
     case "output-error":
     case "error":
       return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-rose-600/30 bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-400">
+        <span className="inline-flex items-center gap-1 rounded-full border border-rose-600/30 bg-rose-500/10 px-2 py-0.5 text-[11px] font-medium text-rose-700 dark:text-rose-400">
           <AlertCircle className="size-2.5" />
           <span>Gagal</span>
         </span>
@@ -274,7 +274,7 @@ export function getStatusBadge(state: ToolState) {
 
     case "output-denied":
       return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-stone-600/30 bg-stone-500/10 px-2 py-0.5 text-[10px] font-medium text-stone-700 dark:text-stone-400">
+        <span className="inline-flex items-center gap-1 rounded-full border border-stone-600/30 bg-stone-500/10 px-2 py-0.5 text-[11px] font-medium text-stone-700 dark:text-stone-400">
           <span>Ditolak</span>
         </span>
       );
@@ -284,7 +284,7 @@ export function getStatusBadge(state: ToolState) {
     case "approval-responded":
     default:
       return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-600/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-600/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
           <CheckCircle2 className="size-2.5" />
           <span>Selesai</span>
         </span>

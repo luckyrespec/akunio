@@ -298,7 +298,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-ink-soft">
+                <p className="text-[11px] text-ink-soft">
                   {parentCode
                     ? `Sub-akun di bawah kode ${parentCode}.`
                     : "Tanpa induk akan otomatis menjadi Akun Utama Level 1."}
@@ -342,7 +342,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
               <div className="sm:col-span-1 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs font-semibold text-ink">Kode Akun</Label>
-                  <span className="text-[10px] text-terra font-medium">Otomatis/Bebas</span>
+                  <span className="text-[11px] text-terra font-medium">Otomatis/Bebas</span>
                 </div>
                 <Input
                   value={code}
@@ -382,7 +382,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
                       />
                       <div className="min-w-0">
                         <span className="font-semibold block leading-tight">Akun Kas Tunai</span>
-                        <span className="text-[10px] text-ink-soft block leading-tight truncate">Petty cash, uang kas di tangan</span>
+                        <span className="text-[11px] text-ink-soft block leading-tight truncate">Petty cash, uang kas di tangan</span>
                       </div>
                     </label>
 
@@ -395,7 +395,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
                       />
                       <div className="min-w-0">
                         <span className="font-semibold block leading-tight">Akun Rekening Bank</span>
-                        <span className="text-[10px] text-ink-soft block leading-tight truncate">Digunakan pada rekonsiliasi</span>
+                        <span className="text-[11px] text-ink-soft block leading-tight truncate">Digunakan pada rekonsiliasi</span>
                       </div>
                     </label>
 
@@ -408,7 +408,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
                       />
                       <div className="min-w-0">
                         <span className="font-semibold block leading-tight">Akun Kontra</span>
-                        <span className="text-[10px] text-ink-soft block leading-tight truncate">
+                        <span className="text-[11px] text-ink-soft block leading-tight truncate">
                           Mengurangi saldo akun induk terkait (misal: Akumulasi Penyusutan)
                         </span>
                       </div>
@@ -425,7 +425,7 @@ export function CreateAccountDialog({ existingAccounts, disabled }: CreateAccoun
                       />
                       <div className="min-w-0">
                         <span className="font-semibold block leading-tight">Akun Kontra</span>
-                        <span className="text-[10px] text-ink-soft block leading-tight truncate">
+                        <span className="text-[11px] text-ink-soft block leading-tight truncate">
                           Mengurangi saldo kategori {TYPE_CONFIG[type].label} (misal: Retur Penjualan, Potongan, atau Prive)
                         </span>
                       </div>

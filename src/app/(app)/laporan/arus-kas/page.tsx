@@ -8,7 +8,7 @@ import { getProfile } from "@/server/db/repos/onboarding.repo";
 import { postedLinesBetween, loadPeriodOrDefault } from "@/server/reports/build";
 import { aggregateFromLines, signed } from "@/core/reports/aggregates";
 import {
-  cashFlowIndirect, incomeStatement, movementByCode,
+  cashFlowIndirect, incomeStatement, movementByPrefix,
 } from "@/core/reports/statements";
 import {
   StatementShell,
@@ -45,15 +45,15 @@ export default async function ArusKasPage({
 
   const cf = cashFlowIndirect({
     netIncomeMinor: is.netIncomeMinor,
-    deltaPiutangMinor: movementByCode(periodAggs, "1200"),
-    deltaPersediaanMinor: movementByCode(periodAggs, "1300"),
-    deltaUtangUsahaMinor: movementByCode(periodAggs, "2100"),
-    depreciationMinor: movementByCode(periodAggs, "5600"),
-    investingMinor: -movementByCode(periodAggs, "1500"),
+    deltaPiutangMinor: movementByPrefix(periodAggs, "12"),
+    deltaPersediaanMinor: movementByPrefix(periodAggs, "13"),
+    deltaUtangUsahaMinor: movementByPrefix(periodAggs, "21"),
+    depreciationMinor: movementByPrefix(periodAggs, "56"),
+    investingMinor: -movementByPrefix(periodAggs, "15"),
     financingMinor:
-      movementByCode(periodAggs, "3100") +
-      movementByCode(periodAggs, "2400") -
-      movementByCode(periodAggs, "3300"),
+      movementByPrefix(periodAggs, "31") +
+      movementByPrefix(periodAggs, "24") -
+      movementByPrefix(periodAggs, "33"),
   });
 
   const deltaKasMinor = periodAggs
@@ -77,9 +77,24 @@ export default async function ArusKasPage({
         {/* 1. AKTIVITAS OPERASI */}
         <section className="space-y-2">
           <ReportSectionHeader title="ARUS KAS DARI AKTIVITAS OPERASI" />
-          {cf.rows.map((r) => (
-            <ReportRowView key={r.code} indent={1} label={r.name} minor={r.movementMinor} />
-          ))}
+          {cf.rows.map((r) => {
+            const tooltips: Record<string, string> = {
+              "NI": "Laba atau rugi bersih dari Laporan Laba Rugi periode berjalan sebagai titik awal rekonsiliasi.",
+              "ADJ.PIUTANG": "Kenaikan piutang mengurangi kas (karena penjualan belum diterima tunai), sedangkan penurunan piutang menambah kas.",
+              "ADJ.PERSEDIAAN": "Kenaikan persediaan mengurangi kas (dana terikat pada stok belanja barang), sedangkan penurunan persediaan menambah kas.",
+              "ADJ.UTANG": "Kenaikan utang usaha menahan kas keluar (pembayaran ke pemasok ditangguhkan), sehingga diperlakukan sebagai penambah kas.",
+              "ADJ.PENYUSUTAN": "Penyusutan merupakan beban non-kas sehingga ditambahkan kembali ke laba bersih.",
+            };
+            return (
+              <ReportRowView
+                key={r.code}
+                indent={1}
+                label={r.name}
+                minor={r.movementMinor}
+                tooltip={tooltips[r.code]}
+              />
+            );
+          })}
           <ReportRowView
             bold
             isTotal
@@ -92,7 +107,12 @@ export default async function ArusKasPage({
         {/* 2. AKTIVITAS INVESTASI */}
         <section className="space-y-2">
           <ReportSectionHeader title="ARUS KAS DARI AKTIVITAS INVESTASI" />
-          <ReportRowView indent={1} label="Perolehan / Pengadaan Aset Tetap" minor={cf.investingMinor} />
+          <ReportRowView
+            indent={1}
+            label="Perolehan / Pengadaan Aset Tetap"
+            minor={cf.investingMinor}
+            tooltip="Arus kas keluar untuk belanja modal aset fisik (peralatan, mesin, kendaraan) atau penerimaan dari pelepasan aset."
+          />
           <ReportRowView
             bold
             isTotal
@@ -105,7 +125,12 @@ export default async function ArusKasPage({
         {/* 3. AKTIVITAS PENDANAAN */}
         <section className="space-y-2">
           <ReportSectionHeader title="ARUS KAS DARI AKTIVITAS PENDANAAN" />
-          <ReportRowView indent={1} label="Setoran Modal &amp; Pinjaman Bersih" minor={cf.financingMinor} />
+          <ReportRowView
+            indent={1}
+            label="Setoran Modal & Pinjaman Bersih"
+            minor={cf.financingMinor}
+            tooltip="Penerimaan dari penambahan modal pemilik, pencairan pinjaman bank, dikurangi penarikan prive pemilik."
+          />
           <ReportRowView
             bold
             isTotal

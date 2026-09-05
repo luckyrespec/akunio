@@ -1,9 +1,20 @@
 import { z } from "zod";
 
+// Model sering mengisi sisi kosong dengan "0"/0 padahal kontraknya string kosong.
+// Koersi di level skema agar SEMUA pemanggil (stream, confirm/HITL, chat, adapter)
+// kebal terhadap varian itu — bukan hanya yang sempat dinormalisasi manual.
+function normalizeSide(v: unknown): unknown {
+  if (v === 0 || v === "0") return "";
+  if (typeof v === "number") return String(v);
+  return v;
+}
+
+const sideText = z.preprocess(normalizeSide, z.string());
+
 export const DraftLineSchema = z.object({
   accountCode: z.string().min(1),
-  debitText: z.string(),
-  creditText: z.string(),
+  debitText: sideText,
+  creditText: sideText,
   confidence: z.number().min(0).max(1),
   reason: z.string(),
 });

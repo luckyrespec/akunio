@@ -117,7 +117,7 @@ export const Conversation = React.forwardRef<HTMLDivElement, ConversationProps>(
                 <UploadCloud className="size-8" />
               </div>
               <h3 className="font-display text-base font-bold text-ink">Lepaskan berkas di sini untuk melampirkan</h3>
-              <p className="text-xs text-ink-soft mt-1">Berkas akan langsung disematkan ke percakapan Nara</p>
+              <p className="text-xs text-ink-soft mt-1">Berkas akan langsung disematkan ke percakapan Akunio</p>
             </div>
           )}
 
@@ -150,23 +150,31 @@ export function ConversationScrollButton({
 }: React.ComponentPropsWithoutRef<typeof Button>) {
   const { isAtBottom, scrollToBottom } = useConversation();
 
-  if (isAtBottom) return null;
-
+  // WAJIB sticky (bukan absolute): tombol ini dirender di dalam kontainer scroll,
+  // dan elemen absolute ikut kegulung bersama konten. Sticky bottom-4 menempelkannya
+  // ke viewport area percakapan. Wrapper h-0 agar tidak menambah ruang kosong.
+  // Tombol memudar (bukan unmount) saat sudah di paling bawah.
   return (
-    <Button
-      type="button"
-      size="icon"
-      variant="secondary"
-      onClick={scrollToBottom}
-      className={cn(
-        "absolute bottom-4 right-4 z-30 size-8 rounded-full border border-rule bg-paper/90 shadow-md backdrop-blur-xs hover:bg-canvas transition-transform active:scale-[0.98] text-ink",
-        className,
-      )}
-      aria-label="Scroll to bottom"
-      {...props}
-    >
-      <ArrowDown className="size-4 text-ink-soft" />
-    </Button>
+    <div className="pointer-events-none sticky bottom-4 z-30 -mt-8 flex h-0 justify-end pr-4">
+      <Button
+        type="button"
+        size="icon"
+        variant="secondary"
+        onClick={scrollToBottom}
+        className={cn(
+          "pointer-events-auto size-8 rounded-full border border-rule bg-paper/90 text-ink shadow-md backdrop-blur-xs transition-all duration-200 hover:bg-canvas active:scale-[0.98]",
+          isAtBottom
+            ? "pointer-events-none translate-y-2 opacity-0"
+            : "translate-y-0 opacity-100",
+          className,
+        )}
+        aria-label="Scroll to bottom"
+        tabIndex={isAtBottom ? -1 : undefined}
+        {...props}
+      >
+        <ArrowDown className="size-4 text-ink-soft" />
+      </Button>
+    </div>
   );
 }
 

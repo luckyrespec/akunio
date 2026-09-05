@@ -1,17 +1,17 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Calendar,
   CheckCircle2,
+  ChevronDown,
   FileText,
   Loader2,
   Maximize2,
   Minimize2,
   Paperclip,
   Plus,
-  Sparkles,
   Trash2,
   UploadCloud,
   X,
@@ -19,15 +19,20 @@ import {
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { createAndPostAction } from "@/server/actions/journal.actions";
 import { uploadDocumentAction } from "@/server/actions/upload.actions";
-import { createDraftAction } from "@/server/actions/ai.actions";
 import { Money } from "@/core/money/money";
 import { todayISO } from "@/lib/date";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { AccountSelect } from "@/components/account-select";
+import { PageHeader } from "@/components/page-header";
 import { cn } from "@/lib/utils";
 
 interface Row {
@@ -53,9 +58,9 @@ export function NewEntryForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [aiProcessing, setAiProcessing] = useState(false);
-  const [aiStatusMessage, setAiStatusMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [posted, setPosted] = useState<{ id: string; number: string; totalMinor: bigint } | null>(null);
+  const [flash, setFlash] = useState<{ id: string; number: string } | null>(null);
 
   // Form State
   const [dateISO, setDateISO] = useState(() => todayISO());
@@ -110,133 +115,206 @@ export function NewEntryForm({
     }
   }
 
-  // AI Auto-Draft Execution
-  async function handleGenerateWithAI() {
-    if (!file && !memo.trim()) {
-      setError("Lampirkan dokumen data dukung atau ketik keterangan transaksi terlebih dahulu.");
-      return;
-    }
-
+  function resetForm() {
+    setRows([
+      { key: 1, accountId: "", debitText: "", creditText: "" },
+      { key: 2, accountId: "", debitText: "", creditText: "" },
+    ]);
+    setMemo("");
+    setDateISO(todayISO());
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
-    setAiProcessing(true);
-    setAiStatusMessage(file ? "Mengunggah data dukung & membaca OCR..." : "Menganalisis transaksi via AI...");
+  }
 
-    try {
-      let documentId: string | undefined;
-      if (file) {
-        const formData = new FormData();
-        formData.set("file", file);
-        const upRes = await uploadDocumentAction(formData);
-        if (!upRes.ok || !upRes.documentId) {
-          throw new Error(upRes.error ?? "Gagal mengunggah file data dukung.");
+  function submitWithMode(mode: "post" | "post-new") {
+    setError(null);
+    setFlash(null);
+    startTransition(async () => {
+      try {
+        let document: { id: string; fileName?: string } | undefined;
+        if (file) {
+          const fd = new FormData();
+          fd.set("file", file);
+          const upRes = await uploadDocumentAction(fd);
+          if (!upRes.ok || !upRes.documentId) {
+            setError(upRes.error ?? "Gagal mengunggah lampiran.");
+            return;
+          }
+          document = { id: upRes.documentId, fileName: file.name };
         }
-        documentId = upRes.documentId;
+        const res = await createAndPostAction({
+          dateISO,
+          memo,
+          lines: rows.map(({ accountId, debitText, creditText }) => ({
+            accountId,
+            debitText,
+            creditText,
+          })),
+          document,
+        });
+        if (!res.ok) {
+          setError(res.error ?? "Gagal memposting jurnal.");
+          return;
+        }
+        if (mode === "post-new") {
+          setFlash({ id: res.id ?? "", number: res.number ?? "" });
+          resetForm();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+          setPosted({ id: res.id ?? "", number: res.number ?? "", totalMinor: totals.d });
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Gagal memposting jurnal.");
       }
-
-      setAiStatusMessage("Menyusun jurnal double-entry & mencocokkan bagan akun...");
-      const draftRes = await createDraftAction({
-        text: memo.trim() || (file ? `Analisis data dukung: ${file.name}` : undefined),
-        documentId,
-      });
-
-      if (!draftRes.ok || !draftRes.draftId) {
-        throw new Error(draftRes.error ?? "Gagal membuat draft jurnal.");
-      }
-
-      setAiStatusMessage("Membuka halaman review draft...");
-      router.push(`/jurnal/ai/${draftRes.draftId}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Terjadi kesalahan saat memproses via AI.");
-      setAiProcessing(false);
-      setAiStatusMessage("");
-    }
+    });
   }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    startTransition(async () => {
-      const res = await createAndPostAction({
-        dateISO,
-        memo,
-        lines: rows.map(({ accountId, debitText, creditText }) => ({
-          accountId,
-          debitText,
-          creditText,
-        })),
-      });
-      if (!res.ok) {
-        setError(res.error ?? "Gagal memposting jurnal.");
-        return;
-      }
-      router.push("/jurnal");
-    });
+    submitWithMode("post");
+  }
+
+  if (posted) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+        className="mx-auto w-full max-w-lg rounded-2xl border border-rule bg-paper p-8 text-center shadow-xs"
+      >
+        <motion.div
+          initial={{ scale: 0.85, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 320, damping: 22, delay: 0.05 }}
+          className="mx-auto flex size-12 items-center justify-center rounded-full bg-debit/10 text-debit"
+        >
+          <CheckCircle2 className="size-6" />
+        </motion.div>
+        <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+          Terposting &amp; Terkunci
+        </p>
+        <p className="tnum mt-1 font-display text-3xl font-semibold tracking-tight text-ink">
+          {posted.number}
+        </p>
+        <p className="tnum mt-1 text-xs text-ink-soft">
+          {Money.fromMinor(posted.totalMinor).formatIdr()} · koreksi hanya via jurnal pembalik
+        </p>
+        <div className="rule-double mx-auto mt-4 max-w-[220px]" />
+        <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+          {posted.id && (
+            <Button
+              type="button"
+              onClick={() => router.push(`/jurnal/${posted.id}`)}
+              className="bg-terra text-xs text-white hover:bg-terra/90"
+            >
+              Lihat Detail
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push("/jurnal")}
+            className="text-xs"
+          >
+            Lihat Jurnal Umum
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => window.location.reload()}
+            className="text-xs"
+          >
+            Tulis Jurnal Lagi
+          </Button>
+        </div>
+      </motion.div>
+    );
   }
 
   return (
     <form onSubmit={submit} className="space-y-6">
-      {/* 1. Top Action Bar: Status Balance & Top Buttons */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 rounded-2xl border border-rule bg-paper p-4 shadow-xs">
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge
-            className={cn(
-              "px-3 py-1 text-xs font-semibold flex items-center gap-1.5",
-              totals.balanced
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                : "bg-terra/10 text-terra border border-terra/20"
-            )}
-          >
-            {totals.balanced ? (
-              <>
-                <CheckCircle2 className="size-3.5" />
-                <span>✓ Seimbang ({Money.fromMinor(totals.d).formatIdr()})</span>
-              </>
-            ) : (
-              <span>
-                Belum seimbang {totals.diff > 0n && `(Selisih ${Money.fromMinor(totals.diff).formatIdr()})`}
-              </span>
-            )}
-          </Badge>
+      <PageHeader
+        title="Tulis Jurnal Baru"
+        eyebrow="Pastikan jumlah total Debit dan Kredit seimbang sebelum memposting transaksi."
+        actions={
+          <div className="flex items-center gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/jurnal")}
+              className="h-9 px-4 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink-soft hover:text-ink transition-colors shadow-xs"
+            >
+              Batal
+            </Button>
 
-          <div className="hidden sm:flex items-center gap-2 text-xs text-ink-soft tnum">
-            <span>Debit: <strong className="text-ink font-semibold">{Money.fromMinor(totals.d).formatIdr()}</strong></span>
-            <span>·</span>
-            <span>Kredit: <strong className="text-ink font-semibold">{Money.fromMinor(totals.c).formatIdr()}</strong></span>
+            <div className="flex items-stretch shadow-xs rounded-xl overflow-hidden">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!totals.balanced || pending}
+                className="h-9 rounded-l-xl rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-none"
+              >
+                {pending ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                    Memposting...
+                  </>
+                ) : (
+                  "Posting Jurnal"
+                )}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!totals.balanced || pending}
+                    aria-label="Opsi posting lainnya"
+                    className="h-9 rounded-l-none rounded-r-xl border-l border-l-white/25 px-2.5 bg-terra text-white hover:bg-terra/90 shadow-none disabled:transform-none"
+                  >
+                    <ChevronDown className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-48 rounded-xl border-rule bg-paper shadow-md">
+                  <DropdownMenuItem
+                    onClick={() => submitWithMode("post")}
+                    className="text-xs font-medium cursor-pointer py-2"
+                  >
+                    Posting Jurnal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => submitWithMode("post-new")}
+                    className="text-xs font-medium cursor-pointer py-2"
+                  >
+                    Posting &amp; Tulis Lagi
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        }
+      />
+
+      {flash?.id && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-debit/25 bg-debit/10 px-4 py-3 text-xs">
+          <span className="text-ink">
+            <strong className="tnum font-semibold">{flash.number}</strong> terposting &amp; terkunci. Formulir sudah dikosongkan untuk jurnal berikutnya.
+          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] border-rule bg-paper" onClick={() => router.push(`/jurnal/${flash.id}`)}>
+              Lihat Detail
+            </Button>
+            <Button type="button" variant="ghost" size="icon-sm" aria-label="Tutup notifikasi" onClick={() => setFlash(null)}>
+              <X className="size-3.5" />
+            </Button>
           </div>
         </div>
-
-        {/* Top Buttons: Batal & Posting */}
-        <div className="flex items-center gap-2.5 self-end sm:self-auto">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/jurnal")}
-            className="h-9 px-4 text-xs font-medium border-rule"
-          >
-            Batal
-          </Button>
-
-          <Button
-            type="submit"
-            size="sm"
-            disabled={!totals.balanced || pending || aiProcessing}
-            className="h-9 px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold shadow-xs transition-transform active:scale-[0.98]"
-          >
-            {pending ? (
-              <>
-                <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                Memposting...
-              </>
-            ) : (
-              "Posting Jurnal"
-            )}
-          </Button>
-        </div>
-      </div>
+      )}
 
       {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3.5 text-xs font-medium text-destructive">
+        <div role="alert" className="rounded-xl bg-destructive/10 border border-destructive/20 p-3.5 text-xs font-medium text-destructive">
           {error}
         </div>
       )}
@@ -275,7 +353,8 @@ export function NewEntryForm({
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        className="text-ink-soft hover:bg-destructive/10 hover:text-destructive"
+                        aria-label={`Hapus baris ${idx + 1}`}
+                        className="text-ink-soft hover:bg-destructive/10 hover:text-destructive max-sm:min-h-[44px] max-sm:min-w-[44px]"
                         onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
                       >
                         <Trash2 className="size-3.5" />
@@ -321,8 +400,27 @@ export function NewEntryForm({
               ))}
             </div>
 
+            {/* Ringkasan Total Mobile */}
+            <div className="rounded-xl border border-rule bg-canvas/30 px-3.5 py-2.5 text-xs sm:hidden">
+              <div className="tnum flex items-center justify-between font-medium">
+                <span>Debit: <strong className="text-ink">{Money.fromMinor(totals.d).formatIdr()}</strong></span>
+                <span>Kredit: <strong className="text-ink">{Money.fromMinor(totals.c).formatIdr()}</strong></span>
+              </div>
+              <div className="mt-1 text-right">
+                {totals.balanced ? (
+                  <span className="font-medium text-debit">Seimbang — siap diposting</span>
+                ) : totals.d === 0n && totals.c === 0n ? (
+                  <span className="text-ink-soft">Isi nominal terlebih dahulu</span>
+                ) : (
+                  <span className="font-medium text-terra">
+                    Belum seimbang — selisih {Money.fromMinor(totals.diff).formatIdr()}
+                  </span>
+                )}
+              </div>
+            </div>
+
             {/* Desktop & Tablet Table (>= sm) */}
-            <div className="hidden sm:block overflow-hidden rounded-xl border border-rule bg-paper shadow-2xs">
+            <div className="hidden sm:block overflow-x-auto rounded-xl border border-rule bg-paper shadow-2xs">
               <table className="w-full table-fixed tnum text-sm">
                 <thead>
                   <tr className="border-b border-rule bg-canvas/70 text-left text-xs font-semibold uppercase tracking-wider text-ink-soft">
@@ -369,6 +467,7 @@ export function NewEntryForm({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
+                            aria-label={`Hapus baris ${idx + 1}`}
                             className="text-ink-soft hover:bg-destructive/10 hover:text-destructive"
                             onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
                           >
@@ -383,32 +482,29 @@ export function NewEntryForm({
             </div>
 
             {/* Subtotal Panel di Bawah Tabel */}
-            <div className="flex items-center justify-between pt-2 text-xs border-t border-rule/50 px-1">
-              <span className="text-ink-soft">{rows.length} baris jurnal</span>
-              <div className="flex items-center gap-4 tnum font-medium">
-                <span>Debit: <strong className="text-ink font-semibold">{Money.fromMinor(totals.d).formatIdr()}</strong></span>
-                <span>Kredit: <strong className="text-ink font-semibold">{Money.fromMinor(totals.c).formatIdr()}</strong></span>
+            <div className="border-t border-rule/50 px-1 pt-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-ink-soft">{rows.length} baris jurnal</span>
+                <div className="flex items-center gap-4 tnum font-medium">
+                  <span>Debit: <strong className="text-ink font-semibold">{Money.fromMinor(totals.d).formatIdr()}</strong></span>
+                  <span>Kredit: <strong className="text-ink font-semibold">{Money.fromMinor(totals.c).formatIdr()}</strong></span>
+                </div>
+              </div>
+              <div className="mt-1.5 flex justify-end">
+                {totals.balanced ? (
+                  <span className="inline-flex items-center gap-1 font-medium text-debit">
+                    <CheckCircle2 className="size-3.5" /> Seimbang — siap diposting
+                  </span>
+                ) : totals.d === 0n && totals.c === 0n ? (
+                  <span className="text-ink-soft">Isi nominal debit atau kredit terlebih dahulu</span>
+                ) : (
+                  <span className="font-medium text-terra">
+                    Belum seimbang — selisih {Money.fromMinor(totals.diff).formatIdr()}
+                    {totals.diff > 0n && (totals.d > totals.c ? " (Debit lebih besar)" : " (Kredit lebih besar)")}
+                  </span>
+                )}
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Pane Kanan: Tanggal, Keterangan / Memo Expandable, Lampiran & AI Helper */}
-        <div className="lg:col-span-5 xl:col-span-4 space-y-4">
-          {/* Card: Tanggal Transaksi */}
-          <div className="rounded-2xl border border-rule bg-paper p-4 sm:p-5 shadow-xs space-y-1.5">
-            <Label htmlFor="tanggal" className="text-xs font-semibold text-ink-soft flex items-center gap-1.5">
-              <Calendar className="size-3.5 text-ink-soft" />
-              <span>Tanggal Transaksi</span>
-            </Label>
-            <Input
-              id="tanggal"
-              type="date"
-              value={dateISO}
-              onChange={(e) => setDateISO(e.target.value)}
-              required
-              className="bg-paper"
-            />
           </div>
 
           {/* Card: Keterangan / Memo dengan Expand Animation */}
@@ -455,10 +551,29 @@ export function NewEntryForm({
               />
             </motion.div>
 
-            <div className="flex items-center justify-between text-[10px] text-ink-soft">
+            <div className="flex items-center justify-between text-[11px] text-ink-soft">
               <span>Mendukung memo multi-baris</span>
               <span>{memo.length} karakter</span>
             </div>
+          </div>
+        </div>
+
+        {/* Pane Kanan: Tanggal & Lampiran */}
+        <div className="lg:col-span-5 xl:col-span-4 space-y-4">
+          {/* Card: Tanggal Transaksi */}
+          <div className="rounded-2xl border border-rule bg-paper p-4 sm:p-5 shadow-xs space-y-1.5">
+            <Label htmlFor="tanggal" className="text-xs font-semibold text-ink-soft flex items-center gap-1.5">
+              <Calendar className="size-3.5 text-ink-soft" />
+              <span>Tanggal Transaksi</span>
+            </Label>
+            <Input
+              id="tanggal"
+              type="date"
+              value={dateISO}
+              onChange={(e) => setDateISO(e.target.value)}
+              required
+              className="bg-paper"
+            />
           </div>
 
           {/* Card: Lampiran / Data Dukung */}
@@ -468,7 +583,7 @@ export function NewEntryForm({
                 <Paperclip className="size-3.5 text-ink-soft" />
                 <span className="text-xs font-semibold text-ink">Lampiran / Data Dukung</span>
               </div>
-              <span className="text-[10px] text-ink-soft">Maks 5 MB</span>
+              <span className="text-[11px] text-ink-soft">Maks 5 MB</span>
             </div>
 
             {file ? (
@@ -479,7 +594,7 @@ export function NewEntryForm({
                   </div>
                   <div className="overflow-hidden">
                     <p className="truncate text-xs font-medium text-ink">{file.name}</p>
-                    <p className="text-[10px] text-ink-soft">{(file.size / 1024).toFixed(1)} KB</p>
+                    <p className="text-[11px] text-ink-soft">{(file.size / 1024).toFixed(1)} KB</p>
                   </div>
                 </div>
                 <Button
@@ -506,37 +621,6 @@ export function NewEntryForm({
                 />
               </label>
             )}
-          </div>
-
-          {/* Card: Bantuan AI Auto-Draft */}
-          <div className="rounded-2xl border border-terra/25 bg-terra/[0.04] p-4 sm:p-5 shadow-xs space-y-3">
-            <div className="flex items-center gap-2 text-terra">
-              <Sparkles className="size-4 shrink-0" />
-              <h3 className="text-xs font-semibold">Otomasi Entri dengan AI</h3>
-            </div>
-            <p className="text-[11px] text-ink-soft leading-relaxed">
-              Unggah lampiran atau tulis keterangan singkat di atas, lalu minta AI menyusun jurnal lengkap siap review.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleGenerateWithAI}
-              disabled={aiProcessing || (!file && !memo.trim())}
-              className="w-full border-terra/30 text-terra bg-paper hover:bg-terra/10 text-xs font-semibold gap-1.5 h-8.5 shadow-2xs"
-            >
-              {aiProcessing ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin" />
-                  <span>{aiStatusMessage || "Memproses AI..."}</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="size-3.5" />
-                  <span>Susun Otomatis via AI</span>
-                </>
-              )}
-            </Button>
           </div>
         </div>
       </div>

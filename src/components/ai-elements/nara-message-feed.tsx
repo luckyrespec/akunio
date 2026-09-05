@@ -5,6 +5,7 @@ import { Sparkles, FileText, Image as ImageIcon, FileSpreadsheet, RotateCcw } fr
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ai-elements/reasoning";
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
+import { postingStampFor } from "@/components/ai-elements/journal-stamp";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import {
   Queue,
@@ -71,7 +72,9 @@ export function NaraMessageFeed({
                           <ToolInput input={ti.args} />
                         ) : null}
                         {ti.result ? (
-                          <ToolOutput output={ti.result as React.ReactNode} />
+                          postingStampFor(ti.toolName, ti.result) ?? (
+                            <ToolOutput output={ti.result as React.ReactNode} />
+                          )
                         ) : ti.error ? (
                           <ToolOutput errorText={ti.error} />
                         ) : null}
@@ -172,7 +175,7 @@ export function NaraMessageFeed({
 
                   {/* Citations */}
                   {m.citations && m.citations.length > 0 && (
-                    <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-rule/60 pt-2.5 text-[10px] text-ink-soft">
+                    <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-rule/60 pt-2.5 text-[11px] text-ink-soft">
                       <span className="font-semibold text-ink">Sumber Referensi:</span>
                       {m.citations.map((c, i) => (
                         <span key={i} className="rounded bg-canvas px-1.5 py-0.5 font-mono border border-rule/50">
@@ -207,7 +210,9 @@ export function NaraMessageFeed({
                   <ToolInput input={st.args} />
                 ) : null}
                 {st.result ? (
-                  <ToolOutput output={st.result as React.ReactNode} />
+                  postingStampFor(st.toolName, st.result) ?? (
+                    <ToolOutput output={st.result as React.ReactNode} />
+                  )
                 ) : st.error ? (
                   <ToolOutput errorText={st.error} />
                 ) : null}
@@ -229,8 +234,8 @@ export function NaraMessageFeed({
               </MessageResponse>
             ) : (
               <div className="flex items-center gap-2 py-2 px-1 text-xs text-ink-soft select-none">
-                <span className="font-medium text-ink/75">Nara sedang berpikir</span>
-                <span className="inline-flex items-center gap-1.5 py-2 px-1" role="status" aria-label="Nara sedang berpikir">
+                <span className="font-medium text-ink/75">Akunio sedang berpikir</span>
+                <span className="inline-flex items-center gap-1.5 py-2 px-1" role="status" aria-label="Akunio sedang berpikir">
                   <span className="size-1.5 rounded-full bg-terra animate-pulse" />
                 </span>
               </div>

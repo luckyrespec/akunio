@@ -62,11 +62,11 @@ export function HitlTool({
 
         <p className="mt-1.5 text-[11px] leading-relaxed text-ink-soft">
           {allowAll
-            ? "Nara langsung memposting jurnal dan mengeksekusi transaksi secara otomatis tanpa meminta konfirmasi manual."
+            ? "Akunio langsung memposting jurnal dan mengeksekusi transaksi secara otomatis tanpa meminta konfirmasi manual."
             : "Aman dan terkendali. Setiap pencatatan transaksi, pembuatan jurnal, atau perubahan akun wajib Anda setujui terlebih dahulu."}
         </p>
 
-        <div className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-canvas/70 px-2 py-1 text-[10px] font-medium text-ink-soft border border-rule/50">
+        <div className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-canvas/70 px-2 py-1 text-[11px] font-medium text-ink-soft border border-rule/50">
           <Info className="size-3 text-terra shrink-0" />
           <span>Klik tombol untuk beralih mode.</span>
         </div>

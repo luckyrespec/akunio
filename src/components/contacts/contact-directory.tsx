@@ -87,7 +87,7 @@ export function ContactDirectory({ initialContacts }: ContactDirectoryProps) {
             role="tab"
             aria-selected={filterType === "ALL"}
             onClick={() => setFilterType("ALL")}
-            className={`relative rounded-md px-3 py-1 font-medium transition-colors ${
+            className={`relative rounded-md px-3 py-1 font-medium transition-colors focus-ring ${
               filterType === "ALL"
                 ? "text-ink"
                 : "text-ink-soft hover:text-ink"
@@ -107,7 +107,7 @@ export function ContactDirectory({ initialContacts }: ContactDirectoryProps) {
             role="tab"
             aria-selected={filterType === "CUSTOMER"}
             onClick={() => setFilterType("CUSTOMER")}
-            className={`relative rounded-md px-3 py-1 font-medium transition-colors ${
+            className={`relative rounded-md px-3 py-1 font-medium transition-colors focus-ring ${
               filterType === "CUSTOMER"
                 ? "text-ink"
                 : "text-ink-soft hover:text-ink"
@@ -127,7 +127,7 @@ export function ContactDirectory({ initialContacts }: ContactDirectoryProps) {
             role="tab"
             aria-selected={filterType === "VENDOR"}
             onClick={() => setFilterType("VENDOR")}
-            className={`relative rounded-md px-3 py-1 font-medium transition-colors ${
+            className={`relative rounded-md px-3 py-1 font-medium transition-colors focus-ring ${
               filterType === "VENDOR"
                 ? "text-ink"
                 : "text-ink-soft hover:text-ink"
@@ -181,42 +181,58 @@ export function ContactDirectory({ initialContacts }: ContactDirectoryProps) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-rule bg-canvas/50 text-ink-soft">
+            <table className="w-full text-left text-xs tnum">
+              <thead className="border-b border-rule bg-canvas/50 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Nama Kontak</th>
-                  <th className="px-4 py-3 font-medium">Tipe</th>
-                  <th className="px-4 py-3 font-medium">No. WhatsApp / HP</th>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Termin Tempo</th>
-                  <th className="px-4 py-3 font-medium text-right">Aksi</th>
+                  <th className="px-4 py-3">Nama Kontak</th>
+                  <th className="px-4 py-3">Tipe</th>
+                  <th className="px-4 py-3">No. WhatsApp / HP</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Termin Tempo</th>
+                  <th className="px-4 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-rule">
                 {filtered.map((c) => (
                   <tr key={c.id} className="hover:bg-canvas/30 transition-colors">
-                    <td className="px-4 py-3 font-semibold text-ink">
-                      <div>{c.name}</div>
-                      {c.address && (
-                        <div className="text-[11px] text-ink-soft font-normal truncate max-w-xs flex items-center gap-1 mt-0.5">
-                          <MapPin className="size-3 shrink-0" />
-                          <span className="truncate">{c.address}</span>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          aria-hidden
+                          className={`flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                            c.type === "CUSTOMER"
+                              ? "bg-blue-500/10 text-blue-700"
+                              : c.type === "VENDOR"
+                                ? "bg-purple-500/10 text-purple-700"
+                                : "bg-emerald-500/10 text-emerald-700"
+                          }`}
+                        >
+                          {c.name.charAt(0).toUpperCase()}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-ink">{c.name}</div>
+                          {c.address && (
+                            <div className="text-[11px] text-ink-soft font-normal truncate max-w-xs flex items-center gap-1 mt-0.5">
+                              <MapPin className="size-3 shrink-0" />
+                              <span className="truncate">{c.address}</span>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {c.type === "CUSTOMER" && (
-                        <Badge variant="outline" className="border-blue-500/30 text-blue-700 bg-blue-50/50 text-[10px]">
+                        <Badge variant="outline" className="border-blue-500/30 text-blue-700 bg-blue-50/50 dark:text-blue-300 dark:bg-blue-500/15 text-[11px]">
                           Pelanggan
                         </Badge>
                       )}
                       {c.type === "VENDOR" && (
-                        <Badge variant="outline" className="border-purple-500/30 text-purple-700 bg-purple-50/50 text-[10px]">
+                        <Badge variant="outline" className="border-purple-500/30 text-purple-700 bg-purple-50/50 dark:text-purple-300 dark:bg-purple-500/15 text-[11px]">
                           Pemasok
                         </Badge>
                       )}
                       {c.type === "BOTH" && (
-                        <Badge variant="outline" className="border-emerald-500/30 text-emerald-700 bg-emerald-50/50 text-[10px]">
+                        <Badge variant="outline" className="border-emerald-500/30 text-emerald-700 bg-emerald-50/50 text-[11px]">
                           Mitra Penuh
                         </Badge>
                       )}

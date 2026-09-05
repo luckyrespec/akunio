@@ -55,8 +55,8 @@ export const journalToolDefs: ToolDefinition[] = [
             type: "object",
             properties: {
               accountCode: { type: "string", description: "Kode akun (misal 1-1001)" },
-              debitText: { type: "string", description: "Nominal debit rupiah" },
-              creditText: { type: "string", description: "Nominal kredit rupiah" },
+              debitText: { type: "string", description: "Nominal debit rupiah; WAJIB string kosong ('') bila nol — jangan tulis '0'" },
+              creditText: { type: "string", description: "Nominal kredit rupiah; WAJIB string kosong ('') bila nol — jangan tulis '0'" },
               confidence: { type: "number" },
               reason: { type: "string" },
             },
@@ -139,32 +139,40 @@ export const journalHandlers: Record<string, ToolHandler> = {
   },
 
   create_journal_draft: async (orgId, _actorEmail, args) => {
-    const parsed = DraftEntrySchema.parse({
+    const parsed = DraftEntrySchema.safeParse({
       dateISO: new Date().toISOString().slice(0, 10),
       overallConfidence: 0.9,
       ...args,
     });
+    if (!parsed.success) {
+      return {
+        success: false,
+        error:
+          "Draf jurnal tidak valid: setiap baris harus mengisi tepat satu sisi (debit atau kredit), sisi lainnya dikosongkan.",
+      };
+    }
+    const draft = parsed.data;
     const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
-    const mapping = resolveDraftAccounts(parsed, accRows);
+    const mapping = resolveDraftAccounts(draft, accRows);
     const row = await db.transaction(async (tx) => {
       const d = await createDraft(tx, {
         orgId,
         kind: "TEXT",
-        inputText: parsed.memo,
-        draft: { ...parsed, mapping },
-        model: "nara-agent",
+        inputText: draft.memo,
+        draft: { ...draft, mapping },
+        model: "akunio-agent",
       });
       await appendAudit(tx, {
         orgId,
-        actor: "nara",
-        action: "NARA_DRAFT_CREATE",
+        actor: "akunio",
+        action: "AKUNIO_DRAFT_CREATE",
         subjectType: "ai_draft",
         subjectId: d.id,
-        data: { memo: parsed.memo, linesCount: parsed.lines.length },
+        data: { memo: draft.memo, linesCount: draft.lines.length },
       });
       return d;
     });
-    return { success: true, data: { draftId: row.id, memo: parsed.memo } };
+    return { success: true, data: { draftId: row.id, memo: draft.memo } };
   },
 
   post_journal: async (orgId, actorEmail, args) => {
@@ -212,8 +220,8 @@ export const journalHandlers: Record<string, ToolHandler> = {
       });
       await appendAudit(tx, {
         orgId,
-        actor: "nara",
-        action: "NARA_POST_JOURNAL",
+        actor: "akunio",
+        action: "AKUNIO_POST_JOURNAL",
         subjectType: "journal_entry",
         subjectId: posted.id,
         data: { number: posted.number, memo },
@@ -226,7 +234,7 @@ export const journalHandlers: Record<string, ToolHandler> = {
 
   reverse_journal: async (orgId, actorEmail, args) => {
     const entryIdOrNum = String(args.entryId ?? "").trim();
-    const reason = String(args.reason ?? "Pembalikan jurnal via Nara AI");
+    const reason = String(args.reason ?? "Pembalikan jurnal via Akunio AI");
     const dateISO = args.dateISO ? String(args.dateISO).slice(0, 10) : new Date().toISOString().slice(0, 10);
 
     const rows = await listEntriesWithLines(db, orgId, 100);
@@ -258,8 +266,8 @@ export const journalHandlers: Record<string, ToolHandler> = {
       );
       await appendAudit(tx, {
         orgId,
-        actor: "nara",
-        action: "NARA_REVERSE_JOURNAL",
+        actor: "akunio",
+        action: "AKUNIO_REVERSE_JOURNAL",
         subjectType: "journal_entry",
         subjectId: posted.id,
         data: { originalJournal: target.number, reversalNumber: posted.number },

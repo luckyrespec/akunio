@@ -3,57 +3,81 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ArrowLeftRight,
-  BookOpen,
-  Boxes,
-  Building2,
-  CalendarCheck,
-  FileBarChart,
-  LayoutDashboard,
-  Library,
-  Receipt,
-  Search,
-  Settings2,
-  Users,
-  X,
-} from "lucide-react";
+  IconDashboard,
+  IconReceipt,
+  IconInventory,
+  IconReconciliation,
+  IconContacts,
+  IconJournal,
+  IconLedger,
+  IconAssets,
+  IconReports,
+  IconClosing,
+  IconDoctor,
+  IconSettings,
+  IconClose,
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NavUser } from "@/components/nav-user";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-/**
- * AkunioMark — huruf "A" ledger: dua kaki diagonal + mistar ganda
- * (motif rule-double pembukuan) dalam satu bahasa goresan round-cap.
- * Warna memakai token agar ikut mode Lilin.
- */
-function AkunioMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" fill="none" aria-hidden className={className}>
-      <rect width="32" height="32" rx="8" fill="var(--color-terra)" />
-      <g stroke="var(--color-paper)" strokeWidth="2.6" strokeLinecap="round">
-        <path d="M16 7.5 9.2 24" />
-        <path d="M16 7.5 22.8 24" />
-        <path d="M11.9 17.6h8.2" strokeWidth="2" />
-        <path d="M11 20.4h10" strokeWidth="2" />
-      </g>
-    </svg>
-  );
-}
+import { AkunioMark } from "@/components/brand/akunio-logo";
 
-const STANDARD_ITEMS = [
-  { href: "/dasbor", label: "Dasbor", icon: LayoutDashboard },
-  { href: "/faktur", label: "Faktur & Tagihan", icon: Receipt },
-  { href: "/persediaan", label: "Persediaan & Stok", icon: Boxes, match: (p: string) => p.startsWith("/persediaan") },
-  { href: "/rekonsiliasi", label: "Rekonsiliasi Bank", icon: ArrowLeftRight },
-  { href: "/aset", label: "Aset Tetap", icon: Building2 },
-  { href: "/kontak", label: "Kontak", icon: Users },
-  { href: "/jurnal", label: "Jurnal Umum", icon: BookOpen, match: (p: string) => p === "/jurnal" || p === "/jurnal/baru" },
-  { href: "/buku-besar", label: "Buku Besar", icon: Library },
-  { href: "/laporan", label: "Laporan Keuangan", icon: FileBarChart },
-  { href: "/tutup-buku", label: "Tutup Buku", icon: CalendarCheck },
-  { href: "/temuan", label: "Diagnosa & Anomali", icon: Search },
-  { href: "/pengaturan", label: "Pengaturan", icon: Settings2 },
-] as const;
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof IconDashboard;
+  match?: (p: string) => boolean;
+};
+
+type NavGroup = {
+  id: string;
+  title: string;
+  items: NavItem[];
+};
+
+const NAVIGATION_GROUPS: NavGroup[] = [
+  {
+    id: "operasional",
+    title: "Operasional",
+    items: [
+      { href: "/faktur", label: "Faktur & Tagihan", icon: IconReceipt },
+      { href: "/persediaan", label: "Persediaan & Stok", icon: IconInventory, match: (p: string) => p.startsWith("/persediaan") },
+      { href: "/rekonsiliasi", label: "Rekonsiliasi Bank", icon: IconReconciliation },
+      { href: "/kontak", label: "Kontak", icon: IconContacts },
+    ],
+  },
+  {
+    id: "akuntansi",
+    title: "Akuntansi",
+    items: [
+      { href: "/jurnal", label: "Jurnal Umum", icon: IconJournal, match: (p: string) => p === "/jurnal" || p === "/jurnal/baru" },
+      { href: "/buku-besar", label: "Buku Besar", icon: IconLedger },
+      { href: "/aset", label: "Aset Tetap", icon: IconAssets },
+    ],
+  },
+  {
+    id: "laporan",
+    title: "Laporan & Evaluasi",
+    items: [
+      { href: "/laporan", label: "Laporan Keuangan", icon: IconReports },
+      { href: "/tutup-buku", label: "Tutup Buku", icon: IconClosing },
+      { href: "/temuan", label: "Diagnosa & Anomali", icon: IconDoctor },
+    ],
+  },
+  {
+    id: "lainnya",
+    title: "Lainnya",
+    items: [
+      { href: "/pengaturan", label: "Pengaturan", icon: IconSettings },
+    ],
+  },
+];
 
 export function SidebarNav({
   collapsed,
@@ -72,14 +96,17 @@ export function SidebarNav({
 
   const isActive = (href: string, match?: (p: string) => boolean) => {
     if (match) return match(pathname);
+    if (href === "/dashboard") {
+      return pathname === "/dashboard" || pathname.startsWith("/dashboard/") || pathname === "/dasbor" || pathname.startsWith("/dasbor/");
+    }
     return pathname === href || pathname.startsWith(href + "/");
   };
 
   const navContent = (isDrawer: boolean = false) => (
     <div className="flex h-full flex-col justify-between">
-      <div>
+      <div className="flex min-h-0 flex-1 flex-col">
         {/* Brand Header */}
-        <div className={cn("flex items-center justify-between gap-2", !isDrawer && collapsed && "justify-center")}>
+        <div className={cn("flex items-center justify-between gap-2 shrink-0", !isDrawer && collapsed && "justify-center")}>
           <div className="flex items-center gap-2.5">
             <AkunioMark className="size-8 shrink-0 shadow-xs" />
             {(isDrawer || !collapsed) && (
@@ -88,80 +115,148 @@ export function SidebarNav({
           </div>
           {isDrawer && onCloseMobile && (
             <Button variant="ghost" size="icon-sm" onClick={onCloseMobile} className="text-ink-soft hover:text-ink">
-              <X className="size-4" />
+              <IconClose className="size-4" />
             </Button>
           )}
         </div>
 
-        {/* HERO / PREMIUM ASISTEN AI CARD */}
-        <div className="mt-6">
-          <Link
-            href="/asisten"
-            onClick={() => {
-              if (isDrawer && onCloseMobile) onCloseMobile();
-            }}
-            title={!isDrawer && collapsed ? "Akunio AI" : undefined}
-            className={cn(
-              "group flex items-center gap-3 rounded-2xl transition-[color,background-color,border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra/50",
-              !isDrawer && collapsed
-                ? "justify-center p-2 border"
-                : "p-2.5 border",
-              isAsistenActive
-                ? "bg-terra/[0.12] border-terra/60 shadow-xs ring-1 ring-terra/40"
-                : "border-terra/30 bg-terra/[0.06] hover:border-terra/50 hover:bg-terra/[0.1] shadow-2xs hover:shadow-xs",
-            )}
-          >
-
-            {/* Brand mark — motif milik produk, bukan ikon AI generik */}
-            <AkunioMark className="size-9 shrink-0 shadow-2xs transition-transform duration-300 [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-105" />
-
-            {/* Label satu baris + petunjuk shortcut */}
-            {(isDrawer || !collapsed) && (
-              <span className="flex min-w-0 flex-1 items-center gap-2">
-                <span className="truncate text-xs font-semibold text-ink tracking-tight">
-                  Akunio AI
-                </span>
-                <kbd className="ml-auto hidden shrink-0 rounded border border-rule/70 bg-paper/80 px-1.5 py-0.5 font-mono text-[11px] font-normal text-ink-soft xl:inline">
-                  Ctrl J
-                </kbd>
-              </span>
-            )}
-          </Link>
-        </div>
-
-        {/* Section Divider & Label */}
-        {(isDrawer || !collapsed) && (
-          <div className="px-1 pt-6 pb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft/70">
-            Menu Pembukuan
-          </div>
-        )}
-
-        {/* Standard Accounting Navigation */}
-        <nav className={cn("flex flex-col gap-1", !isDrawer && collapsed && "mt-4")}>
-          {STANDARD_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href, (item as { match?: (p: string) => boolean }).match);
-            return (
+        {/* HERO / FITUR UTAMA: AKUNIO AI (Tombol Utama Terpisah & Ter-highlight) */}
+        <div className="mt-5 shrink-0">
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Link
-                key={item.href}
-                href={item.href}
+                href="/asisten"
                 onClick={() => {
                   if (isDrawer && onCloseMobile) onCloseMobile();
                 }}
-                title={!isDrawer && collapsed ? item.label : undefined}
                 className={cn(
-                  "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors focus-ring",
-                  !isDrawer && collapsed && "justify-center px-2 py-2.5",
-                  active
+                  "group relative flex items-center justify-between rounded-xl font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra/50 shadow-xs",
+                  !isDrawer && collapsed
+                    ? "justify-center p-2.5 text-center"
+                    : "px-3.5 py-2.5",
+                  isAsistenActive
+                    ? "bg-terra text-paper border border-terra/90 shadow-sm"
+                    : "bg-terra/15 text-terra border border-terra/30 hover:bg-terra/20 hover:border-terra/50 hover:shadow-sm",
+                )}
+              >
+                {/* Label saat collapsed vs expanded */}
+                {!isDrawer && collapsed ? (
+                  <span className="text-xs font-bold tracking-tight">AI</span>
+                ) : (
+                  <>
+                    <span className="truncate text-xs font-bold tracking-wide">
+                      Akunio AI
+                    </span>
+                    <kbd
+                      className={cn(
+                        "hidden shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium xl:inline transition-colors",
+                        isAsistenActive
+                          ? "bg-paper/20 text-paper border border-paper/30"
+                          : "bg-paper/90 text-terra border border-terra/30",
+                      )}
+                    >
+                      Ctrl J
+                    </kbd>
+                  </>
+                )}
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              Akunio AI (Fitur Utama)
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
+        {/* DASHBOARD (Di atas Operasional, Di bawah AI) */}
+        <div className="mt-2 shrink-0">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href="/dashboard"
+                onClick={() => {
+                  if (isDrawer && onCloseMobile) onCloseMobile();
+                }}
+                className={cn(
+                  "group flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium transition-colors focus-ring",
+                  !isDrawer && collapsed && "justify-center px-2 py-2",
+                  isActive("/dashboard")
                     ? "bg-canvas text-terra font-semibold border border-rule shadow-2xs"
                     : "text-ink-soft hover:bg-canvas/60 hover:text-ink border border-transparent",
                 )}
               >
-                <Icon className={cn("size-4 shrink-0 transition-colors", active ? "text-terra" : "text-ink-soft group-hover:text-ink")} />
-                {(isDrawer || !collapsed) && <span className="truncate">{item.label}</span>}
+                <IconDashboard
+                  className={cn(
+                    "size-4 shrink-0 transition-colors",
+                    isActive("/dashboard") ? "text-terra" : "text-ink-soft group-hover:text-ink",
+                  )}
+                />
+                {(isDrawer || !collapsed) && <span className="truncate">Dashboard</span>}
               </Link>
-            );
-          })}
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              Dashboard
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
+        {/* Separator antara Fitur Atas dan Menu Navigasi Operasional */}
+        <div className="mt-3 mb-2 border-b border-rule/70 shrink-0" />
+
+        {/* Grouped Navigation List dengan scrollbar halus */}
+        <nav
+          className={cn(
+            "flex-1 min-h-0 overflow-y-auto pr-0.5 -mr-0.5 space-y-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            !isDrawer && collapsed && "space-y-3",
+          )}
+        >
+          {NAVIGATION_GROUPS.map((group, groupIdx) => (
+            <div key={group.id} className={cn("flex flex-col gap-1", !isDrawer && collapsed && groupIdx > 0 && "pt-2 border-t border-rule/50")}>
+              {/* Header Label Grup */}
+              {(isDrawer || !collapsed) && (
+                <div className="px-2 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-soft/70">
+                  {group.title}
+                </div>
+              )}
+
+              {/* Item-item Navigasi */}
+              <div className="flex flex-col gap-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.href, item.match);
+                  return (
+                    <Tooltip key={item.href}>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href={item.href}
+                          onClick={() => {
+                            if (isDrawer && onCloseMobile) onCloseMobile();
+                          }}
+                          className={cn(
+                            "group flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors focus-ring",
+                            !isDrawer && collapsed && "justify-center px-2 py-2",
+                            active
+                              ? "bg-canvas text-terra font-semibold border border-rule shadow-2xs"
+                              : "text-ink-soft hover:bg-canvas/60 hover:text-ink border border-transparent",
+                          )}
+                        >
+                          <Icon
+                            className={cn(
+                              "size-4 shrink-0 transition-colors",
+                              active ? "text-terra" : "text-ink-soft group-hover:text-ink",
+                            )}
+                          />
+                          {(isDrawer || !collapsed) && <span className="truncate">{item.label}</span>}
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        {item.label}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
       </div>
 

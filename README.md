@@ -11,7 +11,7 @@ Akunio dirancang untuk pemilik usaha kecil-menengah dan akuntan yang ingin hijra
 - [1. Gambaran Umum & Nilai Bisnis](#1-gambaran-umum--nilai-bisnis)
 - [2. Alur Proses Bisnis Akuntansi](#2-alur-proses-bisnis-akuntansi)
   - [A. Siklus Akuntansi Klasik (Double-Entry Engine)](#a-siklus-akuntansi-klasik-double-entry-engine)
-  - [B. Siklus Pencatatan Cerdas Nara AI (Visi & Multimodal)](#b-siklus-pencatatan-cerdas-nara-ai-visi--multimodal)
+  - [B. Siklus Pencatatan Cerdas Akunio AI (Visi & Multimodal)](#b-siklus-pencatatan-cerdas-nara-ai-visi--multimodal)
   - [C. Mekanisme Persetujuan Human-in-The-Loop (HITL)](#c-mekanisme-persetujuan-human-in-the-loop-hitl)
 - [3. Fitur Utama Sistem](#3-fitur-utama-sistem)
 - [4. Arsitektur Teknis](#4-arsitektur-teknis)
@@ -33,7 +33,7 @@ Aplikasi ini mengatasi 3 masalah utama bisnis:
 2. **Keterlambatan Pelaporan Keuangan**: Bukti kuitansi dan nota menumpuk berhari-hari sebelum dicatat oleh akuntan.
 3. **Ketiadaan Jejak Audit yang Kredibel**: Manipulasi angka atau penghapusan data sepihak merusak integritas laporan keuangan.
 
-Akunio menyelesaikannya dengan menggabungkan **Core Ledger Imutabel** (tidak bisa diubah sembarangan setelah diposting) dan **Nara AI Copilot** yang mengekstraksi nota belanja, mencocokkan bagan akun (COA), dan menyusun laporan laba rugi secara seketika.
+Akunio menyelesaikannya dengan menggabungkan **Core Ledger Imutabel** (tidak bisa diubah sembarangan setelah diposting) dan **Akunio AI Copilot** yang mengekstraksi nota belanja, mencocokkan bagan akun (COA), dan menyusun laporan laba rugi secara seketika.
 
 ---
 
@@ -42,7 +42,7 @@ Akunio menyelesaikannya dengan menggabungkan **Core Ledger Imutabel** (tidak bis
 ```mermaid
 flowchart TD
     subgraph INPUT["1. Input Transaksi"]
-        A1["Nota Fisik / PDF Faktur"] --> B["Nara AI Vision / Parser"]
+        A1["Nota Fisik / PDF Faktur"] --> B["Akunio AI Vision / Parser"]
         A2["Prompt Teks / Kasir"] --> B
         A3["Input Jurnal Manual"] --> C["Validasi Validitas & Keseimbangan"]
     end
@@ -75,7 +75,7 @@ flowchart TD
 4. **Penomoran Formal**: Format per tahun fiskal `JE-YYYY-NNNN` yang diatur oleh counter transaksional berperingkat aman (*database advisory locks*).
 5. **Penutupan Buku Periodik**: Mengunci 12 periode buku dalam setahun kalender sehingga data periode lalu tidak bisa diutak-atik.
 
-### B. Siklus Pencatatan Cerdas Nara AI (Visi & Multimodal)
+### B. Siklus Pencatatan Cerdas Akunio AI (Visi & Multimodal)
 1. **Unggah Berkas Tanpa Beban (*Deferred Upload*)**: Pengguna menarik (*drag-and-drop*) foto struk atau PDF faktur. Pratinjau tampil instan 0ms secara lokal.
 2. **Ekstraksi Multimodal**: Model AI mendeteksi nama vendor, tanggal transaksi, komponen pajak (PPN), dan subtotal.
 3. **Pemetaan Akun Cerdas**: AI menganalisis deskripsi transaksi dan mencocokkannya ke akun COA organisasi (misal: "Beli bensin pertalite" otomatis dipetakan ke Debit `5-1010 Beban Kendaraan Operasional` dan Kredit `1-1001 Kas Utama`).
@@ -93,7 +93,7 @@ Untuk menjamin kontrol internal perusahaan, Akunio menerapkan dua mode izin:
 | Modul | Deskripsi Fungsi |
 |---|---|
 | **Dasbor Finansial** | Ringkasan KPI keuangan real-time: Kas & Bank, Pendapatan Bulan Berjalan, Pengeluaran, Laba Bersih, dan grafik pergerakan kas. |
-| **Nara AI Copilot** | Asisten akuntansi percakapan dengan dukungan *drag-and-drop* berkas, visualisasi lampiran grid, riwayat sesi chat, dan pemahaman konteks halaman (*Page-Context Awareness* via `Ctrl+J`). |
+| **Akunio AI Copilot** | Asisten akuntansi percakapan dengan dukungan *drag-and-drop* berkas, visualisasi lampiran grid, riwayat sesi chat, dan pemahaman konteks halaman (*Page-Context Awareness* via `Ctrl+J`). |
 | **Pustaka Dokumen** | Manajemen arsip bukti transaksi terpusat (Gambar nota & PDF) dengan filter kategori, pencarian, dan tombol "Tanyakan di Chat". |
 | **Jurnal Transaksi** | Pencatatan debit/kredit manual dan draf AI dengan filter tanggal, pencarian nomor bukti, status draf/posted, serta mekanisme pembalikan jurnal. |
 | **Buku Besar** | Kartu riwayat mutasi debit/kredit dan pergerakan saldo berjalan untuk setiap kode akun secara terperinci. |

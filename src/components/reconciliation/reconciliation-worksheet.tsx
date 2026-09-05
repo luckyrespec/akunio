@@ -5,6 +5,13 @@ import Link from "next/link";
 import { ArrowLeft, Sparkles, CheckCircle2, AlertCircle, Link as LinkIcon, Unlink, Plus, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Money } from "@/core/money/money";
 import {
   runAutoMatchAction,
@@ -67,6 +74,7 @@ export function ReconciliationWorksheet({
   const [loadingAutoMatch, setLoadingAutoMatch] = React.useState(false);
   const [actionLoadingId, setActionLoadingId] = React.useState<string | null>(null);
   const [finalizing, setFinalizing] = React.useState(false);
+  const [confirmFinalize, setConfirmFinalize] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   // Compute live matched amounts
@@ -148,9 +156,6 @@ export function ReconciliationWorksheet({
   }
 
   async function handleFinalize() {
-    if (!confirm("Apakah Anda yakin ingin mengunci dan menyelesaikan sesi rekonsiliasi ini?")) {
-      return;
-    }
     setFinalizing(true);
     setError(null);
     try {
@@ -188,7 +193,7 @@ export function ReconciliationWorksheet({
                 Selesai / Terkunci
               </Badge>
             ) : (
-              <Badge variant="outline" className="border-blue-500/30 text-blue-700 bg-blue-50/50 text-[11px]">
+              <Badge variant="outline" className="border-blue-500/30 text-blue-700 bg-blue-50/50 dark:text-blue-300 dark:bg-blue-500/15 text-[11px]">
                 Sedang Berlangsung
               </Badge>
             )}
@@ -218,7 +223,7 @@ export function ReconciliationWorksheet({
             <Button
               size="sm"
               disabled={finalizing}
-              onClick={handleFinalize}
+              onClick={() => setConfirmFinalize(true)}
               className="text-xs bg-emerald-700 hover:bg-emerald-800 text-white"
             >
               {finalizing && <Loader2 className="size-3.5 animate-spin mr-1.5" />}
@@ -267,6 +272,55 @@ export function ReconciliationWorksheet({
           <span>{error}</span>
         </div>
       )}
+
+      {/* Dialog konfirmasi penguncian sesi */}
+      <Dialog open={confirmFinalize} onOpenChange={(o) => !o && setConfirmFinalize(false)}>
+        <DialogContent className="border-rule bg-paper sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold text-ink">
+              Kunci &amp; selesaikan rekonsiliasi?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-xs leading-relaxed text-ink-soft">
+            <p>
+              Saldo koran <strong className="tnum text-ink">{Money.fromMinor(session.statementBalanceMinor).formatIdr()}</strong>{" "}
+              vs buku{" "}
+              <strong className="tnum text-ink">{Money.fromMinor(session.ledgerBalanceMinor + matchedStatementTotal).formatIdr()}</strong>{" "}
+              — selisih{" "}
+              <strong className="tnum text-ink">{Money.fromMinor(currentDifferenceMinor).formatIdr()}</strong>.
+            </p>
+            <p>
+              Sesi yang dikunci <strong className="text-ink">tidak bisa diubah lagi</strong> dan
+              tercatat di jejak audit. Finalisasi membutuhkan selisih Rp 0.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={finalizing}
+              onClick={() => setConfirmFinalize(false)}
+              className="text-xs"
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={finalizing || !isBalanced}
+              onClick={() => {
+                setConfirmFinalize(false);
+                void handleFinalize();
+              }}
+              className="bg-terra text-xs text-white hover:bg-terra/90"
+            >
+              {finalizing && <Loader2 className="size-3.5 animate-spin mr-1.5" />}
+              Ya, Kunci Sesi Ini
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Manual Link Action Bar if items selected */}
       {selectedStatementId && selectedLedgerId && !isCompleted && (
@@ -340,8 +394,18 @@ export function ReconciliationWorksheet({
                 return (
                   <div
                     key={l.id}
+                    role="button"
+                    tabIndex={isCompleted || isMatched ? -1 : 0}
+                    aria-pressed={isSelected}
+                    aria-label={`Mutasi ${l.description} ${Money.fromMinor(l.amountMinor).formatIdr()}${isMatched ? ", sudah cocok" : ""}`}
                     onClick={() => !isCompleted && !isMatched && setSelectedStatementId(isSelected ? null : l.id)}
-                    className={`rounded-lg border p-3 text-xs transition-colors cursor-pointer ${
+                    onKeyDown={(e) => {
+                      if ((e.key === "Enter" || e.key === " ") && !isCompleted && !isMatched) {
+                        e.preventDefault();
+                        setSelectedStatementId(isSelected ? null : l.id);
+                      }
+                    }}
+                    className={`rounded-lg border p-3 text-xs transition-colors focus-ring cursor-pointer ${
                       isSelected
                         ? "border-terra bg-terra/5 shadow-2xs"
                         : isMatched
@@ -354,12 +418,12 @@ export function ReconciliationWorksheet({
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-ink-soft text-[11px]">{l.transactionDate}</span>
                           {isMatched && (
-                            <Badge variant="outline" className="border-emerald-500/30 text-emerald-700 bg-emerald-50/50 text-[10px]">
+                            <Badge variant="outline" className="border-emerald-500/30 text-emerald-700 bg-emerald-50/50 text-[11px]">
                               Cocok
                             </Badge>
                           )}
                           {hasSuggestion && (
-                            <Badge variant="outline" className="border-terra/40 text-terra bg-terra/10 text-[10px]">
+                            <Badge variant="outline" className="border-terra/40 text-terra bg-terra/10 text-[11px]">
                               Saran AI ({l.confidenceScore}%)
                             </Badge>
                           )}
@@ -382,7 +446,7 @@ export function ReconciliationWorksheet({
                           {l.type === "CR" ? "+" : "-"}
                           {Money.fromMinor(l.amountMinor).formatIdr()}
                         </span>
-                        <span className="text-[10px] text-ink-soft">{l.type === "CR" ? "Uang Masuk" : "Uang Keluar"}</span>
+                        <span className="text-[11px] text-ink-soft">{l.type === "CR" ? "Uang Masuk" : "Uang Keluar"}</span>
                       </div>
                     </div>
 
@@ -398,7 +462,7 @@ export function ReconciliationWorksheet({
                               e.stopPropagation();
                               handleConfirmMatch(l.id, l.matchedJournalLineId!);
                             }}
-                            className="h-6 text-[10px] border-terra/40 text-terra hover:bg-terra/10"
+                            className="h-6 text-[11px] border-terra/40 text-terra hover:bg-terra/10"
                           >
                             Setujui Saran AI
                           </Button>
@@ -413,7 +477,7 @@ export function ReconciliationWorksheet({
                               e.stopPropagation();
                               handleQuickAdjustment(l.id, "FEE");
                             }}
-                            className="h-6 text-[10px] text-ink-soft hover:text-ink"
+                            className="h-6 text-[11px] text-ink-soft hover:text-ink"
                           >
                             + Beban Admin
                           </Button>
@@ -428,7 +492,7 @@ export function ReconciliationWorksheet({
                               e.stopPropagation();
                               handleQuickAdjustment(l.id, "INTEREST");
                             }}
-                            className="h-6 text-[10px] text-ink-soft hover:text-ink"
+                            className="h-6 text-[11px] text-ink-soft hover:text-ink"
                           >
                             + Pendapatan Bunga
                           </Button>
@@ -443,7 +507,7 @@ export function ReconciliationWorksheet({
                               e.stopPropagation();
                               handleUnlinkMatch(l.id);
                             }}
-                            className="h-6 text-[10px] text-ink-soft hover:text-destructive"
+                            className="h-6 text-[11px] text-ink-soft hover:text-destructive"
                           >
                             <Unlink className="size-3 mr-1" />
                             Lepas Tautan
@@ -479,8 +543,18 @@ export function ReconciliationWorksheet({
                 return (
                   <div
                     key={j.id}
+                    role="button"
+                    tabIndex={isCompleted ? -1 : 0}
+                    aria-pressed={isSelected}
+                    aria-label={`Jurnal ${j.number} ${j.memo}`}
                     onClick={() => !isCompleted && setSelectedLedgerId(isSelected ? null : j.id)}
-                    className={`rounded-lg border p-3 text-xs transition-colors cursor-pointer ${
+                    onKeyDown={(e) => {
+                      if ((e.key === "Enter" || e.key === " ") && !isCompleted) {
+                        e.preventDefault();
+                        setSelectedLedgerId(isSelected ? null : j.id);
+                      }
+                    }}
+                    className={`rounded-lg border p-3 text-xs transition-colors focus-ring cursor-pointer ${
                       isSelected
                         ? "border-terra bg-terra/5 shadow-2xs"
                         : "border-rule/70 bg-canvas/30 hover:border-rule"
@@ -504,7 +578,7 @@ export function ReconciliationWorksheet({
                           {isDebit ? "+" : "-"}
                           {Money.fromMinor(isDebit ? j.debitMinor : j.creditMinor).formatIdr()}
                         </span>
-                        <span className="text-[10px] text-ink-soft">{isDebit ? "Debet (Masuk)" : "Kredit (Keluar)"}</span>
+                        <span className="text-[11px] text-ink-soft">{isDebit ? "Debet (Masuk)" : "Kredit (Keluar)"}</span>
                       </div>
                     </div>
                   </div>

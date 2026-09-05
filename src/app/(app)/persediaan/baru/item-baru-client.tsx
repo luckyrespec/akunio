@@ -109,12 +109,12 @@ export function ItemBaruClient() {
             >
               Batal
             </Button>
-            <div className="inline-flex rounded-xl shadow-xs">
+            <div className="flex items-stretch shadow-xs rounded-xl overflow-hidden">
               <Button
                 type="submit"
                 disabled={isPending}
                 size="sm"
-                className="h-9 px-4 text-xs font-medium rounded-l-xl rounded-r-none bg-ink text-paper hover:bg-ink/90 border-r border-paper/20"
+                className="h-9 rounded-l-xl rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-none"
               >
                 {isPending ? (
                   <>
@@ -131,22 +131,22 @@ export function ItemBaruClient() {
                     type="button"
                     disabled={isPending}
                     size="sm"
-                    className="h-9 px-2 rounded-r-xl rounded-l-none bg-ink text-paper hover:bg-ink/90"
+                    className="h-9 rounded-l-none rounded-r-xl border-l border-l-white/25 px-2.5 bg-terra text-white hover:bg-terra/90 shadow-none disabled:transform-none"
                     aria-label="Opsi simpan lainnya"
                   >
                     <ChevronDown className="size-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuContent align="end" className="min-w-48 rounded-xl border-rule bg-paper shadow-md">
                   <DropdownMenuItem
                     onClick={() => submitWithMode("save")}
-                    className="text-xs cursor-pointer"
+                    className="text-xs font-medium cursor-pointer py-2"
                   >
                     Simpan &amp; Lihat Rincian
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => submitWithMode("save-new")}
-                    className="text-xs cursor-pointer"
+                    className="text-xs font-medium cursor-pointer py-2"
                   >
                     Simpan &amp; Tambah Baru
                   </DropdownMenuItem>

@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { DraftEntrySchema, draftJsonSchema, type DraftEntry } from "./schema";
 import { buildDraftPrompt, type PromptAccount } from "./prompt";
+import { STORE_INTERACTIONS } from "./interaction-memory";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"; // never legacy 2.5/2.0/1.5
 const MAX_RETRIES = 2;
@@ -60,7 +61,7 @@ async function callGemini(input: GenerateDraftInput): Promise<DraftEntry> {
       const interaction = await ai.interactions.create({
         model: MODEL,
         input: inputSteps,
-        store: false, // financial data never persists on Google servers
+        store: STORE_INTERACTIONS, // retensi 55 hari (berbayar) / 1 hari (gratis); memungkinkan chaining
         response_format: {
           type: "text",
           mime_type: "application/json",

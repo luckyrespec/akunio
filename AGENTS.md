@@ -8,10 +8,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Neraca — AI Accounting SaaS (Paper & Ink Matte)
+# Akunio — AI Accounting SaaS (Paper & Ink Matte)
 
 ## Stack
-Next 16.3 (App Router, Turbopack) • React 19 • Tailwind 4 + shadcn/ui + lucide + motion 13 + next-themes • Drizzle 0.45 + pg 8 + pgvector 0.3 (text fallback) • @neondatabase/auth (managed Better Auth) • @google/genai 2.18 (`gemini-3.5-flash-lite`, `store:false`) • @aws-sdk/client-s3 (SeaweedFS) • Vitest 4 + Playwright 1.62
+Next 16.3 (App Router, Turbopack) • React 19 • Tailwind 4 + shadcn/ui + lucide + motion 13 + next-themes • Drizzle 0.45 + pg 8 + pgvector 0.3 (text fallback) • @neondatabase/auth (managed Better Auth) • @google/genai 2.18 (`gemini-3.5-flash-lite`, `store:true` + `previous_interaction_id` per thread) • @aws-sdk/client-s3 (SeaweedFS) • Vitest 4 + Playwright 1.62
 
 ## Commands
 ```bash
@@ -39,7 +39,7 @@ Copy `.env.example` → `.env`. Dev `DATABASE_URL`/`APP_DATABASE_URL` point at *
 ## Conventions
 - **Money:** `numeric(18,2)` in DB, `Money` class BigInt minor via `Money.parseIdr`/`formatIdr` (`src/core/money/money.ts`) — never JS `number` for amounts.
 - **Posting:** `validate → post → immutable` — `journal_entries.status` DRAFT→POSTED only, trigger `forbid_posted_mutation` (`triggers.sql`), corrections via `reversal_of_id`, numbers `JE-YYYY-NNNN` year-scoped per org (`journals.repo.ts`: per-period `journal_seq_counters` + `pg_advisory_xact_lock`).
-- **AI:** `@google/genai` Interactions API (`src/server/ai/adapter.ts`, `nara.ts`, `journal-chat.ts`), `store:false`, `response_format` JSON Schema + zod `DraftEntrySchema` (`schema.ts`), retry 2 (`MAX_RETRIES`). Uploads: `image/*`+`application/pdf` ≤5MB (`src/server/storage/config.ts:MAX_DOCUMENT_BYTES`).
+- **AI:** `@google/genai` Interactions API (`src/server/ai/adapter.ts`, `nara.ts`, `journal-chat.ts`, `interaction-memory.ts`), `store:true` + `previous_interaction_id` per thread (`chat_threads.gemini_interaction_id`, fallback ulangi tanpa chaining bila basi), `response_format` JSON Schema + zod `DraftEntrySchema` (`schema.ts`), retry 2 (`MAX_RETRIES`). Aturan prompt anti-lupa: konfirmasi singkat ("ok catatkan ya") WAJIB resolve dari riwayat 12 pesan terakhir, jangan minta ulang detail. Uploads: `image/*`+`application/pdf` ≤5MB (`src/server/storage/config.ts:MAX_DOCUMENT_BYTES`).
 - **Auth:** `@neondatabase/auth/next` client/server (`src/server/auth/*`); local `user` table is read-only identity mirror, sessions never live there.
 - **UI:** Bahasa Indonesia copy, Paper & Ink tokens `src/app/globals.css` (canvas/paper/ink/terra + elevation), Aceternity set `src/components/aceternity` (token-skinned), motion primitives `src/components/motion`, `prefers-reduced-motion` respected. Sidebar persisted `neraca:sidebar-collapsed`, topbar Cmd+K palette (`searchGlobalAction`). Full-bleed fluid layout — no boxed max-width. **Motion MCP (`opencode.jsonc`): search motion docs before writing any animation, import from `motion`/`motion/react`, never `framer-motion`.**
 
@@ -50,4 +50,4 @@ Copy `.env.example` → `.env`. Dev `DATABASE_URL`/`APP_DATABASE_URL` point at *
 - Shell: PowerShell native; `weed:dev` needs `cmd /c`; plain `bash` is WSL — prefer `C:\Program Files\Git\bin\bash.exe -c` or PowerShell. Never `bash` heredoc for file writes.
 
 ## Routes & Entrypoints
-`(app)/dasbor`, `jurnal` (manual + `?tab=draft`), `jurnal/ai` (chat, fn `create_journal_draft`), `jurnal/ai/[id]` (review diff), `buku-besar`, `laporan/*`, `faktur`, `kontak`, `aset`, `rekonsiliasi`, `tutup-buku`, `temuan` (doctor), `pengaturan` (COA archive, periods), `asisten` (RAG chat), `/onboarding` (+ `/daftar /masuk /verifikasi`), `api/nara`, `api/advisor`. RAG: `src/server/db/repos/rag-search.ts` (vector 768 + `tsvector`).
+`(app)/dasbor`, `jurnal` (entri manual), `jurnal/ai` (chat, fn `create_journal_draft`), `jurnal/ai/[id]` (review diff), `buku-besar`, `laporan/*`, `faktur`, `kontak`, `aset`, `rekonsiliasi`, `tutup-buku`, `temuan` (doctor), `pengaturan` (COA archive, periods), `asisten` (RAG chat), `/onboarding` (+ `/daftar /masuk /verifikasi`), `api/nara`, `api/advisor`. RAG: `src/server/db/repos/rag-search.ts` (vector 768 + `tsvector`).

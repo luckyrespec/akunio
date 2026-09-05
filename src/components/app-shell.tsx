@@ -41,11 +41,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const isAsisten = pathname.startsWith("/asisten");
   const isPengaturan = pathname.startsWith("/pengaturan");
+  const isFaktur = pathname.startsWith("/faktur");
+  const fullBleed = isAsisten || isPengaturan || isFaktur;
 
   // Avoid flash of wrong width before localStorage read
   if (!ready) {
     return (
       <div className={cn("flex w-full bg-canvas", isAsisten ? "h-screen overflow-hidden" : "min-h-screen")}>
+        <a
+          href="#konten-utama"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-ink focus:px-3.5 focus:py-2 focus:text-xs focus:font-semibold focus:text-paper"
+        >
+          Lewati ke konten utama
+        </a>
         <SidebarNav
           collapsed={false}
           mobileOpen={mobileMenuOpen}
@@ -57,10 +65,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onOpenMobile={() => setMobileMenuOpen(true)}
           />
           <main
+            id="konten-utama"
             className={
               isAsisten
                 ? "flex-1 w-full min-h-0 overflow-hidden p-0 m-0 max-w-none flex flex-col"
-                : isPengaturan
+                : fullBleed
                 ? "flex-1 w-full min-h-0 p-0 m-0 max-w-none flex flex-col"
                 : "flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-7"
             }
@@ -75,6 +84,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={cn("flex w-full bg-canvas", isAsisten ? "h-screen overflow-hidden" : "min-h-screen")}>
+      <a
+        href="#konten-utama"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-ink focus:px-3.5 focus:py-2 focus:text-xs focus:font-semibold focus:text-paper"
+      >
+        Lewati ke konten utama
+      </a>
       <SidebarNav
         collapsed={collapsed}
         onToggle={toggle}
@@ -87,15 +102,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onOpenMobile={() => setMobileMenuOpen(true)}
         />
         <main
+          id="konten-utama"
           className={
             isAsisten
               ? "flex-1 w-full min-h-0 overflow-hidden p-0 m-0 max-w-none flex flex-col"
-              : isPengaturan
+              : fullBleed
               ? "flex-1 w-full min-h-0 p-0 m-0 max-w-none flex flex-col"
               : "flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-7"
           }
         >
-          <PageTransition className={isAsisten || isPengaturan ? "flex-1 min-h-0 flex flex-col size-full" : undefined} key={pathname}>
+          <PageTransition className={fullBleed ? "flex-1 min-h-0 flex flex-col size-full" : undefined} key={pathname}>
             {children}
           </PageTransition>
         </main>

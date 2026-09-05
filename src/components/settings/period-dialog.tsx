@@ -140,7 +140,7 @@ export function PeriodDialog({ mode, period, trigger }: PeriodDialogProps) {
               className="font-mono text-xs h-9 rounded-xl font-bold"
               required
             />
-            <p className="text-[10px] text-ink-soft">
+            <p className="text-[11px] text-ink-soft">
               Format standar 7 karakter: YYYY-MM (misal: 2026-01 s/d 2026-12, atau 2026-13 untuk penyesuaian akhir tahun).
             </p>
           </div>

@@ -91,7 +91,7 @@ export function ReasoningTrigger({
         <Brain className={cn("size-3.5", isStreaming ? "animate-pulse text-terra" : "text-ink-soft")} />
         <span>{children ?? (isStreaming ? "Sedang menimbang aturan akuntansi..." : "Proses Berpikir (Chain of Thought)")}</span>
         {duration !== undefined && !isStreaming && (
-          <span className="rounded bg-rule/50 px-1.5 py-0.5 text-[10px] font-mono text-ink-soft">
+          <span className="rounded bg-rule/50 px-1.5 py-0.5 text-[11px] font-mono text-ink-soft">
             {duration.toFixed(1)}s
           </span>
         )}

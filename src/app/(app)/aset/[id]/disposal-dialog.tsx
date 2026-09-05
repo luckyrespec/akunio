@@ -116,7 +116,7 @@ export function DisposalDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-base font-serif font-bold text-ink flex items-center gap-2">
+          <DialogTitle className="font-display text-base font-semibold text-ink flex items-center gap-2">
             <AlertTriangle className="size-4 text-rose-600" />
             Pelepasan / Penjualan Aset Tetap
           </DialogTitle>

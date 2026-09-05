@@ -136,10 +136,10 @@ export function LedgerDetailDialog({
                     <span className="font-mono text-sm font-semibold text-terra">
                       {account?.code || "..."}
                     </span>
-                    <Badge variant="outline" className="text-[10px] py-0 px-2 uppercase font-medium bg-canvas">
+                    <Badge variant="outline" className="text-[11px] py-0 px-2 uppercase font-medium bg-canvas">
                       {account?.type || "Akun"}
                     </Badge>
-                    <Badge variant="outline" className="text-[10px] py-0 px-2 bg-canvas/70 text-ink-soft">
+                    <Badge variant="outline" className="text-[11px] py-0 px-2 bg-canvas/70 text-ink-soft">
                       Normal: {isDebitNormal ? "Debit (D)" : "Kredit (K)"}
                     </Badge>
                   </div>
@@ -157,19 +157,19 @@ export function LedgerDetailDialog({
           {/* Quick Stat Highlights */}
           <div className="mt-4 grid grid-cols-3 gap-3">
             <div className="rounded-xl border border-rule bg-paper p-2.5 shadow-2xs">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">Total Debit</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Total Debit</span>
               <p className="mt-0.5 font-mono text-xs sm:text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                 {Money.fromMinor(totalDebitMinor).formatIdr()}
               </p>
             </div>
             <div className="rounded-xl border border-rule bg-paper p-2.5 shadow-2xs">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">Total Kredit</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Total Kredit</span>
               <p className="mt-0.5 font-mono text-xs sm:text-sm font-semibold text-terra">
                 {Money.fromMinor(totalCreditMinor).formatIdr()}
               </p>
             </div>
             <div className="rounded-xl border border-rule bg-paper p-2.5 shadow-2xs">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">Saldo Akhir</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Saldo Akhir</span>
               <p className="mt-0.5 font-mono text-xs sm:text-sm font-bold text-ink">
                 {Money.fromMinor(closingBigInt).formatIdr()}
               </p>
@@ -250,7 +250,7 @@ export function LedgerDetailDialog({
                           )}
                         </div>
                         <div className="text-right">
-                          <span className="text-[10px] text-ink-soft uppercase mr-1">Saldo:</span>
+                          <span className="text-[11px] text-ink-soft uppercase mr-1">Saldo:</span>
                           <span className="font-bold text-ink">{Money.fromMinor(bMinor).formatIdr()}</span>
                         </div>
                       </div>
@@ -316,7 +316,7 @@ export function LedgerDetailDialog({
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-rule bg-canvas/70 font-semibold">
-                      <td colSpan={3} className="px-3.5 py-3 text-right uppercase text-[10px] tracking-wider text-ink-soft">
+                      <td colSpan={3} className="px-3.5 py-3 text-right uppercase text-[11px] tracking-wider text-ink-soft">
                         Saldo Akhir
                       </td>
                       <td className="px-3.5 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">

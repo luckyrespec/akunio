@@ -12,6 +12,7 @@ import {
   StatementShell,
   ReportRowView,
   ReportSectionHeader,
+  ReportEmptyState,
 } from "@/components/statement-parts";
 
 export default async function NeracaPage({
@@ -65,7 +66,7 @@ export default async function NeracaPage({
             Aset Lancar
           </p>
           {bs.currentAssetRows.length === 0 ? (
-            <p className="pl-6 text-xs italic text-ink-soft/70">Tidak ada saldo aset lancar tercatat.</p>
+            <ReportEmptyState message="Tidak ada saldo aset lancar tercatat." actionHref="/jurnal/baru" actionLabel="Catat Saldo Awal" />
           ) : (
             bs.currentAssetRows.map((r) => (
               <ReportRowView
@@ -92,7 +93,7 @@ export default async function NeracaPage({
             Aset Tidak Lancar (Aset Tetap)
           </p>
           {bs.fixedAssetRows.length === 0 ? (
-            <p className="pl-6 text-xs italic text-ink-soft/70">Tidak ada saldo aset tidak lancar tercatat.</p>
+            <ReportEmptyState message="Tidak ada saldo aset tidak lancar (aset tetap) tercatat." actionHref="/aset/baru" actionLabel="Tambah Aset" />
           ) : (
             bs.fixedAssetRows.map((r) => (
               <ReportRowView
@@ -135,7 +136,7 @@ export default async function NeracaPage({
             Liabilitas Jangka Pendek
           </p>
           {bs.shortTermLiabilityRows.length === 0 ? (
-            <p className="pl-6 text-xs italic text-ink-soft/70">Tidak ada saldo liabilitas jangka pendek tercatat.</p>
+            <ReportEmptyState message="Tidak ada saldo liabilitas jangka pendek (utang usaha) tercatat." actionHref="/jurnal/baru" actionLabel="Catat Liabilitas" />
           ) : (
             bs.shortTermLiabilityRows.map((r) => (
               <ReportRowView

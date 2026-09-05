@@ -4,7 +4,7 @@ import { db } from "@/server/db";
 import { createThread, getThread, listMessages } from "@/server/db/repos/chat.repo";
 import { askNara } from "@/server/ai/nara";
 
-// Compatibility alias — /api/advisor/* delegates to Nara (unified assistant)
+// Compatibility alias — /api/advisor/* delegates to Akunio (unified assistant)
 // Keep for old widget/bookmarks; new clients should use /api/nara/*
 export async function GET(req: NextRequest) {
   const ctx = await requireContext();

@@ -140,7 +140,7 @@ export async function generatePersonalSuggestions(
   const signals = await collectSignals(orgId);
   const exclude = opts?.excludeLabels?.length ? `Jangan ulang label: ${opts.excludeLabels.join(", ")}.` : "";
 
-  const prompt = `Anda adalah modul asisten akuntansi cerdas untuk UMKM Indonesia di aplikasi pembukuan Neraca.
+  const prompt = `Anda adalah modul asisten akuntansi cerdas untuk UMKM Indonesia di aplikasi pembukuan Akunio.
 
 Tugas: Buat 8 saran tombol aksi cepat yang DIPERSONALISASI dari data transaksi pembukuan organisasi.
 

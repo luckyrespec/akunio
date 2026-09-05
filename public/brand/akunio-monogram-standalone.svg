@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Akunio Monogram">
+  <!-- Monogram Transparan untuk Penggunaan di Atas Background Apapun -->
+  <g>
+    <!-- Kaki Kiri & Kanan Huruf A (Debit & Kredit) -->
+    <path d="M32 12 L16 52" stroke="#b66035" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M32 12 L48 52" stroke="#b66035" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Mistar Ganda Pembukuan (Double-Rule Ledger) -->
+    <path d="M22.5 35 H41.5" stroke="#b66035" stroke-width="3.6" stroke-linecap="round"/>
+    <path d="M20.5 41.5 H43.5" stroke="#b66035" stroke-width="3.6" stroke-linecap="round"/>
+
+    <!-- Puncak Akurasi AI (Diamond Node) -->
+    <circle cx="32" cy="12" r="3.2" fill="#914522"/>
+  </g>
+</svg>

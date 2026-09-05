@@ -86,7 +86,7 @@ export function AsistenLibraryView({
               <SidebarOpen className="size-4" />
             </Button>
           )}
-          <h1 className="font-display text-lg md:text-xl font-bold text-ink">Pustaka</h1>
+          <h1 className="font-display text-lg md:text-xl font-bold tracking-tight text-ink">Pustaka</h1>
         </div>
 
         <div className="flex items-center gap-3">
@@ -308,14 +308,14 @@ export function AsistenLibraryView({
                         <FileSpreadsheet className="size-4 text-emerald-600" />
                       )}
                     </div>
-                    <span className="text-[10px] text-ink-soft">{dateFormatted}</span>
+                    <span className="text-[11px] text-ink-soft">{dateFormatted}</span>
                   </div>
 
                   <div className="mt-3 min-w-0">
                     <p className="text-xs font-semibold text-ink truncate" title={file.fileName}>
                       {file.fileName}
                     </p>
-                    <p className="text-[10px] text-ink-soft mt-0.5">{sizeFormatted}</p>
+                    <p className="text-[11px] text-ink-soft mt-0.5">{sizeFormatted}</p>
                   </div>
 
                   <div className="mt-3 pt-2.5 border-t border-rule/50 flex justify-end">
@@ -323,7 +323,7 @@ export function AsistenLibraryView({
                       variant="ghost"
                       size="sm"
                       onClick={() => onAskFileInChat(file)}
-                      className="h-6 text-[10px] text-terra hover:text-terra hover:bg-canvas px-2"
+                      className="h-6 text-[11px] text-terra hover:text-terra hover:bg-canvas px-2"
                     >
                       Chat
                     </Button>

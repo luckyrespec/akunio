@@ -88,7 +88,7 @@ export function JournalChatClient({
       <div className="border-b border-rule px-4 py-2.5">
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium uppercase tracking-widest text-ink-soft">Chat Copilot Jurnal</p>
-          <Badge variant="outline" className="text-[10px]">
+          <Badge variant="outline" className="text-[11px]">
             {quotaUsed}/{quotaLimit} draft bulan ini
           </Badge>
         </div>

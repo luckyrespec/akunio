@@ -8,26 +8,32 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 
-export function ReverseButton({ entryId }: { entryId: string }) {
+export function ReverseDialog({
+  entryId,
+  entryNumber,
+  open,
+  onOpenChange,
+}: {
+  entryId: string;
+  entryNumber?: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateISO, setDateISO] = useState(() => todayISO());
   const [pending, startTransition] = useTransition();
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-ink-soft hover:text-credit">
-          Balikan
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm bg-paper border-rule">
         <DialogHeader>
-          <DialogTitle className="font-display">Buat Jurnal Balikan</DialogTitle>
+          <DialogTitle className="font-display">
+            Buat Jurnal Balikan{entryNumber ? ` ${entryNumber}` : ""}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <Label htmlFor={`rev-date-${entryId}`}>Tanggal balikan</Label>
@@ -36,12 +42,15 @@ export function ReverseButton({ entryId }: { entryId: string }) {
           {error && <p className="text-sm text-credit">{error}</p>}
         </div>
         <DialogFooter>
+          <Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>
+            Batal
+          </Button>
           <Button disabled={pending}
                   onClick={() =>
                     startTransition(async () => {
                       const res = await reverseEntryAction(entryId, dateISO);
                       if (!res.ok) { setError(res.error ?? "Gagal."); return; }
-                      setOpen(false);
+                      onOpenChange(false);
                       router.refresh();
                     })
                   }
@@ -51,5 +60,18 @@ export function ReverseButton({ entryId }: { entryId: string }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function ReverseButton({ entryId }: { entryId: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Button variant="ghost" size="sm" className="text-ink-soft hover:text-credit" onClick={() => setOpen(true)}>
+        Balikan
+      </Button>
+      <ReverseDialog entryId={entryId} open={open} onOpenChange={setOpen} />
+    </>
   );
 }

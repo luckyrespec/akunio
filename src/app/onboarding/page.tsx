@@ -19,6 +19,7 @@ export default async function OnboardingPage() {
       initialStep={view.profile?.currentStep ?? "NAMA"}
       initialPreview={view.coaPreview}
       initialChips={view.chips}
+      initialBusinessName={view.profile?.businessName ?? null}
     />
   );
 }

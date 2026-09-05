@@ -63,4 +63,21 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("Nara Accounting Tools Execut
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/seimbang|balance|VALIDASI_GAGAL/i);
   });
+
+  it("accepts create_journal_draft with '0' empty sides (model output variance)", async () => {
+    const { executeNaraTool } = await import("@/server/ai/nara-tools");
+    // Bentuk args persis seperti yang dikirim model di screenshot error SETIAP_BARIS_SATU_SISI
+    const res = await executeNaraTool(orgId, actorEmail, "create_journal_draft", {
+      memo: "Pencatatan aset laptop dari modal disetor",
+      dateISO: "2022-07-01",
+      explanation: "Pencatatan aset tetap laptop senilai Rp10.000.000",
+      overallConfidence: 0.9,
+      lines: [
+        { accountCode: "1500", debitText: "10000000", creditText: "0", confidence: 0.9, reason: "Penambahan aset tetap" },
+        { accountCode: "3100", debitText: "0", creditText: "10000000", confidence: 0.9, reason: "Setoran modal pemilik" },
+      ],
+    });
+    expect(res.success).toBe(true);
+    expect((res.data as { draftId?: string }).draftId).toBeDefined();
+  });
 });

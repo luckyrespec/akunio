@@ -68,7 +68,7 @@ export function RunDepreciationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-base font-serif font-bold text-ink flex items-center gap-2">
+          <DialogTitle className="font-display text-base font-semibold text-ink flex items-center gap-2">
             <Play className="size-4 text-terra" />
             Posting Penyusutan Bulanan
           </DialogTitle>

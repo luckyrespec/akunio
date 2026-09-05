@@ -84,7 +84,7 @@ export function AttachmentItem({
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-90" />
             <div className="absolute bottom-2 left-2.5 right-2.5 text-white">
               <p className="truncate text-xs font-semibold leading-tight">{attachment.fileName}</p>
-              {sizeFormatted && <p className="text-[10px] text-white/80">{sizeFormatted}</p>}
+              {sizeFormatted && <p className="text-[11px] text-white/80">{sizeFormatted}</p>}
             </div>
           </div>
         ) : (
@@ -103,15 +103,15 @@ export function AttachmentItem({
                 <p className="truncate text-xs font-semibold text-ink" title={attachment.fileName}>
                   {attachment.fileName}
                 </p>
-                <p className="text-[10px] text-ink-soft mt-0.5">{sizeFormatted || (isPdf ? "Dokumen PDF" : "Berkas")}</p>
+                <p className="text-[11px] text-ink-soft mt-0.5">{sizeFormatted || (isPdf ? "Dokumen PDF" : "Berkas")}</p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] text-ink-soft pt-2 border-t border-rule/50">
+            <div className="flex items-center justify-between text-[11px] text-ink-soft pt-2 border-t border-rule/50">
               <span className="uppercase font-mono tracking-wider font-semibold text-terra">
                 {attachment.fileName.split(".").pop() || "FILE"}
               </span>
-              <span className="text-[10px] text-emerald-600 font-medium">Terlampir</span>
+              <span className="text-[11px] text-emerald-600 font-medium">Terlampir</span>
             </div>
           </div>
         )}
@@ -154,7 +154,7 @@ export function AttachmentItem({
 
       <div className="flex max-w-[150px] flex-col overflow-hidden">
         <span className="truncate font-medium text-ink text-[11px] leading-tight">{attachment.fileName}</span>
-        {sizeFormatted && <span className="text-[9px] text-ink-soft leading-none mt-0.5">{sizeFormatted}</span>}
+        {sizeFormatted && <span className="text-[11px] text-ink-soft leading-none mt-0.5">{sizeFormatted}</span>}
       </div>
 
       {onRemove && (

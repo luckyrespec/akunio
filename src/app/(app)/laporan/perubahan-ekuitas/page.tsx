@@ -5,11 +5,12 @@ import { accounts, organizations } from "@/server/db/schema/org";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { listPeriods } from "@/server/db/repos/periods.repo";
 import { getProfile } from "@/server/db/repos/onboarding.repo";
-import { postedLinesBetween, loadPeriodOrDefault } from "@/server/reports/build";
+import { postedLinesBetween, postedLinesThrough, loadPeriodOrDefault } from "@/server/reports/build";
 import { aggregateFromLines } from "@/core/reports/aggregates";
 import {
-  changesInEquity, incomeStatement, movementByCode,
+  changesInEquity, incomeStatement, movementByPrefix,
 } from "@/core/reports/statements";
+import { buildSakEmkmIncomeStatement } from "@/core/reports/sak-emkm";
 import {
   StatementShell,
   ReportRowView,
@@ -32,23 +33,42 @@ export default async function PerubahanEkuitasPage({
     const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
     const period = await loadPeriodOrDefault(tx, ctx.orgId, sp.period);
     const options = await listPeriods(tx, ctx.orgId);
-    const lines = await postedLinesBetween(tx, ctx.orgId, period.startsOn, period.endsOn);
-    return { org, profile, accRows, period, options, lines };
+
+    // Tanggal sebelum periode mulai untuk menghitung saldo awal ekuitas
+    const prevDate = new Date(new Date(period.startsOn).getTime() - 86400000).toISOString().slice(0, 10);
+    const [priorLines, periodLines] = await Promise.all([
+      postedLinesThrough(tx, ctx.orgId, prevDate),
+      postedLinesBetween(tx, ctx.orgId, period.startsOn, period.endsOn),
+    ]);
+
+    return { org, profile, accRows, period, options, priorLines, periodLines };
   });
 
   const entityName =
     data.profile?.businessName || data.org?.name || "Entitas Usaha Akunio";
 
   const metas = reportMetaMap(data.accRows);
-  const periodAggs = aggregateFromLines(data.lines, metas);
+  
+  // Saldo awal ekuitas sebelum periode berjalan
+  const priorAggs = aggregateFromLines(data.priorLines, metas);
+  const priorIS = buildSakEmkmIncomeStatement(priorAggs);
+  const priorContributions = movementByPrefix(priorAggs, "31");
+  const priorDrawings = movementByPrefix(priorAggs, "33");
+  const priorRetained = movementByPrefix(priorAggs, "32");
+  const openingEquityMinor = priorContributions - priorDrawings + priorRetained + priorIS.netIncomeMinor;
+
+  // Mutasi ekuitas selama periode berjalan
+  const periodAggs = aggregateFromLines(data.periodLines, metas);
   const is = incomeStatement(periodAggs);
 
   const cie = changesInEquity({
     openingRetainedEarningsMinor: 0n,
-    contributionsMinor: movementByCode(periodAggs, "3100"),
-    drawingsMinor: movementByCode(periodAggs, "3300"),
+    contributionsMinor: movementByPrefix(periodAggs, "31"),
+    drawingsMinor: movementByPrefix(periodAggs, "33"),
     netIncomeMinor: is.netIncomeMinor,
   });
+
+  const endingEquityMinor = openingEquityMinor + cie.rows.reduce((s, r) => s + r.movementMinor, 0n);
 
   return (
     <StatementShell
@@ -64,8 +84,8 @@ export default async function PerubahanEkuitasPage({
           <ReportSectionHeader title="REKONSILIASI EKUITAS PEMILIK" />
           <ReportRowView
             indent={1}
-            label="Saldo Saldo Laba / Ekuitas Awal Periode"
-            minor={0n}
+            label="Saldo Ekuitas Awal Periode"
+            minor={openingEquityMinor}
           />
           {cie.rows.map((r) => (
             <ReportRowView
@@ -80,7 +100,7 @@ export default async function PerubahanEkuitasPage({
               bold
               isGrandTotal
               label="SALDO EKUITAS AKHIR PERIODE"
-              minor={cie.closingRetainedEarningsMinor + cie.rows.reduce((s, r) => r.label === "Modal Disetor" ? s + r.movementMinor : s, 0n)}
+              minor={endingEquityMinor}
               variant="grand-total"
             />
           </div>

@@ -196,8 +196,8 @@ export const reportsHandlers: Record<string, ToolHandler> = {
         await setPeriodStatus(tx, orgId, existing.id, "OPEN");
         await appendAudit(tx, {
           orgId,
-          actor: "nara",
-          action: "NARA_OPEN_PERIOD",
+          actor: "akunio",
+          action: "AKUNIO_OPEN_PERIOD",
           subjectType: "fiscal_period",
           subjectId: existing.id,
           data: { name },
@@ -217,8 +217,8 @@ export const reportsHandlers: Record<string, ToolHandler> = {
         }).returning();
         await appendAudit(tx, {
           orgId,
-          actor: "nara",
-          action: "NARA_CREATE_PERIOD",
+          actor: "akunio",
+          action: "AKUNIO_CREATE_PERIOD",
           subjectType: "fiscal_period",
           subjectId: p.id,
           data: { name, startsOn, endsOn },
@@ -239,8 +239,8 @@ export const reportsHandlers: Record<string, ToolHandler> = {
       await setPeriodStatus(tx, orgId, existing.id, "CLOSED");
       await appendAudit(tx, {
         orgId,
-        actor: "nara",
-        action: "NARA_CLOSE_PERIOD",
+        actor: "akunio",
+        action: "AKUNIO_CLOSE_PERIOD",
         subjectType: "fiscal_period",
         subjectId: existing.id,
         data: { name },

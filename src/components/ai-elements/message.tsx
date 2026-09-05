@@ -163,7 +163,7 @@ function renderInlineMarkdown(text: string): React.ReactNode {
       parts.push(
         <code
           key={partKey++}
-          className="rounded bg-canvas px-1.5 py-0.5 font-mono text-[12px] text-terra border border-rule/70"
+          className="rounded bg-canvas px-1.5 py-0.5 font-mono text-xs text-terra border border-rule/70"
         >
           {codeMatch[1]}
         </code>

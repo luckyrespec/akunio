@@ -6,8 +6,14 @@ import { accounts } from "@/server/db/schema/org";
 import { InvoiceDashboard } from "@/components/invoicing/invoice-dashboard";
 import { eq, and } from "drizzle-orm";
 
-export default async function FakturPage() {
+export default async function FakturPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const ctx = await requireContext();
+  const sp = await searchParams;
+  const tab = sp.tab === "utang" ? "UTANG" : sp.tab === "aging" ? "AGING" : "PIUTANG";
 
   const [invoices, contacts, cashAccounts, aging] = await Promise.all([
     listInvoicesRepo(db, ctx.orgId),
@@ -22,6 +28,7 @@ export default async function FakturPage() {
   return (
     <div className="space-y-6">
       <InvoiceDashboard
+        initialTab={tab}
         invoices={invoices}
         contacts={contacts}
         accounts={cashAccounts}

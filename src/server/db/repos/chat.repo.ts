@@ -36,7 +36,7 @@ export async function updateThread(
   q: Queryable,
   orgId: string,
   threadId: string,
-  patch: { title?: string; modelPreset?: string; pinned?: boolean },
+  patch: { title?: string; modelPreset?: string; pinned?: boolean; geminiInteractionId?: string | null },
 ): Promise<ChatThread | null> {
   const values: Partial<typeof chatThreads.$inferInsert> = {
     updatedAt: new Date(),
@@ -44,6 +44,7 @@ export async function updateThread(
   if (patch.title !== undefined) values.title = patch.title;
   if (patch.modelPreset !== undefined) values.modelPreset = patch.modelPreset;
   if (patch.pinned !== undefined) values.pinned = patch.pinned;
+  if (patch.geminiInteractionId !== undefined) values.geminiInteractionId = patch.geminiInteractionId;
 
   const [row] = await q
     .update(chatThreads)

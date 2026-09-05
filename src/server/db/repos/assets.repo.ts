@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { Queryable } from "./queryable";
 import {
   fixedAssets,
@@ -110,6 +110,50 @@ export async function listFixedAssets(q: Queryable, orgId: string) {
     .from(fixedAssets)
     .where(eq(fixedAssets.orgId, orgId))
     .orderBy(desc(fixedAssets.createdAt));
+}
+
+export interface AssetSearchHit {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+  acquisitionCostMinor: bigint;
+}
+
+/** Cari aset berdasar nama/kode/keterangan, plus nominal harga perolehan bila ada. */
+export async function searchAssets(
+  q: Queryable,
+  orgId: string,
+  term: string,
+  amountMinor: bigint | null,
+  limit = 5,
+): Promise<AssetSearchHit[]> {
+  const like = `%${term}%`;
+  const textMatch = or(
+    ilike(fixedAssets.name, like),
+    ilike(fixedAssets.code, like),
+    ilike(fixedAssets.notes, like),
+  );
+  const rows = await q
+    .select({
+      id: fixedAssets.id,
+      code: fixedAssets.code,
+      name: fixedAssets.name,
+      status: fixedAssets.status,
+      acquisitionCostMinor: fixedAssets.acquisitionCostMinor,
+    })
+    .from(fixedAssets)
+    .where(
+      and(
+        eq(fixedAssets.orgId, orgId),
+        amountMinor !== null
+          ? or(textMatch, eq(fixedAssets.acquisitionCostMinor, amountMinor))
+          : textMatch,
+      ),
+    )
+    .orderBy(desc(fixedAssets.createdAt))
+    .limit(limit);
+  return rows;
 }
 
 export async function getFixedAssetDetail(

@@ -119,96 +119,80 @@ export default async function LaporanIndex() {
 
   return (
     <section className="space-y-8">
-      {/* Page Header Editorial */}
+      {/* Page Header Ringkas & Bersih dengan Info Entitas & Kepatuhan Terintegrasi */}
       <PageHeader
-        title="Laporan Keuangan"
-        eyebrow="Paket pelaporan resmi standar SAK EMKM (Entitas Mikro, Kecil, dan Menengah) · Siap audit, lampiran pajak, &amp; ekspor PDF formal."
+        title="Pusat Laporan Keuangan"
+        eyebrow={`Paket pelaporan resmi standar SAK EMKM ${year} · Siap audit, lampiran pajak, & ekspor PDF/Excel formal.`}
         actions={
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/30 dark:border-emerald-800/40 dark:text-emerald-300">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-xl border border-rule bg-paper px-3 py-1.5 text-xs font-semibold text-ink shadow-2xs">
+              <Building2 className="size-3.5 text-terra" />
+              <span>{entityName}</span>
+            </div>
+
+            <div className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50/90 px-3 py-1.5 text-xs font-semibold text-emerald-900 shadow-2xs dark:bg-emerald-950/40 dark:border-emerald-700/50 dark:text-emerald-200">
               <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>Standar SAK EMKM IAI</span>
+              <span>SAK EMKM IAI</span>
             </div>
           </div>
         }
       />
 
-      {/* Info Banner Entitas & Kepatuhan */}
-      <Reveal>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-rule bg-canvas/60 p-4 sm:p-5 shadow-2xs">
-          <div className="flex items-center gap-3.5">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-paper text-terra border border-rule shadow-2xs shrink-0">
-              <Building2 className="size-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-ink-soft">Entitas Pembukuan Aktif:</p>
-              <h2 className="font-display text-base font-bold text-ink">{entityName}</h2>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs text-ink-soft">
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="size-4 text-emerald-600" />
-              <span>Double-Entry Terverifikasi</span>
-            </div>
-            <div className="h-4 w-px bg-rule" />
-            <span>Mata Uang: <strong>IDR (Rp)</strong></span>
-          </div>
-        </div>
-      </Reveal>
-
       {/* 1. KELOMPOK LAPORAN UTAMA SAK EMKM */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-rule/60 pb-2">
+      <div className="space-y-5">
+        <div className="flex items-end justify-between border-b-2 border-ink/80 pb-3">
           <div>
-            <h2 className="font-display text-sm sm:text-base font-bold text-ink uppercase tracking-tight">
-              Laporan Pokok SAK EMKM
-            </h2>
-            <p className="text-xs text-ink-soft">
-              Tiga komponen laporan wajib bagi UMKM menurut ketentuan Ikatan Akuntan Indonesia.
+            <div className="flex items-center gap-2">
+              <span className="inline-block size-2 rounded-full bg-terra" />
+              <h2 className="font-display text-base sm:text-lg font-bold text-ink uppercase tracking-tight">
+                Laporan Pokok SAK EMKM
+              </h2>
+            </div>
+            <p className="text-xs font-medium text-ink-soft mt-0.5">
+              Tiga komponen laporan wajib bagi UMKM menurut Bab 3, 4, dan 14 Standar Akuntansi Keuangan IAI.
             </p>
           </div>
-          <span className="text-[11px] font-semibold text-terra uppercase tracking-wider hidden sm:inline-block">
-            Komponen Wajib
+          <span className="text-[11px] font-bold text-terra uppercase tracking-wider hidden sm:inline-block px-2.5 py-1 rounded-md bg-terra/10">
+            Wajib SAK EMKM
           </span>
         </div>
 
-        <Stagger className="grid grid-cols-1 gap-5 md:grid-cols-3" staggerDelay={0.08}>
+        <Stagger className="grid grid-cols-1 gap-6 md:grid-cols-3" staggerDelay={0.08}>
           {PRIMARY_REPORTS.map((r) => {
             const Icon = r.icon;
             return (
               <StaggerItem key={r.href}>
                 <Link
                   href={r.href}
-                  className="group flex flex-col justify-between h-full rounded-2xl border border-rule bg-paper p-6 shadow-xs transition-all duration-200 hover:border-terra/50 hover:shadow-md hover:-translate-y-0.5"
+                  className="group flex flex-col justify-between h-full rounded-2xl border-2 border-rule bg-paper p-6 shadow-xs transition-all duration-200 hover:border-terra hover:shadow-md hover:-translate-y-1"
                 >
                   <div>
                     <div className="flex items-start justify-between">
-                      <div className="flex size-11 items-center justify-center rounded-xl bg-canvas text-terra border border-rule/70 group-hover:bg-terra group-hover:text-white transition-colors shadow-2xs">
-                        <Icon className="size-5" />
+                      <div className="flex size-12 items-center justify-center rounded-xl bg-canvas text-terra border border-rule group-hover:bg-terra group-hover:text-white transition-all shadow-2xs">
+                        <Icon className="size-6" />
                       </div>
-                      <span className="rounded-full bg-terra/10 px-2.5 py-0.5 text-[10px] font-semibold text-terra">
+                      <span className="rounded-md border border-terra/20 bg-terra/10 px-2.5 py-1 text-[11px] font-bold text-terra uppercase tracking-wider">
                         {r.badge}
                       </span>
                     </div>
 
-                    <div className="mt-5">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-display text-base font-bold text-ink group-hover:text-terra transition-colors">
+                    <div className="mt-6">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="font-display text-lg font-bold text-ink group-hover:text-terra transition-colors leading-snug">
                           {r.label}
                         </h3>
-                        <ArrowUpRight className="size-4 text-ink-soft group-hover:text-terra transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                        <ArrowUpRight className="size-4.5 text-ink-soft group-hover:text-terra transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 shrink-0" />
                       </div>
 
-                      <p className="mt-2 text-xs text-ink-soft leading-relaxed">
+                      <p className="mt-2.5 text-xs text-ink-soft leading-relaxed">
                         {r.note}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-rule/60">
-                    <p className="text-[11px] font-medium text-ink-soft">{r.figureLabel}</p>
-                    <p className="tnum mt-0.5 truncate font-display text-xl font-bold tracking-tight text-ink">
+                  <div className="mt-6 pt-5 border-t border-rule/80">
+                    <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wider">{r.figureLabel}</p>
+                    <p className="tnum mt-1 truncate font-display text-2xl font-bold tracking-tight text-ink group-hover:text-terra transition-colors">
                       {r.figure || "—"}
                     </p>
                   </div>
@@ -220,48 +204,54 @@ export default async function LaporanIndex() {
       </div>
 
       {/* 2. KELOMPOK LAPORAN PELENGKAP / ANALITIK */}
-      <div className="space-y-4 pt-4">
-        <div className="flex items-center justify-between border-b border-rule/60 pb-2">
+      <div className="space-y-5 pt-4">
+        <div className="flex items-end justify-between border-b-2 border-ink/40 pb-3">
           <div>
-            <h2 className="font-display text-sm sm:text-base font-bold text-ink uppercase tracking-tight">
-              Laporan Pelengkap &amp; Analitik Kas
-            </h2>
-            <p className="text-xs text-ink-soft">
-              Laporan pelengkap komprehensif untuk pengawasan likuiditas dan struktur modal usaha.
+            <div className="flex items-center gap-2">
+              <span className="inline-block size-2 rounded-full bg-ink" />
+              <h2 className="font-display text-base sm:text-lg font-bold text-ink uppercase tracking-tight">
+                Laporan Pelengkap &amp; Analitik
+              </h2>
+            </div>
+            <p className="text-xs font-medium text-ink-soft mt-0.5">
+              Laporan pelengkap komprehensif untuk pengawasan likuiditas kas dan struktur ekuitas pemilik.
             </p>
           </div>
+          <span className="text-[11px] font-semibold text-ink-soft uppercase tracking-wider hidden sm:inline-block">
+            Pelengkap Manajemen
+          </span>
         </div>
 
-        <Stagger className="grid grid-cols-1 gap-5 sm:grid-cols-2" staggerDelay={0.08}>
+        <Stagger className="grid grid-cols-1 gap-6 sm:grid-cols-2" staggerDelay={0.08}>
           {SECONDARY_REPORTS.map((r) => {
             const Icon = r.icon;
             return (
               <StaggerItem key={r.href}>
                 <Link
                   href={r.href}
-                  className="group flex flex-col justify-between h-full rounded-2xl border border-rule bg-paper p-6 shadow-xs transition-all duration-200 hover:border-terra/50 hover:shadow-md hover:-translate-y-0.5"
+                  className="group flex flex-col justify-between h-full rounded-2xl border-2 border-rule bg-paper p-6 shadow-xs transition-all duration-200 hover:border-ink hover:shadow-md hover:-translate-y-1"
                 >
                   <div>
                     <div className="flex items-start justify-between">
-                      <div className="flex size-10 items-center justify-center rounded-xl bg-canvas text-ink group-hover:bg-ink group-hover:text-white transition-colors border border-rule/70 shadow-2xs">
+                      <div className="flex size-11 items-center justify-center rounded-xl bg-canvas text-ink group-hover:bg-ink group-hover:text-paper transition-all border border-rule shadow-2xs">
                         <Icon className="size-5" />
                       </div>
-                      <ArrowUpRight className="size-4 text-ink-soft group-hover:text-terra transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                      <ArrowUpRight className="size-4.5 text-ink-soft group-hover:text-ink transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                     </div>
 
-                    <div className="mt-4">
-                      <h3 className="font-display text-base font-bold text-ink group-hover:text-terra transition-colors">
+                    <div className="mt-5">
+                      <h3 className="font-display text-lg font-bold text-ink group-hover:text-terra transition-colors leading-snug">
                         {r.label}
                       </h3>
-                      <p className="mt-1.5 text-xs text-ink-soft leading-relaxed">
+                      <p className="mt-2 text-xs text-ink-soft leading-relaxed">
                         {r.note}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-rule/60">
-                    <p className="text-[11px] font-medium text-ink-soft">{r.figureLabel}</p>
-                    <p className="tnum mt-0.5 truncate font-display text-xl font-bold tracking-tight text-ink">
+                  <div className="mt-6 pt-5 border-t border-rule/80">
+                    <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wider">{r.figureLabel}</p>
+                    <p className="tnum mt-1 truncate font-display text-2xl font-bold tracking-tight text-ink">
                       {r.figure || "—"}
                     </p>
                   </div>

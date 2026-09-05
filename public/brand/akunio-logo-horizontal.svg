@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" fill="none" role="img" aria-label="Akunio Logo Horizontal">
+  <defs>
+    <linearGradient id="h-terra-gradient" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#b66035"/>
+      <stop offset="100%" stop-color="#914522"/>
+    </linearGradient>
+    <linearGradient id="h-stroke-grad" x1="12" y1="10" x2="36" y2="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fdf9f2"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Mark Icon -->
+  <g transform="translate(2, 2)">
+    <rect x="1" y="1" width="42" height="42" rx="12" fill="url(#h-terra-gradient)"/>
+    <rect x="1.5" y="1.5" width="41" height="41" rx="11.5" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+    <g>
+      <path d="M22 9.5 L11 34.5" stroke="url(#h-stroke-grad)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M22 9.5 L33 34.5" stroke="url(#h-stroke-grad)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M15.5 24 H28.5" stroke="url(#h-stroke-grad)" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M14 28 H30" stroke="url(#h-stroke-grad)" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="22" cy="9.5" r="2" fill="#ffffff"/>
+    </g>
+  </g>
+
+  <!-- Wordmark Text -->
+  <text x="56" y="32" font-family="'Fraunces', Georgia, serif" font-size="27" font-weight="700" fill="#232a33" letter-spacing="-0.03em">
+    Akunio
+  </text>
+  <!-- Subtle Tagline/Pill -->
+  <rect x="156" y="18" width="24" height="15" rx="5" fill="#a8562f" fill-opacity="0.12"/>
+  <text x="162" y="29.5" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="9" font-weight="700" fill="#a8562f" letter-spacing="0.05em">
+    AI
+  </text>
+</svg>
