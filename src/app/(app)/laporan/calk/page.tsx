@@ -8,6 +8,8 @@ import { getProfile } from "@/server/db/repos/onboarding.repo";
 import { postedLinesThrough, loadPeriodOrDefault } from "@/server/reports/build";
 import { aggregateFromLines } from "@/core/reports/aggregates";
 import { buildSakEmkmBalanceSheet, buildSakEmkmIncomeStatement } from "@/core/reports/sak-emkm";
+import { generateCalkNarrative } from "@/server/reports/calk-ai";
+import { getTaxSettings, getTaxSummariesByYear, type TaxSummaryView } from "@/server/db/repos/tax.repo";
 import { BUSINESS_TYPE_LABELS, type BusinessType } from "@/core/accounts/business-types";
 import { Money } from "@/core/money/money";
 import {
@@ -15,6 +17,7 @@ import {
   ReportRowView,
   ReportSectionHeader,
 } from "@/components/statement-parts";
+import { CalkActions } from "@/components/calk/calk-actions";
 
 export default async function CalkPage({
   searchParams,
@@ -35,7 +38,13 @@ export default async function CalkPage({
     const period = await loadPeriodOrDefault(tx, ctx.orgId, sp.period);
     const options = await listPeriods(tx, ctx.orgId);
     const lines = await postedLinesThrough(tx, ctx.orgId, period.endsOn);
-    return { org, profile, accRows, period, options, lines };
+    const narrative = await generateCalkNarrative(tx, ctx.orgId, period.endsOn);
+
+    const year = parseInt(period.endsOn.slice(0, 4), 10);
+    const taxSettings = await getTaxSettings(tx, ctx.orgId);
+    const taxSummaries = await getTaxSummariesByYear(tx, ctx.orgId, year);
+
+    return { org, profile, accRows, period, options, lines, narrative, taxSettings, taxSummaries };
   });
 
   const entityName =
@@ -56,23 +65,45 @@ export default async function CalkPage({
     return m?.isCash || m?.isBank || r.code.startsWith("11");
   });
 
+  // Agregasi Pajak Tahun Berjalan
+  const totalGrossRevenueMinor = data.taxSummaries.reduce(
+    (acc: bigint, s: TaxSummaryView) => acc + s.grossRevenueMinor,
+    0n
+  );
+  const taxableRevenueMinor = data.taxSummaries.reduce(
+    (acc: bigint, s: TaxSummaryView) => acc + s.taxableRevenueMinor,
+    0n
+  );
+  const taxDueMinor = data.taxSummaries.reduce(
+    (acc: bigint, s: TaxSummaryView) => acc + s.taxDueMinor,
+    0n
+  );
+  const taxPaidMinor = data.taxSummaries.reduce(
+    (acc: bigint, s: TaxSummaryView) => acc + (s.status === "PAID" ? s.taxDueMinor : 0n),
+    0n
+  );
+  const ntpnList = data.taxSummaries
+    .map((s: TaxSummaryView) => s.ntpn)
+    .filter((n: string | null): n is string => Boolean(n));
+
   return (
     <StatementShell
       title="Catatan Atas Laporan Keuangan (CALK)"
-      subtitle="Disusun Berdasarkan Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah (Bab 14 SAK EMKM)"
+      subtitle="Disusun Berdasarkan Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah (Bab 14 & 15 SAK EMKM)"
       entityName={entityName}
       periodName={data.period.name}
       options={data.options.map((p) => ({ name: p.name }))}
       periodDateRange={{ startsOn: data.period.startsOn, endsOn: data.period.endsOn }}
       isBalanced={bs.isBalanced}
       hideTableHeader={true}
+      actions={<CalkActions periodName={data.period.name} />}
     >
       <div className="space-y-8 text-xs sm:text-sm text-ink leading-relaxed">
         {/* BAB 1: INFORMASI UMUM ENTITAS */}
         <section className="space-y-3">
           <ReportSectionHeader title="1. INFORMASI UMUM ENTITAS" />
-          <p>
-            <strong>{entityName}</strong> (&ldquo;Entitas&rdquo;) didirikan di Indonesia dan bergerak dalam bidang kegiatan usaha <strong>{businessTypeLabel}</strong>.
+          <p className="leading-relaxed">
+            {data.narrative.generalInfo}
           </p>
           <div className="rounded-xl border border-rule bg-canvas/40 p-4 space-y-2 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
@@ -99,11 +130,8 @@ export default async function CalkPage({
         {/* BAB 2: DASAR PENYUSUNAN LAPORAN KEUANGAN */}
         <section className="space-y-3">
           <ReportSectionHeader title="2. DASAR PENYUSUNAN LAPORAN KEUANGAN" />
-          <p>
-            Laporan keuangan Entitas disusun dan disajikan sesuai dengan <strong>Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah (SAK EMKM)</strong> yang diterbitkan oleh Dewan Standar Akuntansi Keuangan Ikatan Akuntan Indonesia (DSAK IAI).
-          </p>
-          <p>
-            Dasar pengukuran dalam penyusunan laporan keuangan adalah <em>biaya historis (historical cost)</em>. Penyusunan laporan keuangan disusun menggunakan dasar akrual, kecuali untuk laporan arus kas.
+          <p className="leading-relaxed">
+            {data.narrative.accountingBasis}
           </p>
         </section>
 
@@ -113,32 +141,32 @@ export default async function CalkPage({
           <div className="space-y-3">
             <div>
               <h3 className="font-semibold text-ink">a. Kas dan Setara Kas</h3>
-              <p className="text-ink-soft mt-0.5">
-                Kas dan setara kas mencakup kas tunai di brankas/kasir dan saldo rekening giro atau tabungan pada bank yang dapat segera ditarik tanpa batasan.
+              <p className="text-ink-soft mt-0.5 leading-relaxed">
+                {data.narrative.policies.cash}
               </p>
             </div>
             <div>
               <h3 className="font-semibold text-ink">b. Piutang Usaha</h3>
-              <p className="text-ink-soft mt-0.5">
-                Piutang usaha dicatat sebesar jumlah tagihan neto yang diharapkan dapat ditagih sesuai dengan bukti faktur penjualan barang atau penyerahan jasa kepada pelanggan.
+              <p className="text-ink-soft mt-0.5 leading-relaxed">
+                {data.narrative.policies.receivables}
               </p>
             </div>
             <div>
               <h3 className="font-semibold text-ink">c. Persediaan</h3>
-              <p className="text-ink-soft mt-0.5">
-                Persediaan diukur berdasarkan biaya perolehan dengan metode FIFO (First-In, First-Out) atau rata-rata tertimbang (weighted average), mencakup harga pembelian dan biaya perolehan terkait.
+              <p className="text-ink-soft mt-0.5 leading-relaxed">
+                {data.narrative.policies.inventory}
               </p>
             </div>
             <div>
               <h3 className="font-semibold text-ink">d. Aset Tetap</h3>
-              <p className="text-ink-soft mt-0.5">
-                Aset tetap diakui sebesar biaya perolehan dikurangi akumulasi penyusutan. Penyusutan dihitung dengan metode garis lurus (straight-line method) selama masa manfaat ekonomis aset.
+              <p className="text-ink-soft mt-0.5 leading-relaxed">
+                {data.narrative.policies.fixedAssets}
               </p>
             </div>
             <div>
               <h3 className="font-semibold text-ink">e. Pengakuan Pendapatan dan Beban</h3>
-              <p className="text-ink-soft mt-0.5">
-                Pendapatan dari penjualan barang atau jasa diakui ketika hak dan manfaat signifikan telah berpindah kepada pelanggan. Beban diakui pada saat terjadinya transaksi (basis akrual).
+              <p className="text-ink-soft mt-0.5 leading-relaxed">
+                {data.narrative.policies.revenueExpense}
               </p>
             </div>
           </div>
@@ -151,8 +179,8 @@ export default async function CalkPage({
           {/* Rincian Kas & Bank */}
           <div className="space-y-2">
             <h3 className="font-semibold text-ink">4.1 Kas dan Setara Kas</h3>
-            <p className="text-xs text-ink-soft">
-              Rincian saldo kas dan simpanan pada bank pada tanggal pelaporan adalah sebagai berikut:
+            <p className="text-xs text-ink-soft leading-relaxed">
+              {data.narrative.accountNotes.cashAndBank}
             </p>
             <div className="rounded-xl border border-rule overflow-hidden bg-paper">
               {cashAccounts.length === 0 ? (
@@ -181,6 +209,9 @@ export default async function CalkPage({
           {/* Rincian Aset Tetap */}
           <div className="space-y-2 pt-3">
             <h3 className="font-semibold text-ink">4.2 Aset Tetap dan Akumulasi Penyusutan</h3>
+            <p className="text-xs text-ink-soft leading-relaxed">
+              {data.narrative.accountNotes.fixedAssets}
+            </p>
             <div className="rounded-xl border border-rule overflow-hidden bg-paper">
               {bs.fixedAssetRows.length === 0 ? (
                 <p className="p-4 text-xs italic text-ink-soft">Tidak ada aset tetap tercatat.</p>
@@ -208,6 +239,9 @@ export default async function CalkPage({
           {/* Rincian Liabilitas */}
           <div className="space-y-2 pt-3">
             <h3 className="font-semibold text-ink">4.3 Liabilitas (Kewajiban)</h3>
+            <p className="text-xs text-ink-soft leading-relaxed">
+              {data.narrative.accountNotes.liabilities}
+            </p>
             <div className="rounded-xl border border-rule overflow-hidden bg-paper">
               {bs.shortTermLiabilityRows.length === 0 && bs.longTermLiabilityRows.length === 0 ? (
                 <p className="p-4 text-xs italic text-ink-soft">Entitas tidak memiliki saldo kewajiban pada tanggal ini.</p>
@@ -240,6 +274,51 @@ export default async function CalkPage({
                 minor={bs.totalLiabilitiesMinor}
                 variant="subtotal"
               />
+            </div>
+          </div>
+        </section>
+
+        {/* BAB 5: PAJAK PENGHASILAN (BAB 15 SAK EMKM & PP 55/2022) */}
+        <section className="space-y-3 pt-2">
+          <ReportSectionHeader title="5. PAJAK PENGHASILAN (SAK EMKM BAB 15 &amp; PP 55 TAHUN 2022)" />
+          <p className="leading-relaxed">
+            {data.narrative.incomeTaxNote}
+          </p>
+
+          <div className="rounded-xl border border-rule overflow-hidden bg-paper font-mono text-xs">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60 bg-canvas/40 font-sans">
+              <span className="text-ink-soft">Jenis Wajib Pajak:</span>
+              <span className="font-semibold text-ink">
+                {data.taxSettings.taxpayerType === "INDIVIDUAL" ? "Orang Pribadi (Fasilitas Rp 500 Juta)" : "Badan Usaha (Tarif 0,5% Penuh)"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60 font-sans">
+              <span className="text-ink-soft">Nomor Pokok Wajib Pajak (NPWP):</span>
+              <span className="font-mono font-medium text-ink">{data.taxSettings.npwp || "Belum Terdaftar"}</span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60">
+              <span className="font-sans text-ink-soft">Akumulasi Peredaran Bruto (Omzet):</span>
+              <span className="font-bold text-ink">{Money.fromMinor(totalGrossRevenueMinor).formatIdr()}</span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60">
+              <span className="font-sans text-ink-soft">Dasar Pengenaan Pajak (DPP):</span>
+              <span className="text-ink">{Money.fromMinor(taxableRevenueMinor).formatIdr()}</span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60">
+              <span className="font-sans text-ink-soft">Beban PPh Final Terutang (0,5%):</span>
+              <span className="font-bold text-ink">{Money.fromMinor(taxDueMinor).formatIdr()}</span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60">
+              <span className="font-sans text-ink-soft">Realisasi Pembayaran Pajak:</span>
+              <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                {Money.fromMinor(taxPaidMinor).formatIdr()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 font-sans">
+              <span className="text-ink-soft">Nomor Transaksi Penerimaan Negara (NTPN):</span>
+              <span className="font-mono font-semibold text-ink">
+                {ntpnList.length > 0 ? ntpnList.join(", ") : "-"}
+              </span>
             </div>
           </div>
         </section>

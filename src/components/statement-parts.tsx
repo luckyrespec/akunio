@@ -36,6 +36,7 @@ export interface StatementShellProps {
   periodDateRange?: { startsOn: string; endsOn: string };
   isBalanced?: boolean;
   hideTableHeader?: boolean;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -65,6 +66,7 @@ export function StatementShell({
   periodDateRange,
   isBalanced,
   hideTableHeader,
+  actions,
   children,
 }: StatementShellProps) {
   const pathname = usePathname();
@@ -277,8 +279,10 @@ export function StatementShell({
               </div>
             )}
 
-            {/* Tombol Aksi: Cetak PDF & Ekspor CSV */}
+            {/* Tombol Aksi: Cetak PDF & Ekspor CSV & Custom Actions */}
             <div className="pt-3 border-t border-rule/80 space-y-2.5">
+              {actions}
+
               <Button
                 type="button"
                 onClick={() => window.print()}
