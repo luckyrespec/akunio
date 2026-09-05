@@ -55,9 +55,43 @@ function ProblemRow({
 
 const SOLUTIONS = [
   {
+    icon: Scale,
+    title: "Seimbang dulu, baru posting",
+    body: "Setiap draf diperiksa komputer sebelum bisa posting: total debit harus sama dengan total kredit. Selisih serupiah pun ditolak — kesalahan Januari tidak akan menghantui tutup tahun.",
+    answers: "Menjawab: jurnal asal-asalan",
+    demo: (
+      <div className="rounded-xl border border-rule bg-paper p-4 shadow-xs">
+        <div className="flex items-center justify-between">
+          <span className="rounded-md bg-destructive/10 px-2 py-0.5 text-[11px] font-bold tracking-widest uppercase text-destructive">
+            Ditolak
+          </span>
+          <span className="tnum text-xs font-medium text-ink-soft">Draf JE-2026-0144</span>
+        </div>
+        <div className="mt-3 space-y-2 text-sm">
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="font-semibold">Beban ATK</span>
+            <span className="tnum">
+              150.000 <span className="ml-1 text-xs font-bold text-debit">Debit</span>
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="font-semibold">Kas</span>
+            <span className="tnum">
+              100.000 <span className="ml-1 text-xs font-bold text-credit">Kredit</span>
+            </span>
+          </div>
+        </div>
+        <p className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive">
+          Selisih Rp50.000 — tidak bisa posting.
+        </p>
+      </div>
+    ),
+  },
+  {
     icon: MessageSquareText,
     title: "Cerita, AI yang mencatat",
-    body: "Ketik “bensin 150rb” atau foto struk — Akunio mengekstrak vendor, tanggal, dan pajak, lalu memetakan ke akun yang benar. Draf seimbang muncul dalam hitungan detik, lengkap dengan alasannya.",
+    body: "Ketik “bensin 150rb” atau foto struk — Akunio mengekstrak vendor, tanggal, dan pajak, lalu mengusulkan pasangan akun yang benar. Draf seimbang muncul dalam hitungan detik, lengkap dengan alasannya.",
+    answers: "Menjawab: nota menumpuk",
     demo: (
       <div className="space-y-2.5">
         <div className="flex justify-end">
@@ -89,8 +123,9 @@ const SOLUTIONS = [
   },
   {
     icon: Lock,
-    title: "Terkunci, jadi dipercaya",
-    body: "Begitu diposting, jurnal dikunci trigger database dan dirantai hash audit. Tidak ada ubah diam-diam, tidak ada hapus sepihak — mitra dan bank membaca laporan yang sama dengan yang Anda lihat.",
+    title: "Terkunci, lalu siap ke bank",
+    body: "Begitu diposting, jurnal dikunci trigger database dan dirantai hash audit. Tidak ada ubah diam-diam — dan dari jurnal yang sama tersusun 4 laporan standar, siap dibawa ke bank.",
+    answers: "Menjawab: angka diubah + laporan telat",
     demo: (
       <div className="rounded-xl border border-rule bg-paper p-4 shadow-xs">
         <div className="flex items-center justify-between">
@@ -99,23 +134,13 @@ const SOLUTIONS = [
           </span>
           <span className="tnum text-xs font-medium text-ink-soft">JE-2026-0143</span>
         </div>
-        <div className="mt-3 space-y-1.5 font-mono text-[11px] break-all text-ink-soft">
-          <p>rantai 9f2c…a41b ← 77d0…c9e2 ← 3b18…f0a7</p>
-        </div>
-        <p className="mt-3 text-xs leading-relaxed text-ink-soft">
-          Rantai hash utuh. Mengubah satu angka akan merusak seluruh rantai.
+        <p className="mt-3 font-mono text-xs break-all text-ink-soft">
+          rantai 9f2c…a41b ← 77d0…c9e2 ← 3b18…f0a7
         </p>
-      </div>
-    ),
-  },
-  {
-    icon: FileCheck2,
-    title: "Laporan standar, real-time",
-    body: "Neraca, laba rugi, perubahan ekuitas, dan arus kas metode tidak langsung tersusun dari jurnal yang sama — bukan spreadsheet terpisah. Tutup bulan tanpa begadang.",
-    demo: (
-      <div className="rounded-xl border border-rule bg-paper p-4 shadow-xs">
-        <p className="text-[11px] font-bold tracking-widest uppercase text-ink-soft">Laba rugi · bulan berjalan</p>
-        <div className="mt-3 space-y-2 text-sm">
+        <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+          Coba ubah satu angka — seluruh rantai di bawahnya rusak.
+        </p>
+        <div className="mt-3 space-y-1.5 border-t border-rule pt-3 text-sm">
           <div className="flex items-baseline justify-between gap-4">
             <span className="text-ink-soft">Pendapatan</span>
             <span className="tnum font-semibold">Rp48.200.000</span>
@@ -124,7 +149,7 @@ const SOLUTIONS = [
             <span className="text-ink-soft">Beban</span>
             <span className="tnum font-semibold">Rp31.750.000</span>
           </div>
-          <div className="rule-double flex items-baseline justify-between gap-4 border-t border-rule pt-2 pb-1">
+          <div className="rule-double flex items-baseline justify-between gap-4 pt-1 pb-0.5">
             <span className="font-bold">Laba bersih</span>
             <span className="tnum font-bold">Rp16.450.000</span>
           </div>
@@ -189,20 +214,45 @@ export function LandingPage() {
           title="Mesin pembukuan yang bekerja untuk Anda"
           desc="Tiga masalah di atas, tiga mekanisme di bawah — berpasangan dan berurutan."
         >
-          <div className="grid gap-4 lg:grid-cols-3">
-            {SOLUTIONS.map((s, i) => (
-              <article key={s.title} className="relative flex flex-col overflow-hidden rounded-2xl border border-rule bg-paper p-5 shadow-xs sm:p-6">
-                <span aria-hidden className="font-display absolute -top-2 right-3 text-7xl leading-none font-semibold text-ink/[0.07] select-none">
-                  {i + 1}
-                </span>
-                <span className="grid size-11 place-items-center rounded-xl bg-terra/10">
-                  <s.icon className="size-5 text-terra" strokeWidth={2} />
-                </span>
-                <h3 className="mt-4 text-lg font-bold tracking-tight">{s.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-soft">{s.body}</p>
-                <div className="mt-5 border-t border-rule pt-5">{s.demo}</div>
-              </article>
+          <div className="relative mt-8 lg:mt-12">
+            <svg
+              aria-hidden
+              viewBox="0 0 600 40"
+              preserveAspectRatio="none"
+              className="absolute -top-10 right-0 left-0 hidden h-10 w-full lg:block"
+            >
+              <path
+                d="M8 34 Q 160 34 300 12 T 592 34"
+                fill="none"
+                stroke="#a8562f"
+                strokeWidth={4}
+                strokeLinecap="round"
+                strokeDasharray="2 12"
+                vectorEffect="non-scaling-stroke"
+                opacity={0.8}
+              />
+            </svg>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {SOLUTIONS.map((s, i) => (
+                <article
+                  key={s.title}
+                  className={`relative flex flex-col overflow-hidden rounded-2xl border border-rule bg-paper p-5 shadow-xs sm:p-6 ${
+                    i === 1 ? "lg:-translate-y-6" : ""
+                  }`}
+                >
+                  <span aria-hidden className="font-display absolute -top-2 right-3 text-8xl leading-none font-semibold text-ink/[0.07] select-none">
+                    {i + 1}
+                  </span>
+                  <span className="grid size-11 place-items-center rounded-xl bg-terra/10">
+                    <s.icon className="size-5 text-terra" strokeWidth={2} />
+                  </span>
+                  <h3 className="mt-4 text-lg font-bold tracking-tight">{s.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-soft">{s.body}</p>
+                  <div className="mt-5 border-t border-rule pt-5">{s.demo}</div>
+                  <p className="mt-4 text-xs font-semibold text-ink-soft">{s.answers}</p>
+                </article>
             ))}
+            </div>
           </div>
         </Section>
 
@@ -292,6 +342,9 @@ export function LandingPage() {
                 Saya sudah punya akun
               </Link>
             </div>
+            <p className="relative mt-4 text-xs font-medium text-paper/60">
+              Gratis memulai · Tanpa kartu kredit
+            </p>
           </div>
         </section>
       </main>
@@ -303,8 +356,8 @@ export function LandingPage() {
             Akunio — pembukuan double-entry untuk UKM. Debit = Kredit, selalu.
           </p>
           <div className="flex gap-5 text-sm font-medium">
-            <Link href="/masuk" className="focus-ring rounded-md text-ink-soft transition-colors hover:text-ink">Masuk</Link>
-            <Link href="/daftar" className="focus-ring rounded-md text-ink-soft transition-colors hover:text-ink">Daftar</Link>
+            <Link href="/masuk" className="focus-ring rounded-md px-1 py-1 text-ink-soft transition-colors hover:text-ink">Masuk</Link>
+            <Link href="/daftar" className="focus-ring rounded-md px-1 py-1 text-ink-soft transition-colors hover:text-ink">Daftar</Link>
           </div>
         </div>
       </footer>

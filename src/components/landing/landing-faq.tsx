@@ -15,7 +15,7 @@ const ITEMS = [
   },
   {
     q: "Apakah data usaha saya aman dan tidak tercampur?",
-    a: "Setiap perusahaan terisolasi di level database (Row-Level Security per organisasi), dan setiap mutasi penting dicatat dalam rantai hash audit. Data cabang A tidak akan pernah bocor ke cabang B.",
+    a: "Aman. Setiap usaha punya ruang datanya sendiri yang terkunci di level database — data cabang A tidak akan pernah bocor ke cabang B. Setiap mutasi penting juga dicatat dalam rantai audit yang tidak bisa disisipi.",
   },
   {
     q: "Nota saya sudah menumpuk berminggu-minggu. Mulai dari mana?",
@@ -28,6 +28,10 @@ const ITEMS = [
   {
     q: "Laporannya bisa dibawa ke bank atau konsultan pajak?",
     a: "Bisa. Neraca, laba rugi, perubahan ekuitas, dan arus kas disusun mengikuti standar sehingga layak dibawa ke bank untuk pengajuan modal atau ke konsultan untuk pendampingan pajak.",
+  },
+  {
+    q: "Berapa biayanya, dan berapa lama sampai bisa dipakai?",
+    a: "Gratis untuk memulai — cukup daftar dengan email, tanpa kartu kredit. Bagan akun standar dan 12 periode buku disiapkan otomatis saat onboarding, jadi transaksi pertama bisa Anda catat dalam hitungan menit.",
   },
 ];
 

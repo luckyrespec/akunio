@@ -55,6 +55,9 @@ export function LandingHero() {
               Lihat cara kerja
             </Link>
           </motion.div>
+          <motion.p {...enter(0.22)} className="mt-3 text-xs font-medium text-ink-soft">
+            Gratis memulai · Tanpa kartu kredit · Transaksi pertama dalam hitungan menit
+          </motion.p>
           <motion.dl {...enter(0.26)} className="mt-10 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-rule bg-rule lg:grid-cols-4">
             {PROOF.map((p) => (
               <div key={p.title} className="bg-paper px-4 py-3.5">
