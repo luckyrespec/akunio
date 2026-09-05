@@ -99,74 +99,74 @@ export default async function CalkPage({
       hideTableHeader={true}
       actions={<CalkActions periodName={data.period.name} />}
     >
-      <div className="space-y-8 text-xs sm:text-sm text-ink leading-relaxed">
+      <div className="space-y-9 text-xs sm:text-sm text-ink leading-relaxed">
         {/* BAB 1: INFORMASI UMUM ENTITAS */}
-        <section className="space-y-3">
+        <section className="space-y-3.5">
           <ReportSectionHeader title="1. INFORMASI UMUM ENTITAS" />
-          <p className="leading-relaxed">
+          <p className="leading-relaxed text-ink/90 sm:text-justify">
             {data.narrative.generalInfo}
           </p>
-          <div className="rounded-xl border border-rule bg-canvas/40 p-4 space-y-2 text-xs">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
+          <div className="rounded-2xl border border-rule/90 bg-canvas/40 p-4 sm:p-5 space-y-2.5 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pb-2 border-b border-rule/50">
               <span className="text-ink-soft">Nama Entitas Usaha:</span>
-              <span className="sm:col-span-2 font-medium text-ink">{entityName}</span>
+              <span className="sm:col-span-2 font-bold text-ink">{entityName}</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pb-2 border-b border-rule/50">
               <span className="text-ink-soft">Bidang Usaha:</span>
               <span className="sm:col-span-2 font-medium text-ink">{businessTypeLabel}</span>
             </div>
             {data.profile?.city && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pb-2 border-b border-rule/50">
                 <span className="text-ink-soft">Domisili / Kota:</span>
                 <span className="sm:col-span-2 font-medium text-ink">{data.profile.city}</span>
               </div>
             )}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
               <span className="text-ink-soft">Mata Uang Pelaporan:</span>
-              <span className="sm:col-span-2 font-medium text-ink">Rupiah (IDR)</span>
+              <span className="sm:col-span-2 font-semibold text-ink">Rupiah (IDR)</span>
             </div>
           </div>
         </section>
 
         {/* BAB 2: DASAR PENYUSUNAN LAPORAN KEUANGAN */}
-        <section className="space-y-3">
+        <section className="space-y-3.5">
           <ReportSectionHeader title="2. DASAR PENYUSUNAN LAPORAN KEUANGAN" />
-          <p className="leading-relaxed">
+          <p className="leading-relaxed text-ink/90 sm:text-justify">
             {data.narrative.accountingBasis}
           </p>
         </section>
 
         {/* BAB 3: IKHTISAR KEBIJAKAN AKUNTANSI PENTING */}
-        <section className="space-y-3">
+        <section className="space-y-4">
           <ReportSectionHeader title="3. IKHTISAR KEBIJAKAN AKUNTANSI PENTING" />
-          <div className="space-y-3">
-            <div>
-              <h3 className="font-semibold text-ink">a. Kas dan Setara Kas</h3>
-              <p className="text-ink-soft mt-0.5 leading-relaxed">
+          <div className="grid grid-cols-1 gap-3.5">
+            <div className="p-3.5 rounded-xl border border-rule/70 bg-paper">
+              <h3 className="font-bold text-ink text-xs sm:text-sm">a. Kas dan Setara Kas</h3>
+              <p className="text-ink-soft mt-1 leading-relaxed text-xs">
                 {data.narrative.policies.cash}
               </p>
             </div>
-            <div>
-              <h3 className="font-semibold text-ink">b. Piutang Usaha</h3>
-              <p className="text-ink-soft mt-0.5 leading-relaxed">
+            <div className="p-3.5 rounded-xl border border-rule/70 bg-paper">
+              <h3 className="font-bold text-ink text-xs sm:text-sm">b. Piutang Usaha</h3>
+              <p className="text-ink-soft mt-1 leading-relaxed text-xs">
                 {data.narrative.policies.receivables}
               </p>
             </div>
-            <div>
-              <h3 className="font-semibold text-ink">c. Persediaan</h3>
-              <p className="text-ink-soft mt-0.5 leading-relaxed">
+            <div className="p-3.5 rounded-xl border border-rule/70 bg-paper">
+              <h3 className="font-bold text-ink text-xs sm:text-sm">c. Persediaan</h3>
+              <p className="text-ink-soft mt-1 leading-relaxed text-xs">
                 {data.narrative.policies.inventory}
               </p>
             </div>
-            <div>
-              <h3 className="font-semibold text-ink">d. Aset Tetap</h3>
-              <p className="text-ink-soft mt-0.5 leading-relaxed">
+            <div className="p-3.5 rounded-xl border border-rule/70 bg-paper">
+              <h3 className="font-bold text-ink text-xs sm:text-sm">d. Aset Tetap</h3>
+              <p className="text-ink-soft mt-1 leading-relaxed text-xs">
                 {data.narrative.policies.fixedAssets}
               </p>
             </div>
-            <div>
-              <h3 className="font-semibold text-ink">e. Pengakuan Pendapatan dan Beban</h3>
-              <p className="text-ink-soft mt-0.5 leading-relaxed">
+            <div className="p-3.5 rounded-xl border border-rule/70 bg-paper">
+              <h3 className="font-bold text-ink text-xs sm:text-sm">e. Pengakuan Pendapatan dan Beban</h3>
+              <p className="text-ink-soft mt-1 leading-relaxed text-xs">
                 {data.narrative.policies.revenueExpense}
               </p>
             </div>
@@ -174,16 +174,19 @@ export default async function CalkPage({
         </section>
 
         {/* BAB 4: RINCIAN AKUN SIGNIFIKAN */}
-        <section className="space-y-4">
+        <section className="space-y-5">
           <ReportSectionHeader title="4. RINCIAN AKUN SIGNIFIKAN" />
 
           {/* Rincian Kas & Bank */}
-          <div className="space-y-2">
-            <h3 className="font-semibold text-ink">4.1 Kas dan Setara Kas</h3>
+          <div className="space-y-2.5">
+            <div className="flex items-baseline justify-between">
+              <h3 className="font-bold text-ink text-xs sm:text-sm">4.1 Kas dan Setara Kas</h3>
+              <span className="text-[11px] font-medium text-ink-soft">Likuiditas Lancar</span>
+            </div>
             <p className="text-xs text-ink-soft leading-relaxed">
               {data.narrative.accountNotes.cashAndBank}
             </p>
-            <div className="rounded-xl border border-rule overflow-hidden bg-paper">
+            <div className="rounded-2xl border border-rule overflow-hidden bg-paper shadow-2xs">
               {cashAccounts.length === 0 ? (
                 <p className="p-4 text-xs italic text-ink-soft">Tidak ada saldo kas dan bank.</p>
               ) : (
@@ -208,12 +211,15 @@ export default async function CalkPage({
           </div>
 
           {/* Rincian Aset Tetap */}
-          <div className="space-y-2 pt-3">
-            <h3 className="font-semibold text-ink">4.2 Aset Tetap dan Akumulasi Penyusutan</h3>
+          <div className="space-y-2.5 pt-2">
+            <div className="flex items-baseline justify-between">
+              <h3 className="font-bold text-ink text-xs sm:text-sm">4.2 Aset Tetap dan Akumulasi Penyusutan</h3>
+              <span className="text-[11px] font-medium text-ink-soft">Biaya Perolehan Historis</span>
+            </div>
             <p className="text-xs text-ink-soft leading-relaxed">
               {data.narrative.accountNotes.fixedAssets}
             </p>
-            <div className="rounded-xl border border-rule overflow-hidden bg-paper">
+            <div className="rounded-2xl border border-rule overflow-hidden bg-paper shadow-2xs">
               {bs.fixedAssetRows.length === 0 ? (
                 <p className="p-4 text-xs italic text-ink-soft">Tidak ada aset tetap tercatat.</p>
               ) : (
@@ -238,12 +244,15 @@ export default async function CalkPage({
           </div>
 
           {/* Rincian Liabilitas */}
-          <div className="space-y-2 pt-3">
-            <h3 className="font-semibold text-ink">4.3 Liabilitas (Kewajiban)</h3>
+          <div className="space-y-2.5 pt-2">
+            <div className="flex items-baseline justify-between">
+              <h3 className="font-bold text-ink text-xs sm:text-sm">4.3 Liabilitas (Kewajiban)</h3>
+              <span className="text-[11px] font-medium text-ink-soft">Kewajiban Berjalan &amp; Panjang</span>
+            </div>
             <p className="text-xs text-ink-soft leading-relaxed">
               {data.narrative.accountNotes.liabilities}
             </p>
-            <div className="rounded-xl border border-rule overflow-hidden bg-paper">
+            <div className="rounded-2xl border border-rule overflow-hidden bg-paper shadow-2xs">
               {bs.shortTermLiabilityRows.length === 0 && bs.longTermLiabilityRows.length === 0 ? (
                 <p className="p-4 text-xs italic text-ink-soft">Entitas tidak memiliki saldo kewajiban pada tanggal ini.</p>
               ) : (
@@ -280,45 +289,45 @@ export default async function CalkPage({
         </section>
 
         {/* BAB 5: PAJAK PENGHASILAN (BAB 15 SAK EMKM & PP 55/2022) */}
-        <section className="space-y-3 pt-2">
+        <section className="space-y-3.5 pt-2">
           <ReportSectionHeader title="5. PAJAK PENGHASILAN (SAK EMKM BAB 15 &amp; PP 55 TAHUN 2022)" />
-          <p className="leading-relaxed">
+          <p className="leading-relaxed text-ink/90 sm:text-justify">
             {data.narrative.incomeTaxNote}
           </p>
 
-          <div className="rounded-xl border border-rule overflow-hidden bg-paper font-mono text-xs">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60 bg-canvas/40 font-sans">
-              <span className="text-ink-soft">Jenis Wajib Pajak:</span>
-              <span className="font-semibold text-ink">
-                {data.taxSettings.taxpayerType === "INDIVIDUAL" ? "Orang Pribadi (Fasilitas Rp 500 Juta)" : "Badan Usaha (Tarif 0,5% Penuh)"}
+          <div className="rounded-2xl border border-rule overflow-hidden bg-paper shadow-2xs text-xs">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-rule/70 bg-canvas/50">
+              <span className="text-ink-soft font-medium">Jenis Wajib Pajak:</span>
+              <span className="font-bold text-ink">
+                {data.taxSettings.taxpayerType === "INDIVIDUAL" ? "Orang Pribadi (Fasilitas Bebas s.d. Rp 500 Juta)" : "Badan Usaha (Tarif 0,5% Penuh)"}
               </span>
             </div>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60 font-sans">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/50">
               <span className="text-ink-soft">Nomor Pokok Wajib Pajak (NPWP):</span>
-              <span className="font-mono font-medium text-ink">{data.taxSettings.npwp || "Belum Terdaftar"}</span>
+              <span className="font-mono font-semibold text-ink">{data.taxSettings.npwp || "Belum Terdaftar"}</span>
             </div>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60">
-              <span className="font-sans text-ink-soft">Akumulasi Peredaran Bruto (Omzet):</span>
-              <span className="font-bold text-ink">{Money.fromMinor(totalGrossRevenueMinor).formatIdr()}</span>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/50">
+              <span className="text-ink-soft">Akumulasi Peredaran Bruto (Omzet Tahunan):</span>
+              <span className="font-mono font-bold text-ink tnum">{Money.fromMinor(totalGrossRevenueMinor).formatIdr()}</span>
             </div>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60">
-              <span className="font-sans text-ink-soft">Dasar Pengenaan Pajak (DPP):</span>
-              <span className="text-ink">{Money.fromMinor(taxableRevenueMinor).formatIdr()}</span>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/50">
+              <span className="text-ink-soft">Dasar Pengenaan Pajak (DPP):</span>
+              <span className="font-mono font-medium text-ink tnum">{Money.fromMinor(taxableRevenueMinor).formatIdr()}</span>
             </div>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60">
-              <span className="font-sans text-ink-soft">Beban PPh Final Terutang (0,5%):</span>
-              <span className="font-bold text-ink">{Money.fromMinor(taxDueMinor).formatIdr()}</span>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/50">
+              <span className="text-ink-soft">Beban PPh Final Terutang (Tarif 0,5%):</span>
+              <span className="font-mono font-bold text-terra tnum">{Money.fromMinor(taxDueMinor).formatIdr()}</span>
             </div>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/60">
-              <span className="font-sans text-ink-soft">Realisasi Pembayaran Pajak:</span>
-              <span className="font-bold text-emerald-700 dark:text-emerald-300">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-rule/50">
+              <span className="text-ink-soft">Realisasi Pembayaran Disetor:</span>
+              <span className="font-mono font-bold text-debit tnum">
                 {Money.fromMinor(taxPaidMinor).formatIdr()}
               </span>
             </div>
-            <div className="flex items-center justify-between px-4 py-2.5 font-sans">
-              <span className="text-ink-soft">Nomor Transaksi Penerimaan Negara (NTPN):</span>
-              <span className="font-mono font-semibold text-ink">
-                {ntpnList.length > 0 ? ntpnList.join(", ") : "-"}
+            <div className="flex items-center justify-between px-4 py-3 bg-canvas/30">
+              <span className="text-ink-soft font-medium">Bukti Setor Resmi (NTPN):</span>
+              <span className="font-mono font-bold text-ink">
+                {ntpnList.length > 0 ? ntpnList.join(", ") : "Belum Ada Setoran"}
               </span>
             </div>
           </div>

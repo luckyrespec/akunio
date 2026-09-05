@@ -1,5 +1,6 @@
-import { StatementSkeleton } from "@/components/statement-skeleton";
+import { CalkLoadingState } from "@/components/calk/calk-loading";
 
 export default function Loading() {
-  return <StatementSkeleton title="Menyusun Rincian & Catatan Atas Laporan Keuangan (CALK)..." />;
+  return <CalkLoadingState />;
 }
+

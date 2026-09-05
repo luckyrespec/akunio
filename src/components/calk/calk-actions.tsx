@@ -72,7 +72,7 @@ export function CalkActions({ periodName }: CalkActionsProps) {
         ) : (
           <Sparkles className="size-3.5 text-terra" />
         )}
-        <span>Perbarui Narasi AI</span>
+        <span>Perbarui Narasi Akunio</span>
       </Button>
     </div>
   );
