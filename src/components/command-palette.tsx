@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Library, LayoutDashboard, Package, Receipt, Search, Sparkles } from "lucide-react";
+import { BookOpen, FileText, Library, LayoutDashboard, Package, Receipt, Search, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useDebounce } from "@/hooks/use-debounce";
 import { searchGlobalAction, type GlobalSearchResult } from "@/server/actions/search.actions";
@@ -12,14 +12,14 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const router = useRouter();
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, 500);
-  const [results, setResults] = useState<GlobalSearchResult>({ pages: [], journals: [], accounts: [], invoices: [], assets: [] });
+  const [results, setResults] = useState<GlobalSearchResult>({ pages: [], journals: [], accounts: [], invoices: [], assets: [], rules: [] });
   const [pending, startTransition] = useTransition();
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (debouncedQuery.trim().length < 2) {
-      setResults({ pages: [], journals: [], accounts: [], invoices: [], assets: [] });
+      setResults({ pages: [], journals: [], accounts: [], invoices: [], assets: [], rules: [] });
       return;
     }
     startTransition(async () => {
@@ -35,6 +35,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const flatItems: Array<{ id: string; href: string }> = [
     ...results.pages.map((p) => ({ id: `page-${p.href}`, href: p.href })),
+    ...results.rules.map((r) => ({ id: `rule-${r.id}`, href: r.href })),
     ...results.journals.map((j) => ({ id: `journal-${j.id}`, href: `/jurnal/${j.id}` })),
     ...results.accounts.map((a) => ({ id: `account-${a.id}`, href: `/buku-besar/${a.id}` })),
     ...results.invoices.map((inv) => ({ id: `invoice-${inv.id}`, href: `/faktur/${inv.id}` })),
@@ -43,7 +44,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [query, results.pages.length, results.journals.length, results.accounts.length, results.invoices.length, results.assets.length]);
+  }, [query, results.pages.length, results.rules.length, results.journals.length, results.accounts.length, results.invoices.length, results.assets.length]);
 
   useEffect(() => {
     listRef.current
@@ -69,6 +70,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const hasResults =
     results.pages.length +
+      results.rules.length +
       results.journals.length +
       results.accounts.length +
       results.invoices.length +
@@ -101,7 +103,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             aria-expanded={hasResults}
             aria-controls="palette-listbox"
             aria-activedescendant={flatItems[activeIndex]?.id}
-            placeholder="Cari halaman, jurnal, akun, faktur, aset, nominal…"
+            placeholder="Cari halaman, aturan SAK EMKM, jurnal, akun, faktur, aset, nominal…"
             className="h-9 border-0 bg-transparent p-0 text-base shadow-none focus-visible:ring-0"
           />
           <span className="hidden rounded border border-rule bg-canvas px-1.5 py-0.5 text-[11px] leading-none text-ink-soft sm:inline">ESC</span>
@@ -112,7 +114,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             <p className="px-4 py-10 text-center text-sm text-ink-soft">Tidak ada hasil untuk “{query}”.</p>
           )}
           {!hasResults && query.trim().length < 2 && (
-            <p className="px-4 py-8 text-center text-sm text-ink-soft">Ketik minimal 2 huruf — coba “Jurnal”, “Kas”, nomor JE, nominal, nama aset, atau nama pelanggan.</p>
+            <p className="px-4 py-8 text-center text-sm text-ink-soft">Ketik minimal 2 huruf — coba “Aturan”, “Persediaan”, “Bab 2”, “Jurnal”, “Kas”, nomor JE, nominal, nama aset, atau nama pelanggan.</p>
           )}
 
           {results.pages.length > 0 && (
@@ -129,6 +131,43 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                 >
                   <span className="text-ink-soft">↗</span> {p.label}
                   <span className="ml-auto text-xs text-ink-soft">{p.href}</span>
+                </button>
+              ))}
+            </Group>
+          )}
+
+          {results.rules.length > 0 && (
+            <Group title="Aturan SAK EMKM" icon={BookOpen}>
+              {results.rules.map((r) => (
+                <button
+                  key={r.id}
+                  data-palette-id={`rule-${r.id}`}
+                  role="option"
+                  aria-selected={flatItems[activeIndex]?.id === `rule-${r.id}`}
+                  onClick={() => navigate(r.href)}
+                  onMouseMove={() => setActiveIndex(flatItems.findIndex((f) => f.id === `rule-${r.id}`))}
+                  className={paletteItemClass(`rule-${r.id}`)}
+                >
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-serif font-bold text-ink truncate">
+                        {r.sectionTitle}
+                      </span>
+                      {r.paragraphRange && (
+                        <span className="inline-flex items-center rounded bg-terra/10 px-1.5 py-0.5 text-[10px] font-mono text-terra font-semibold border border-terra/20">
+                          {r.paragraphRange}
+                        </span>
+                      )}
+                    </div>
+                    {r.snippet && (
+                      <span className="truncate text-xs text-ink-soft mt-0.5">
+                        {r.snippet}
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-xs font-mono font-medium text-terra ml-2">
+                    Bab {r.bab}
+                  </span>
                 </button>
               ))}
             </Group>

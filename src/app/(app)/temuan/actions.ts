@@ -44,23 +44,121 @@ export async function triggerDoctorScanAction() {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const { runDoctorAuditScan } = await import("@/core/doctor/scan");
+    const { listFindings } = await import("@/server/db/repos/findings.repo");
     const result = await db.transaction(async (tx) => {
       const res = await runDoctorAuditScan(tx, ctx.orgId);
+      const allFindings = await listFindings(tx, ctx.orgId);
       await appendAudit(tx, {
         orgId: ctx.orgId,
         actor: ctx.userEmail,
-        action: "FINDING_RESOLVED", // Audit log tracking
+        action: "DOCTOR_AUDIT_SCAN",
         subjectType: "ai_finding",
         subjectId: ctx.orgId,
         data: { scanSummary: res },
       });
-      return res;
+      const serializedAll = allFindings.map((f) => ({
+        id: f.id,
+        type: f.type,
+        severity: f.severity,
+        status: f.status,
+        evidence: (f.evidence as Record<string, unknown>) ?? null,
+        createdAt: f.createdAt instanceof Date ? f.createdAt.toISOString() : String(f.createdAt),
+      }));
+      return {
+        ...res,
+        allFindings: serializedAll,
+        openFindings: serializedAll.filter((f) => f.status === "open"),
+      };
     });
     revalidatePath("/temuan");
     return { ok: true, data: result };
   } catch (e) {
     if (isRedirectError(e)) throw e;
     return { ok: false, error: e instanceof Error ? e.message : "Gagal memindai buku" };
+  }
+}
+
+export async function uploadFindingReceiptAction(findingId: string, formData: FormData) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const file = formData.get("file");
+    if (!(file instanceof File)) return { ok: false, error: "File tidak ditemukan." };
+
+    const { ALLOWED_MIMES, MAX_DOCUMENT_BYTES, putDocument } = await import("@/server/storage/storage");
+    if (!ALLOWED_MIMES.includes(file.type as never)) {
+      return { ok: false, error: "Format file tidak didukung. Harap unggah berkas gambar (PNG/JPG) atau PDF." };
+    }
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      return { ok: false, error: "Ukuran file maksimal 5 MB." };
+    }
+
+    const result = await withOrg(ctx.orgId, async (tx) => {
+      const { getFinding, resolveFinding } = await import("@/server/db/repos/findings.repo");
+      const { createDocumentRow } = await import("@/server/db/repos/documents.repo");
+      const { appendAudit } = await import("@/server/db/repos/audit.repo");
+
+      const finding = await getFinding(tx, ctx.orgId, findingId);
+      if (!finding) throw new Error("TEMUAN_TIDAK_DITEMUKAN");
+
+      const ev = (finding.evidence as Record<string, unknown> | null) ?? {};
+      const entryId = ev.entryId;
+      if (typeof entryId !== "string" || !entryId) {
+        throw new Error("Entri jurnal terkait tidak ditemukan dalam bukti temuan.");
+      }
+
+      // 1. Simpan berkas fisik ke S3 / SeaweedFS storage
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const { storageKey } = await putDocument(ctx.orgId, { buffer, mime: file.type });
+
+      // 2. Buat rekaman dokumen di database
+      const docRow = await createDocumentRow(tx, {
+        orgId: ctx.orgId,
+        storageKey,
+        mime: file.type,
+        sizeBytes: file.size,
+      });
+
+      // 3. Tautkan dokumen fisik ke entri jurnal
+      const { linkDocumentToEntry } = await import("@/server/db/repos/journals.repo");
+      await linkDocumentToEntry(tx, {
+        orgId: ctx.orgId,
+        entryId,
+        documentId: docRow.id,
+        fileName: file.name,
+      });
+
+      // 4. Otomatis tandai temuan selesai!
+      await resolveFinding(tx, ctx.orgId, findingId);
+
+      // 5. Audit log
+      await appendAudit(tx, {
+        orgId: ctx.orgId,
+        actor: ctx.userEmail,
+        action: "FINDING_RESOLVED",
+        subjectType: "ai_finding",
+        subjectId: findingId,
+        data: {
+          reason: "RECEIPT_UPLOADED",
+          entryId,
+          documentId: docRow.id,
+          fileName: file.name,
+        },
+      });
+
+      return { docId: docRow.id, fileName: file.name, sizeBytes: file.size, mime: file.type };
+    });
+
+    try {
+      revalidatePath(`/temuan/${findingId}`);
+      revalidatePath("/temuan");
+      revalidatePath("/dasbor");
+    } catch {}
+
+    return { ok: true, data: result };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    console.error("Gagal mengunggah bukti temuan:", e);
+    return { ok: false, error: e instanceof Error ? e.message : "Gagal mengunggah dokumen bukti." };
   }
 }
 

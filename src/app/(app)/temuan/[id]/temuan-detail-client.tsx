@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { Upload, FileText } from "lucide-react";
 import {
   IconArrowRight,
   IconCircleCheck,
+  IconClock,
   IconFileWarning,
   IconInfo,
+  IconReceipt,
   IconSparkles,
 } from "@/components/icons";
 import { Money } from "@/core/money/money";
@@ -22,7 +25,7 @@ import {
   typeMetadata,
   type FindingView,
 } from "../finding-meta";
-import { getFindingRelatedAction } from "../actions";
+import { getFindingRelatedAction, uploadFindingReceiptAction } from "../actions";
 
 type RelatedItem = Record<string, unknown>;
 
@@ -323,6 +326,169 @@ function AccountCard({ account }: { account: AccountView }) {
   );
 }
 
+function typeRecommendation(type: string, standard: string): string {
+  switch (type) {
+    case "missingReceipts":
+      return `Jurnal transaksi ini sudah tercatat dengan benar dan seimbang di buku besar. Untuk memenuhi kepatuhan ${standard} tentang keandalan bukti transaksi, silakan lampirkan dokumen bukti fisik (faktur/kuitansi/struk) sah di bawah ini. Temuan otomatis terselesaikan setelah berkas berhasil diunggah.`;
+    case "duplicates":
+      return `Ditemukan jurnal yang memiliki memo, tanggal, nominal, dan alokasi akun yang kembar. Sesuai prinsip ${standard}, buat draf jurnal pembalik (reversal) untuk menganulir salah satu entri agar tidak terjadi pencatatan ganda.`;
+    case "abnormalBalances":
+      return `Saldo akun berada di sisi berlawanan aturan akuntansi wajar (saldo minus). Mengikuti prinsip ${standard}, buat draf jurnal reklasifikasi penyesuaian untuk menormalkan saldo akun.`;
+    case "oddDates":
+      return `Transaksi dibukukan di luar rentang tanggal periode fiskal aktif. Sesuai prinsip ${standard}, Anda dapat membuka periode pembukuan terkait di Pengaturan Periode, atau membuat draf penyesuaian pisah batas periode.`;
+    case "ratioAnomalies":
+      return `Terjadi fluktuasi mutasi debit/kredit yang melebihi batas deviasi historis. Periksa mutasi buku besar di panel samping. Jika mutasi wajar, Anda dapat mengonfirmasi dan menandai temuan ini selesai.`;
+    default:
+      return `Sistem merekomendasikan penyesuaian pembukuan mengikuti prinsip ${standard}.`;
+  }
+}
+
+function MissingReceiptUploadCard({
+  findingId,
+  isResolved,
+  onUploaded,
+}: {
+  findingId: string;
+  isResolved: boolean;
+  onUploaded?: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await uploadFindingReceiptAction(findingId, formData);
+      if (!res.ok) {
+        setError(res.error || "Gagal mengunggah berkas.");
+        return;
+      }
+      setSuccess(true);
+      setUploadedName(file.name);
+      if (onUploaded) onUploaded();
+    } catch {
+      setError("Terjadi kesalahan jaringan saat mengunggah.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  if (isResolved || success) {
+    return (
+      <div className="rounded-xl border border-debit/30 bg-debit/[0.08] p-4 text-xs space-y-2">
+        <div className="flex items-center gap-2 font-semibold text-debit">
+          <IconCircleCheck className="size-4 shrink-0" />
+          <span>Dokumen Lampiran Sah Terverifikasi</span>
+        </div>
+        <p className="text-ink-soft leading-relaxed">
+          {uploadedName ? (
+            <>
+              Berkas <strong className="font-mono text-ink">{uploadedName}</strong> telah berhasil dilampirkan ke entri jurnal ini. Temuan ini telah berstatus terselesaikan.
+            </>
+          ) : (
+            "Dokumen bukti fisik telah berhasil dilampirkan ke entri jurnal ini. Temuan kepatuhan ini telah berstatus terselesaikan."
+          )}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div id="upload-lampiran-section" className="rounded-xl border border-terra/30 bg-paper p-4 text-xs space-y-3 shadow-xs">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-ink flex items-center gap-1.5">
+          <Upload className="size-4 text-terra" />
+          Unggah Lampiran Bukti Transaksi
+        </span>
+        <span className="text-[10px] text-ink-soft bg-canvas px-2 py-0.5 rounded border border-rule">
+          PDF / PNG / JPG maks 5MB
+        </span>
+      </div>
+      <p className="text-ink-soft leading-relaxed">
+        Jurnal telah dicatat dengan benar. Unggah berkas kuitansi, struk belanja, atau faktur sah untuk menautkannya langsung ke transaksi ini dan menyelesaikan temuan.
+      </p>
+
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className={cn(
+            "flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-4 text-center cursor-pointer transition-colors",
+            file
+              ? "border-terra bg-terra/5"
+              : "border-rule bg-canvas/40 hover:bg-canvas/70 hover:border-terra/40",
+          )}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) setFile(f);
+            }}
+          />
+          {file ? (
+            <div className="flex items-center gap-2">
+              <FileText className="size-5 text-terra" />
+              <div className="text-left">
+                <p className="font-medium text-ink truncate max-w-[200px] sm:max-w-xs">{file.name}</p>
+                <p className="text-[10px] text-ink-soft">{(file.size / 1024).toFixed(1)} KB</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <Upload className="size-5 text-ink-soft" />
+              <div>
+                <span className="font-semibold text-terra hover:underline">Pilih berkas dokumen</span>
+                <span className="text-ink-soft"> atau seret ke sini</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {error && (
+          <p role="alert" className="text-xs text-terra font-medium">
+            {error}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          {file && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={uploading}
+              onClick={() => setFile(null)}
+              className="text-xs text-ink-soft cursor-pointer"
+            >
+              Batal
+            </Button>
+          )}
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!file || uploading}
+            className="bg-terra text-white hover:bg-terra/90 text-xs px-4 cursor-pointer"
+          >
+            {uploading ? "Mengunggah & Menautkan..." : "Unggah & Tandai Selesai"}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export function TemuanDetailClient({ finding }: { finding: FindingView }) {
   const [related, setRelated] = useState<RelatedItem[] | null>(null);
   const [relatedError, setRelatedError] = useState<string | null>(null);
@@ -390,7 +556,14 @@ export function TemuanDetailClient({ finding }: { finding: FindingView }) {
                 <span className="font-semibold text-ink uppercase tracking-wider text-[10px]">
                   Rincian Bukti & Parameter
                 </span>
-                <span className="text-[10px] text-ink-soft font-medium">Ref: {meta.standard}</span>
+                <Link
+                  href={`/aturan?bab=${meta.bab}`}
+                  title={`Buka SAK EMKM ${meta.babTitle} di Aturan Akunio`}
+                  className="text-[10px] text-terra hover:underline font-medium inline-flex items-center gap-1"
+                >
+                  <span>Ref: {meta.standard}</span>
+                  <span>↗</span>
+                </Link>
               </div>
               <div className="space-y-1.5 pt-1">
                 {Object.entries(ev).length === 0 && (
@@ -416,16 +589,51 @@ export function TemuanDetailClient({ finding }: { finding: FindingView }) {
                 })}
               </div>
             </div>
+
+            {/* Rekomendasi Solusi Khusus per Jenis Masalah */}
             <div className="rounded-xl border border-terra/30 bg-terra/[0.06] p-4 text-xs space-y-2">
               <div className="flex items-center gap-2 text-terra font-semibold">
                 <IconSparkles className="size-4" />
-                <span>Rekomendasi Tindakan AI Doctor</span>
+                <span>Rekomendasi Tindakan Perbaikan</span>
               </div>
-              <p className="text-ink-soft leading-relaxed">
-                Sistem dapat membuat draf jurnal koreksi pembalik atau reklasifikasi saldo penyesuaian secara otomatis
-                mengikuti prinsip {meta.standard}. Draf dapat Anda periksa kembali sebelum diposting.
+              <p className="text-ink-soft leading-relaxed text-justify [text-justify:inter-word]">
+                {typeRecommendation(finding.type, meta.standard)}
               </p>
             </div>
+
+            {/* Form Penyelesaian Khusus: Unggah Bukti Transaksi */}
+            {finding.type === "missingReceipts" && (
+              <MissingReceiptUploadCard
+                findingId={finding.id}
+                isResolved={finding.status === "resolved"}
+                onUploaded={() => {
+                  void loadRelated();
+                }}
+              />
+            )}
+
+            {/* Opsi Khusus: Tanggal di Luar Periode */}
+            {finding.type === "oddDates" && finding.status === "open" && (
+              <div className="rounded-xl border border-rule bg-canvas/50 p-4 text-xs space-y-2">
+                <span className="font-semibold text-ink flex items-center gap-1.5">
+                  <IconClock className="size-4 text-terra" />
+                  Opsi Pengaturan Periode Fiskal
+                </span>
+                <p className="text-ink-soft leading-relaxed">
+                  Jika tanggal transaksi ini adalah periode pembukuan yang sah namun belum dibuka, Anda dapat membuka periode tersebut di menu pengaturan.
+                </p>
+                <div className="pt-1">
+                  <Link
+                    href="/pengaturan/periode"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-terra hover:underline"
+                  >
+                    Buka Pengaturan Periode
+                    <IconArrowRight className="size-3" />
+                  </Link>
+                </div>
+              </div>
+            )}
+
             {finding.status === "open" ? null : (
               <p className="flex items-center gap-2 rounded-xl border border-debit/25 bg-debit/[0.07] px-3.5 py-2.5 text-xs text-ink">
                 <IconCircleCheck className="size-4 text-debit shrink-0" />

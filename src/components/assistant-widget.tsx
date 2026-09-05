@@ -220,7 +220,7 @@ export function AssistantWidget() {
               </svg>
               <span className="absolute top-0.5 right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-paper" />
             </div>
-            <span className="font-display tracking-tight text-ink font-semibold">Akunio</span>
+            <span className="font-display tracking-tight text-ink font-semibold">Asisten</span>
           </button>
         </TooltipTrigger>
         <TooltipContent side="left" className="text-xs font-medium">
@@ -364,14 +364,14 @@ export function AssistantWidget() {
               emptyState={
                 <ConversationEmptyState
                   icon={<Sparkles className="size-8 text-terra" />}
-                  title="Halo! Ada yang bisa Akunio bantu?"
-                  description={`Akunio siap membantu pembukuan, mencatat transaksi dari nota, atau menjelaskan laporan di ${pageContext.label || "aplikasi"}.`}
+                  title="Asisten Pembukuan"
+                  description={`Ketik transaksi, tanyakan aturan akuntansi, atau minta ringkasan di ${pageContext.label || "halaman ini"}.`}
                 >
                   <Suggestions className="flex flex-col gap-2 mt-4 w-full text-left">
                     {pageContext.pathname.includes("/persediaan") ? (
                       <>
                         <Suggestion
-                          label="📦 Ekstrak & Input Barang dari File"
+                          label="Ekstrak & Input Barang dari File"
                           description="Unggah CSV/Excel atau beri daftar teks untuk dimasukkan ke katalog"
                           suggestion="Tolong bantu ekstrak dan daftarkan barang-barang ini ke master persediaan:"
                           onClick={(val) => {
@@ -380,9 +380,39 @@ export function AssistantWidget() {
                           }}
                         />
                         <Suggestion
-                          label="📋 Cek Daftar Stok Persediaan"
+                          label="Cek Daftar Stok Persediaan"
                           description="Lihat ringkasan barang dengan stok atau harga modalnya"
                           suggestion="Tampilkan daftar barang persediaan yang ada saat ini."
+                          onClick={(val) => {
+                            setInput(val);
+                            handleSendMessage(val);
+                          }}
+                        />
+                      </>
+                    ) : pageContext.pathname.includes("/aturan") ? (
+                      <>
+                        <Suggestion
+                          label="Tanya Aturan Bab Ini"
+                          description={pageContext.summary ? `Konsultasikan ${pageContext.summary}` : "Penerapan SAK EMKM terhadap kasus usaha Anda"}
+                          suggestion={pageContext.summary ? `Bagaimana contoh penerapan dan pencatatan jurnal untuk ${pageContext.summary} di usaha saya?` : "Bagaimana contoh pencatatan jurnal untuk aturan ini di usaha saya?"}
+                          onClick={(val) => {
+                            setInput(val);
+                            handleSendMessage(val);
+                          }}
+                        />
+                        <Suggestion
+                          label="Perbedaan dengan SAK Umum"
+                          description="Kemudahan dan simplifikasi untuk UMKM pada aturan ini"
+                          suggestion={`Apa perbedaan perlakuan akuntansi pada ${pageContext.summary || "bab ini"} dibandingkan SAK Umum / PSAK?`}
+                          onClick={(val) => {
+                            setInput(val);
+                            handleSendMessage(val);
+                          }}
+                        />
+                        <Suggestion
+                          label="Kriteria Pengakuan & Pengukuran"
+                          description="Syarat transaksi diakui dan diukur dalam laporan keuangan"
+                          suggestion={`Jelaskan syarat pengakuan dan pengukuran transaksi menurut ${pageContext.summary || "standar ini"}.`}
                           onClick={(val) => {
                             setInput(val);
                             handleSendMessage(val);
@@ -392,9 +422,9 @@ export function AssistantWidget() {
                     ) : (
                       <>
                         <Suggestion
-                          label="☀️ Briefing Keuangan Hari Ini"
+                          label="Briefing Keuangan Hari Ini"
                           description="Ringkasan kas masuk, kas keluar, dan tugas hari ini"
-                          suggestion="☀️ Berikan ringkasan briefing keuangan hari ini."
+                          suggestion="Berikan ringkasan briefing keuangan hari ini."
                           onClick={(val) => {
                             setInput(val);
                             handleSendMessage(val);
@@ -402,7 +432,7 @@ export function AssistantWidget() {
                         />
 
                         <Suggestion
-                          label="📊 Saldo Kas & Laba Berjalan"
+                          label="Saldo Kas & Laba Berjalan"
                           description="Cek posisi saldo bank dan performa laba tahun berjalan"
                           suggestion="Berapa saldo kas/bank dan laba bersih bulan berjalan?"
                           onClick={(val) => {

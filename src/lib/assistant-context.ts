@@ -18,6 +18,7 @@ const PATH_LABELS: Record<string, string> = {
   "/laporan/perubahan-ekuitas": "Perubahan Ekuitas",
   "/temuan": "Diagnosa & Anomali",
   "/pengaturan": "Pengaturan Akun & Periode",
+  "/aturan": "Standar SAK EMKM",
   "/persediaan/baru/batch": "Input Cepat Persediaan (Grid / Batch)",
   "/persediaan/baru": "Tambah Barang Persediaan",
   "/persediaan/opname": "Sesi Stok Opname",

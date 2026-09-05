@@ -315,10 +315,10 @@ export function SettingsClient({
               <div>
                 <h2 className="font-display text-base font-bold text-ink flex items-center gap-2">
                   <Bot className="size-5 text-terra" />
-                  <span>Kebijakan Otorisasi Akunio AI (Human-in-The-Loop)</span>
+                  <span>Otorisasi &amp; Persetujuan Jurnal</span>
                 </h2>
                 <p className="mt-0.5 text-xs text-ink-soft">
-                  Atur tingkat otonomi dan batas verifikasi sebelum Akunio AI membuat draf atau memposting jurnal ke buku besar.
+                  Atur batas verifikasi sebelum transaksi diposting ke buku besar.
                 </p>
               </div>
             </div>

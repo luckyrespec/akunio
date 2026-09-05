@@ -15,7 +15,8 @@ export function citationLabel(c: {
   bab: string;
   paragraph: string;
 }): string {
-  return `Dok ${c.docId} Bab ${c.bab} par. ${c.paragraph}`;
+  const cleanDoc = c.docId.replace(/-/g, " ");
+  return `${cleanDoc} Bab ${c.bab} Paragraf ${c.paragraph}`;
 }
 
 // Detail usulan akun baru: "kode · nama · induk <parentCode>" — hanya dari

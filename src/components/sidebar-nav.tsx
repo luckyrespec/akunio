@@ -14,6 +14,7 @@ import {
   IconReports,
   IconClosing,
   IconDoctor,
+  IconBookOpen,
   IconSettings,
   IconClose,
 } from "@/components/icons";
@@ -68,6 +69,7 @@ const NAVIGATION_GROUPS: NavGroup[] = [
       { href: "/laporan", label: "Laporan Keuangan", icon: IconReports },
       { href: "/tutup-buku", label: "Tutup Buku", icon: IconClosing },
       { href: "/temuan", label: "Diagnosa & Anomali", icon: IconDoctor },
+      { href: "/aturan", label: "Standar SAK EMKM", icon: IconBookOpen, match: (p: string) => p.startsWith("/aturan") },
     ],
   },
   {
@@ -145,7 +147,7 @@ export function SidebarNav({
                 ) : (
                   <>
                     <span className="truncate text-xs font-bold tracking-wide">
-                      Akunio AI
+                      Asisten Akunio
                     </span>
                     <kbd
                       className={cn(
@@ -162,7 +164,7 @@ export function SidebarNav({
               </Link>
             </TooltipTrigger>
             <TooltipContent side="right">
-              Akunio AI (Fitur Utama)
+              Asisten Akunio · Tanya &amp; Catat Transaksi
             </TooltipContent>
           </Tooltip>
         </div>

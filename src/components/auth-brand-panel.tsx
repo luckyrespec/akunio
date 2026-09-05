@@ -79,7 +79,7 @@ function LockedLedgerIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 const FEATURES: { icon: ComponentType<SVGProps<SVGSVGElement>>; label: string }[] = [
-  { icon: AgentIcon, label: "Asisten AI" },
+  { icon: AgentIcon, label: "Asisten Pembukuan" },
   { icon: LedgerIcon, label: "SAK EMKM" },
   { icon: CloudIcon, label: "Data Aman" },
   { icon: EaseIcon, label: "Awam Pun Bisa" },

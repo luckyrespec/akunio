@@ -27,3 +27,7 @@ export async function createProposal(q: Queryable, orgId: string, findingId: str
   const [row] = await q.insert(aiProposals).values({ orgId, findingId, draft: draft as never, ifrsCitation }).returning();
   return row;
 }
+export async function updateProposalStatus(q: Queryable, orgId: string, id: string, status: "pending" | "accepted" | "rejected") {
+  const [row] = await q.update(aiProposals).set({ status }).where(and(eq(aiProposals.orgId, orgId), eq(aiProposals.id, id))).returning();
+  return row ?? null;
+}

@@ -11,43 +11,55 @@ export interface FindingView {
   createdAt: string;
 }
 
-export function typeMetadata(t: string): { label: string; desc: string; standard: string } {
+export function typeMetadata(t: string): { label: string; desc: string; standard: string; bab: number; babTitle: string } {
   switch (t) {
     case "abnormalBalances":
       return {
         label: "Saldo Abnormal",
         desc: "Posisi saldo buku berlawanan dengan saldo normal akun (debit/kredit terbalik atau saldo minus).",
-        standard: "SAK EMKM Bab 3 / SAK ETAP",
+        standard: "SAK EMKM Bab 2 & 3 (Konsep Pengakuan & Penyajian Saldo Wajar)",
+        bab: 2,
+        babTitle: "Konsep dan Prinsip Pervasif",
       };
     case "duplicates":
       return {
         label: "Transaksi Duplikat",
         desc: "Ditemukan jurnal dengan memo, nilai nominal, dan alokasi akun yang identik.",
-        standard: "PSAK 25 (Koreksi Kesalahan Pencatatan)",
+        standard: "SAK EMKM Bab 7 Paragraf 7.16 (Koreksi Kesalahan Pencatatan Periode Berjalan)",
+        bab: 7,
+        babTitle: "Kebijakan Akuntansi, Estimasi, dan Kesalahan",
       };
     case "missingReceipts":
       return {
         label: "Bukti Transaksi Belum Terlampir",
         desc: "Pengeluaran material bernilai signifikan belum memiliki dokumen lampiran fisik atau faktur sah.",
-        standard: "SAK EMKM Bab 4 (Keandalan Dokumen Transaksi)",
+        standard: "SAK EMKM Bab 2 Paragraf 2.14 & Bab 6 (Keandalan Bukti Transaksi & CALK)",
+        bab: 2,
+        babTitle: "Konsep dan Prinsip Pervasif",
       };
     case "oddDates":
       return {
         label: "Tanggal di Luar Periode Aktif",
         desc: "Tanggal transaksi berada di luar rentang kalender pembukuan fiskal yang berstatus OPEN.",
-        standard: "SAK EMKM Bab 2 (Asas Akrual & Pisah Batas Periode)",
+        standard: "SAK EMKM Bab 2 Paragraf 2.19 (Asumsi Dasar Akrual & Pisah Batas Periode)",
+        bab: 2,
+        babTitle: "Konsep dan Prinsip Pervasif",
       };
     case "ratioAnomalies":
       return {
         label: "Anomali Fluktuasi Mutasi",
         desc: "Lonjakan volume debit/kredit melebihi 2× deviasi rata-rata historis akun buku besar.",
-        standard: "Analisis Volatilitas Finansial",
+        standard: "SAK EMKM Bab 2 Paragraf 2.17 (Materialitas & Signifikansi Transaksi)",
+        bab: 2,
+        babTitle: "Konsep dan Prinsip Pervasif",
       };
     default:
       return {
         label: t,
         desc: "Penyimpangan pencatatan terdeteksi oleh sistem pemeriksa jurnal otomatis.",
-        standard: "Kepatuhan Buku Besar",
+        standard: "Standar Akuntansi Keuangan EMKM 2024",
+        bab: 1,
+        babTitle: "Ruang Lingkup",
       };
   }
 }

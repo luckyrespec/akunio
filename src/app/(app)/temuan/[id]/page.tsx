@@ -9,6 +9,8 @@ import { TemuanDetailActions } from "./temuan-detail-actions";
 import { TemuanDetailClient } from "./temuan-detail-client";
 import type { FindingView } from "../finding-meta";
 
+import { cn } from "@/lib/utils";
+
 interface Props {
   params: Promise<{ id: string }>;
 }
@@ -41,8 +43,29 @@ export default async function TemuanDetailPage({ params }: Props) {
       </div>
       <PageHeader
         title={`Temuan #${finding.id.slice(0, 8)}`}
-        eyebrow="Detail diagnosa Doctor AI"
-        actions={<TemuanDetailActions findingId={finding.id} status={finding.status} />}
+        eyebrow="Rincian diagnosa dan rekomendasi perbaikan pembukuan"
+        actions={
+          finding.status === "open" ? (
+            <TemuanDetailActions
+              findingId={finding.id}
+              findingType={finding.type}
+              status={finding.status}
+            />
+          ) : (
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
+                  finding.status === "resolved"
+                    ? "border-debit/30 bg-debit/10 text-debit"
+                    : "border-rule bg-canvas text-ink-soft",
+                )}
+              >
+                {finding.status === "resolved" ? "✓ Terselesaikan" : "Diabaikan"}
+              </span>
+            </div>
+          )
+        }
       />
       <TemuanDetailClient finding={finding} />
     </section>

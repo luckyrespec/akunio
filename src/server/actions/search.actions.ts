@@ -8,18 +8,22 @@ import { listInvoicesRepo } from "@/server/db/repos/invoices.repo";
 import { invoiceMatchesQuery, parseNominalMinor } from "@/server/search/match";
 import { Money } from "@/core/money/money";
 
+import { searchSakDocs, type SakSearchResult } from "@/server/db/repos/sak-docs.repo";
+
 export interface GlobalSearchResult {
   pages: Array<{ href: string; label: string }>;
   journals: Array<{ id: string; number: string; memo: string; entryDate: string; totalText: string }>;
   accounts: Array<{ id: string; code: string; name: string }>;
   invoices: Array<{ id: string; invoiceNumber: string; contactName: string; status: string; totalText: string }>;
   assets: Array<{ id: string; code: string; name: string; status: string; costText: string }>;
+  rules: SakSearchResult[];
 }
 
 const PAGES = [
   { href: "/dasbor", label: "Dasbor" },
   { href: "/jurnal", label: "Jurnal Umum" },
-  { href: "/asisten", label: "Asisten AI" },
+  { href: "/asisten", label: "Asisten Akunio" },
+  { href: "/aturan", label: "Aturan SAK EMKM (Buku Pedoman)" },
   { href: "/buku-besar", label: "Buku Besar" },
   { href: "/laporan", label: "Laporan" },
   { href: "/laporan/laba-rugi", label: "Laporan Laba Rugi" },
@@ -31,7 +35,7 @@ const PAGES = [
 export async function searchGlobalAction(term: string): Promise<GlobalSearchResult> {
   const ctx = await requireContext();
   const q = term.trim().toLowerCase();
-  const empty: GlobalSearchResult = { pages: [], journals: [], accounts: [], invoices: [], assets: [] };
+  const empty: GlobalSearchResult = { pages: [], journals: [], accounts: [], invoices: [], assets: [], rules: [] };
   if (!q || term.trim().length < 2) return empty;
 
   const pages = PAGES.filter((p) => p.label.toLowerCase().includes(q) || p.href.includes(q)).slice(0, 3);
@@ -69,6 +73,8 @@ export async function searchGlobalAction(term: string): Promise<GlobalSearchResu
       totalText: Money.fromMinor(inv.totalMinor).formatIdr(),
     }));
 
+  const rules = await searchSakDocs(term.trim(), 4);
+
   return {
     pages,
     journals,
@@ -78,5 +84,6 @@ export async function searchGlobalAction(term: string): Promise<GlobalSearchResu
       ...a,
       costText: Money.fromMinor(a.acquisitionCostMinor).formatIdr(),
     })),
+    rules,
   };
 }

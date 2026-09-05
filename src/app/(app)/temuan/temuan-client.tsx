@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Money } from "@/core/money/money";
 import {
   IconArrowRight,
   IconCircleCheck,
@@ -30,6 +31,14 @@ import {
   typeMetadata,
   type FindingView,
 } from "./finding-meta";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface TemuanClientProps {
   initialFindings: FindingView[];
@@ -59,18 +68,17 @@ function summarizeEvidenceDetailed(type: string, evidence: Record<string, unknow
       const memo = typeof evidence.memo === "string" ? `"${evidence.memo}"` : "transaksi terkait";
       return `Duplikasi entri terdeteksi pada ${memo}. Perlu diperiksa apakah terjadi dobel entri dari mutasi rekening.`;
     }
-    if (type === "missingReceipts" && evidence.amountMinor !== undefined) {
-      let amt: string;
-      try {
-        amt = evidenceValueText(evidence.amountMinor, true);
-      } catch {
-        amt = String(evidence.amountMinor);
-      }
-      const num = evidence.entryNumber ? `(${evidence.entryNumber})` : "";
-      return `Pengeluaran ${amt} pada jurnal ${num} belum diverifikasi dengan lampiran dokumen sah.`;
+    if (type === "missingReceipts") {
+      const memo = typeof evidence.memo === "string" ? ` pada jurnal "${evidence.memo}"` : "";
+      const amt = typeof evidence.amountMinor === "string" ? ` ${Money.fromMinor(BigInt(evidence.amountMinor)).formatIdr()}` : "";
+      return `Pengeluaran material${amt}${memo} belum diverifikasi dengan lampiran dokumen sah.`;
     }
-    if (type === "oddDates" && typeof evidence.dateISO === "string") {
-      return `Transaksi bertanggal ${evidence.dateISO} diposting di luar periode fiskal terbuka saat ini.`;
+    if (type === "oddDates") {
+      const date = typeof evidence.dateISO === "string" ? ` tanggal ${evidence.dateISO}` : "";
+      return `Entri dibukukan pada${date} di luar rentang tanggal buku yang aktif (OPEN).`;
+    }
+    if (type === "ratioAnomalies") {
+      return "Terjadi deviasi signifikan pada volume debit/kredit yang melebihi batas batas ambang deviasi.";
     }
   } catch {
     /* fallback generic */
@@ -84,39 +92,81 @@ function summarizeEvidenceDetailed(type: string, evidence: Record<string, unknow
 
 export function TemuanClient({ initialFindings, stats }: TemuanClientProps) {
   const router = useRouter();
-  const [findings] = useState<FindingView[]>(initialFindings);
+  const [findings, setFindings] = useState<FindingView[]>(initialFindings);
+  const [statusFilter, setStatusFilter] = useState<"open" | "resolved" | "dismissed">("open");
   const [severityFilter, setSeverityFilter] = useState<"ALL" | "HIGH" | "MEDIUM" | "LOW">("ALL");
   const [isScanning, setIsScanning] = useState(false);
-  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  
+  // State untuk modal hasil pemindaian
+  const [scanResult, setScanResult] = useState<{
+    totalScanned: number;
+    healthScore: number;
+    newFindingsCount: number;
+    breakdown: {
+      abnormalBalances: number;
+      duplicates: number;
+      missingReceipts: number;
+      oddDates: number;
+    };
+  } | null>(null);
+  const [scanModalOpen, setScanModalOpen] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
 
-  // Kalkulasi Skor Kesehatan Buku (Health Score)
-  const highCount = findings.filter((f) => f.severity === "HIGH").length;
-  const mediumCount = findings.filter((f) => f.severity === "MEDIUM").length;
-  const lowCount = findings.filter((f) => f.severity === "LOW").length;
+  // Filter temuan berdasarkan status
+  const openFindings = findings.filter((f) => f.status === "open");
+  const resolvedFindings = findings.filter((f) => f.status === "resolved");
+  const dismissedFindings = findings.filter((f) => f.status === "dismissed");
 
-  const penalty = highCount * 18 + mediumCount * 8 + lowCount * 4;
+  const activeFindings = statusFilter === "open"
+    ? openFindings
+    : statusFilter === "resolved"
+    ? resolvedFindings
+    : dismissedFindings;
+
+  // Kalkulasi Skor Kesehatan Buku (Health Score) — hanya temuan OPEN yang mengurangi skor
+  const openHigh = openFindings.filter((f) => f.severity === "HIGH").length;
+  const openMedium = openFindings.filter((f) => f.severity === "MEDIUM").length;
+  const openLow = openFindings.filter((f) => f.severity === "LOW").length;
+
+  const penalty = openHigh * 18 + openMedium * 8 + openLow * 4;
   const healthScore = Math.max(10, Math.min(100, 100 - penalty));
 
+  // Hitung jumlah severity dalam tab yang sedang aktif
+  const highCount = activeFindings.filter((f) => f.severity === "HIGH").length;
+  const mediumCount = activeFindings.filter((f) => f.severity === "MEDIUM").length;
+  const lowCount = activeFindings.filter((f) => f.severity === "LOW").length;
+
   const visibleFindings = severityFilter === "ALL"
-    ? findings
-    : findings.filter((f) => f.severity === severityFilter);
+    ? activeFindings
+    : activeFindings.filter((f) => f.severity === severityFilter);
 
   // Trigger Scan Manual
   async function handleTriggerScan() {
     setIsScanning(true);
-    setScanMessage(null);
+    setScanError(null);
     try {
       const res = await triggerDoctorScanAction();
       if (res.ok && res.data) {
-        setScanMessage(
-          `Pemeriksaan tuntas! ${res.data.totalScannedEntries} jurnal dipindai. Skor Integritas: ${res.data.healthScore}%.`,
-        );
+        setScanResult({
+          totalScanned: res.data.totalScannedEntries,
+          healthScore: res.data.healthScore,
+          newFindingsCount: res.data.newFindingsCount,
+          breakdown: res.data.breakdown,
+        });
+        if (res.data.allFindings) {
+          setFindings(res.data.allFindings as FindingView[]);
+        } else if (res.data.openFindings) {
+          setFindings(res.data.openFindings as FindingView[]);
+        }
+        setScanModalOpen(true);
         router.refresh();
       } else {
-        setScanMessage(res.error ?? "Gagal memindai pembukuan.");
+        setScanError(res.error ?? "Gagal memindai pembukuan.");
+        setScanModalOpen(true);
       }
     } catch {
-      setScanMessage("Terjadi kesalahan koneksi saat memindai.");
+      setScanError("Terjadi kesalahan koneksi saat memindai.");
+      setScanModalOpen(true);
     } finally {
       setIsScanning(false);
     }
@@ -162,22 +212,46 @@ export function TemuanClient({ initialFindings, stats }: TemuanClientProps) {
                   </h2>
                 </div>
                 <p className="max-w-xl text-xs sm:text-sm text-ink-soft leading-relaxed">
-                  Doctor AI memeriksa konsistensi jurnal, saldo abnormal akun neraca, kepatuhan bukti pengeluaran,
-                  serta batas periode pelaporan secara berkala.
+                  Pemeriksa pembukuan meninjau konsistensi jurnal, saldo abnormal pada akun neraca, kelengkapan bukti transaksi,
+                  serta pisah batas periode pelaporan secara berkala.
                 </p>
                 <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-ink-soft">
                   <span className="flex items-center gap-1.5">
                     <IconFileSpreadsheet className="size-3.5 text-terra" />
                     <span className="tnum font-medium text-ink">{stats.totalScanned}</span> Jurnal Terekam
                   </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="size-2 rounded-full bg-terra" />
-                    <span className="tnum font-medium text-ink">{findings.length}</span> Temuan Terbuka
-                  </span>
-                  <span className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("open");
+                      setSeverityFilter("ALL");
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors cursor-pointer",
+                      statusFilter === "open"
+                        ? "bg-canvas font-semibold text-ink border border-rule/70"
+                        : "hover:text-ink",
+                    )}
+                  >
+                    <span className={cn("size-2 rounded-full", openFindings.length > 0 ? "bg-terra" : "bg-debit")} />
+                    <span className="tnum font-medium text-ink">{openFindings.length}</span> Perlu Tindakan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("resolved");
+                      setSeverityFilter("ALL");
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors cursor-pointer",
+                      statusFilter === "resolved"
+                        ? "bg-canvas font-semibold text-debit border border-debit/30"
+                        : "hover:text-ink",
+                    )}
+                  >
                     <span className="size-2 rounded-full bg-debit" />
-                    <span className="tnum font-medium text-ink">{stats.resolvedCount}</span> Terselesaikan
-                  </span>
+                    <span className="tnum font-medium text-ink">{resolvedFindings.length}</span> Terselesaikan
+                  </button>
                 </div>
               </div>
             </div>
@@ -188,38 +262,117 @@ export function TemuanClient({ initialFindings, stats }: TemuanClientProps) {
                 variant="outline"
                 onClick={handleTriggerScan}
                 disabled={isScanning}
-                className="group relative flex items-center justify-center gap-2 rounded-xl border-rule/80 bg-canvas/40 px-4 py-2.5 text-xs font-semibold text-ink hover:border-terra/40 hover:bg-canvas transition-colors shadow-2xs"
+                className="group relative flex items-center justify-center gap-2 rounded-xl border-rule/80 bg-canvas/40 px-4 py-2.5 text-xs font-semibold text-ink hover:border-terra/40 hover:bg-canvas transition-colors shadow-2xs cursor-pointer"
               >
                 <IconRefresh className={cn("size-3.5 text-terra transition-transform", isScanning && "animate-spin")} />
                 <span>{isScanning ? "Memindai Jurnal..." : "Pindai Ulang Sekarang"}</span>
               </Button>
             </div>
           </div>
-
-          {/* Notifikasi feedback hasil scan manual */}
-          {scanMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 flex items-center gap-2 rounded-xl border border-terra/30 bg-terra/[0.08] px-3.5 py-2 text-xs text-ink"
-            >
-              <IconSparkles className="size-3.5 text-terra shrink-0" />
-              <span>{scanMessage}</span>
-            </motion.div>
-          )}
         </div>
       </Reveal>
 
-      {/* 2. FILTER SEVERITY TABS */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* 2. TAB NAVIGASI STATUS & FILTER TINGKAT KEPARAHAN */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* Navigasi Status Utama (Perlu Tindakan vs Riwayat Selesai) */}
         <div
           className="flex items-center gap-1 rounded-xl border border-rule bg-paper p-1 text-xs shadow-2xs w-fit"
+          role="tablist"
+          aria-label="Filter status temuan"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={statusFilter === "open"}
+            onClick={() => {
+              setStatusFilter("open");
+              setSeverityFilter("ALL");
+            }}
+            disabled={isScanning}
+            className={cn(
+              "rounded-lg px-3.5 py-1.5 font-medium transition-colors focus-ring flex items-center gap-2 cursor-pointer",
+              statusFilter === "open"
+                ? "bg-canvas text-ink font-semibold shadow-2xs border border-rule/70"
+                : "text-ink-soft hover:text-ink hover:bg-canvas/50",
+              isScanning && "opacity-50 cursor-not-allowed",
+            )}
+          >
+            <span className={cn("size-2 rounded-full", openFindings.length > 0 ? "bg-terra" : "bg-debit")} />
+            <span>Perlu Tindakan</span>
+            <span
+              className={cn(
+                "tnum text-[11px] rounded-full px-1.5 py-0.2 font-semibold",
+                statusFilter === "open" ? "bg-terra/15 text-terra" : "bg-canvas text-ink-soft",
+              )}
+            >
+              {openFindings.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={statusFilter === "resolved"}
+            onClick={() => {
+              setStatusFilter("resolved");
+              setSeverityFilter("ALL");
+            }}
+            disabled={isScanning}
+            className={cn(
+              "rounded-lg px-3.5 py-1.5 font-medium transition-colors focus-ring flex items-center gap-2 cursor-pointer",
+              statusFilter === "resolved"
+                ? "bg-canvas text-debit font-semibold shadow-2xs border border-debit/30"
+                : "text-ink-soft hover:text-ink hover:bg-canvas/50",
+              isScanning && "opacity-50 cursor-not-allowed",
+            )}
+          >
+            <IconCircleCheck className="size-3.5 text-debit" />
+            <span>Riwayat Terselesaikan</span>
+            <span
+              className={cn(
+                "tnum text-[11px] rounded-full px-1.5 py-0.2 font-semibold",
+                statusFilter === "resolved" ? "bg-debit/15 text-debit" : "bg-canvas text-ink-soft",
+              )}
+            >
+              {resolvedFindings.length}
+            </span>
+          </button>
+
+          {dismissedFindings.length > 0 && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === "dismissed"}
+              onClick={() => {
+                setStatusFilter("dismissed");
+                setSeverityFilter("ALL");
+              }}
+              disabled={isScanning}
+              className={cn(
+                "rounded-lg px-3 py-1.5 font-medium transition-colors focus-ring flex items-center gap-1.5 cursor-pointer",
+                statusFilter === "dismissed"
+                  ? "bg-canvas text-ink font-semibold shadow-2xs border border-rule/70"
+                  : "text-ink-soft hover:text-ink hover:bg-canvas/50",
+                isScanning && "opacity-50 cursor-not-allowed",
+              )}
+            >
+              <span>Diabaikan</span>
+              <span className="tnum text-[11px] rounded-full bg-canvas px-1.5 py-0.2 text-ink-soft">
+                {dismissedFindings.length}
+              </span>
+            </button>
+          )}
+        </div>
+
+        {/* Filter Tingkat Keparahan (Pill Tabs) */}
+        <div
+          className="flex items-center gap-1 rounded-xl border border-rule/70 bg-paper/60 p-1 text-xs shadow-2xs w-fit"
           role="tablist"
           aria-label="Filter tingkat keparahan"
         >
           {(
             [
-              { key: "ALL", label: "Semua Temuan", count: findings.length },
+              { key: "ALL", label: "Semua", count: activeFindings.length },
               { key: "HIGH", label: "Kritis", count: highCount },
               { key: "MEDIUM", label: "Perhatian", count: mediumCount },
               { key: "LOW", label: "Informasi", count: lowCount },
@@ -233,17 +386,19 @@ export function TemuanClient({ initialFindings, stats }: TemuanClientProps) {
                 role="tab"
                 aria-selected={isTabActive}
                 onClick={() => setSeverityFilter(s.key)}
+                disabled={isScanning}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 font-medium transition-colors focus-ring flex items-center gap-1.5",
+                  "rounded-lg px-2.5 py-1 font-medium transition-colors focus-ring flex items-center gap-1.5 cursor-pointer",
                   isTabActive
                     ? "bg-canvas text-terra font-semibold shadow-2xs border border-rule/60"
                     : "text-ink-soft hover:text-ink hover:bg-canvas/50",
+                  isScanning && "opacity-50 cursor-not-allowed",
                 )}
               >
                 <span>{s.label}</span>
                 <span
                   className={cn(
-                    "tnum text-[11px] rounded-full px-1.5 py-0.2",
+                    "tnum text-[10px] rounded-full px-1.5 py-0.2",
                     isTabActive ? "bg-terra/15 text-terra font-bold" : "bg-canvas text-ink-soft",
                   )}
                 >
@@ -255,20 +410,67 @@ export function TemuanClient({ initialFindings, stats }: TemuanClientProps) {
         </div>
       </div>
 
-      {/* 3. DAFTAR KARTU TEMUAN */}
-      {visibleFindings.length === 0 ? (
+      {/* 3. DAFTAR KARTU TEMUAN ATAU SKELETON LOADER SAAT MEMINDAI */}
+      {isScanning ? (
+        /* SKELETON LOADER SELAMA PROSES PINDAI ULANG */
+        <div className="space-y-3" aria-label="Memindai buku besar...">
+          <div className="flex items-center gap-2 px-1 py-1 text-xs font-semibold text-terra animate-pulse">
+            <IconRefresh className="size-4 animate-spin" />
+            <span>Sedang memeriksa transaksi dan menganalisis kepatuhan SAK EMKM...</span>
+          </div>
+          {[1, 2, 3].map((n) => (
+            <div
+              key={n}
+              className="matte-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-rule bg-paper p-4"
+            >
+              <div className="flex items-start gap-3.5 flex-1">
+                <Skeleton className="size-9 rounded-lg shrink-0" />
+                <div className="space-y-2.5 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-32 rounded-md" />
+                    <Skeleton className="h-4 w-20 rounded-full" />
+                    <Skeleton className="h-3 w-16 rounded-md" />
+                  </div>
+                  <Skeleton className="h-3 w-3/4 rounded-md" />
+                  <Skeleton className="h-4 w-44 rounded-md" />
+                </div>
+              </div>
+              <Skeleton className="h-7 w-28 rounded-lg shrink-0" />
+            </div>
+          ))}
+        </div>
+      ) : visibleFindings.length === 0 ? (
         <Reveal>
           <div className="matte-card flex flex-col items-center justify-center rounded-2xl border border-rule bg-paper px-6 py-16 text-center shadow-xs">
-            <div className="flex size-12 items-center justify-center rounded-full bg-debit/10 text-debit mb-3">
-              <IconCircleCheck className="size-6" />
+            <div
+              className={cn(
+                "flex size-12 items-center justify-center rounded-full mb-3",
+                statusFilter === "resolved" ? "bg-canvas text-debit border border-rule" : "bg-debit/10 text-debit",
+              )}
+            >
+              {statusFilter === "resolved" ? (
+                <IconShieldCheck className="size-6 text-debit" />
+              ) : (
+                <IconCircleCheck className="size-6" />
+              )}
             </div>
             <h3 className="font-display text-base font-semibold text-ink">
-              {severityFilter === "ALL"
-                ? "Tidak Ada Temuan — Buku Besar Rapi"
-                : `Tidak ada temuan dengan tingkat keparahan ${severityFilter}.`}
+              {statusFilter === "open"
+                ? severityFilter === "ALL"
+                  ? "Tidak Ada Temuan yang Perlu Tindakan"
+                  : `Tidak ada temuan terbuka dengan tingkat keparahan ${severityFilter}.`
+                : statusFilter === "resolved"
+                ? severityFilter === "ALL"
+                  ? "Belum Ada Riwayat Temuan yang Terselesaikan"
+                  : `Tidak ada temuan selesai dengan tingkat keparahan ${severityFilter}.`
+                : "Tidak Ada Temuan yang Diabaikan"}
             </h3>
             <p className="mt-1.5 max-w-md text-xs text-ink-soft leading-relaxed">
-              Semua entri jurnal berada dalam toleransi kepatuhan standar akuntansi dan kaidah debit/kredit yang wajar.
+              {statusFilter === "open"
+                ? "Semua entri jurnal dan akun neraca telah berada dalam batas kepatuhan standar akuntansi tanpa anomali terbuka."
+                : statusFilter === "resolved"
+                ? "Temuan yang telah Anda bereskan, posting koreksinya, atau tandai selesai akan tersimpan rapi di sini untuk rekam jejak audit."
+                : "Temuan yang Anda abaikan akan dikelompokkan di sini."}
             </p>
           </div>
         </Reveal>
@@ -280,33 +482,63 @@ export function TemuanClient({ initialFindings, stats }: TemuanClientProps) {
             const sev = severityMeta(f.severity);
             const dateFormatted = formatFindingDate(f.createdAt);
             const summary = summarizeEvidenceDetailed(f.type, f.evidence);
+            const isResolved = f.status === "resolved";
+            const isDismissed = f.status === "dismissed";
 
             return (
               <motion.div key={f.id} variants={staggerItem}>
-                <Link
-                  href={`/temuan/${f.id}`}
+                <div
+                  role="article"
                   aria-label={`${meta.label}, ${sev.label}`}
-                  className="matte-card group flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-rule bg-paper p-4 text-left transition-all duration-200 hover:border-terra/40 hover:bg-canvas/50 hover:shadow-xs focus-ring"
+                  onClick={() => router.push(`/temuan/${f.id}`)}
+                  className={cn(
+                    "matte-card group flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border p-4 text-left transition-all duration-200 hover:shadow-xs cursor-pointer focus-ring",
+                    isResolved
+                      ? "border-rule/70 bg-paper/70 hover:border-debit/40 hover:bg-canvas/40"
+                      : isDismissed
+                      ? "border-rule/60 bg-canvas/30 opacity-75 hover:opacity-100"
+                      : "border-rule bg-paper hover:border-terra/40 hover:bg-canvas/50",
+                  )}
                 >
                   {/* Kolom Kiri: Ikon & Deskripsi Inti */}
                   <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-rule/80 bg-canvas text-terra shadow-2xs mt-0.5">
-                      <Icon className="size-4" />
+                    <div
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-lg border shadow-2xs mt-0.5",
+                        isResolved
+                          ? "border-debit/20 bg-debit/10 text-debit"
+                          : "border-rule/80 bg-canvas text-terra",
+                      )}
+                    >
+                      {isResolved ? <IconCircleCheck className="size-4 text-debit" /> : <Icon className="size-4" />}
                     </div>
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-semibold text-ink tracking-tight">
                           {meta.label}
                         </span>
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                            sev.badgeClass,
-                          )}
-                        >
-                          <span className={cn("size-1.5 rounded-full", sev.dot)} />
-                          {sev.label}
-                        </span>
+
+                        {isResolved ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-debit/30 bg-debit/10 px-2 py-0.5 text-[10px] font-semibold text-debit">
+                            <span className="size-1.5 rounded-full bg-debit" />
+                            Terselesaikan
+                          </span>
+                        ) : isDismissed ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-rule bg-canvas px-2 py-0.5 text-[10px] font-medium text-ink-soft">
+                            Diabaikan
+                          </span>
+                        ) : (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                              sev.badgeClass,
+                            )}
+                          >
+                            <span className={cn("size-1.5 rounded-full", sev.dot)} />
+                            {sev.label}
+                          </span>
+                        )}
+
                         <span className="text-[11px] text-ink-soft/70">
                           {dateFormatted}
                         </span>
@@ -315,26 +547,129 @@ export function TemuanClient({ initialFindings, stats }: TemuanClientProps) {
                         {summary}
                       </p>
                       <div className="pt-0.5">
-                        <span className="inline-block text-[10px] font-medium text-ink-soft/80 bg-canvas px-2 py-0.5 rounded border border-rule/50">
-                          Standar: {meta.standard}
-                        </span>
+                        <Link
+                          href={`/aturan?bab=${meta.bab}`}
+                          title={`Buka SAK EMKM ${meta.babTitle} di Aturan Akunio`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 text-[10px] font-medium text-ink-soft/90 bg-canvas hover:bg-paper-raised px-2.5 py-0.5 rounded-md border border-rule hover:border-terra/40 hover:text-terra transition-colors"
+                        >
+                          <span className="font-semibold text-terra">Standar:</span>
+                          <span>{meta.standard}</span>
+                          <span className="text-terra">↗</span>
+                        </Link>
                       </div>
                     </div>
                   </div>
 
                   {/* Kolom Kanan: Aksi Cepat / Preview */}
                   <div className="flex items-center justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-rule/40">
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-terra group-hover:underline">
-                      Periksa & Koreksi
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 text-xs font-semibold group-hover:underline",
+                        isResolved ? "text-ink hover:text-terra" : "text-terra",
+                      )}
+                    >
+                      {isResolved ? "Lihat Rincian Selesai" : isDismissed ? "Lihat Rincian" : "Periksa & Koreksi"}
                       <IconArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
                     </span>
                   </div>
-                </Link>
+                </div>
               </motion.div>
             );
           })}
         </Stagger>
       )}
+
+      {/* 4. MODAL HASIL PEMINDAIAN AKUNIO DOCTOR */}
+      <Dialog open={scanModalOpen} onOpenChange={setScanModalOpen}>
+        <DialogContent className="max-w-md rounded-2xl border-rule bg-paper p-6 shadow-lg">
+          <DialogHeader className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-terra/10 text-terra border border-terra/20">
+                <IconSparkles className="size-5" />
+              </div>
+              <div>
+                <DialogTitle className="font-serif text-lg font-bold text-ink">
+                  {scanError ? "Pemeriksaan Terkendala" : "Hasil Pemeriksaan Pembukuan"}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-ink-soft">
+                  {scanError ? "Terjadi kendala saat menganalisis buku besar" : "Audit integritas buku selesai dijalankan"}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {scanError ? (
+            <div className="my-3 rounded-xl border border-terra/30 bg-terra/10 p-4 text-xs text-ink leading-relaxed">
+              <p className="font-semibold text-terra">Keterangan Galat:</p>
+              <p className="mt-1">{scanError}</p>
+            </div>
+          ) : scanResult ? (
+            <div className="my-4 space-y-4">
+              {/* Stat Ringkasan dalam Modal */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-rule/80 bg-canvas/60 p-3.5 text-center">
+                  <span className="text-[11px] font-medium text-ink-soft uppercase tracking-wider block">
+                    Skor Integritas
+                  </span>
+                  <span className="tnum font-serif text-3xl font-bold text-ink mt-0.5 block">
+                    {scanResult.healthScore}%
+                  </span>
+                  <span className="text-[10px] text-ink-soft">
+                    {scanResult.healthScore >= 85 ? "Sangat Sehat" : "Perlu Penyesuaian"}
+                  </span>
+                </div>
+
+                <div className="rounded-xl border border-rule/80 bg-canvas/60 p-3.5 text-center">
+                  <span className="text-[11px] font-medium text-ink-soft uppercase tracking-wider block">
+                    Jurnal Dipindai
+                  </span>
+                  <span className="tnum font-serif text-3xl font-bold text-ink mt-0.5 block">
+                    {scanResult.totalScanned}
+                  </span>
+                  <span className="text-[10px] text-ink-soft">
+                    Transaksi Terverifikasi
+                  </span>
+                </div>
+              </div>
+
+              {/* Rincian temuan anomali */}
+              <div className="rounded-xl border border-rule bg-canvas/40 p-3.5 space-y-2 text-xs">
+                <span className="font-semibold text-ink text-[11px] uppercase tracking-wider block border-b border-rule/60 pb-1.5">
+                  Rincian Anomali SAK EMKM:
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-ink-soft pt-1">
+                  <div className="flex items-center justify-between bg-paper px-2.5 py-1.5 rounded-lg border border-rule/50">
+                    <span>Saldo Terbalik:</span>
+                    <strong className="text-ink font-mono">{scanResult.breakdown.abnormalBalances}</strong>
+                  </div>
+                  <div className="flex items-center justify-between bg-paper px-2.5 py-1.5 rounded-lg border border-rule/50">
+                    <span>Duplikasi Entri:</span>
+                    <strong className="text-ink font-mono">{scanResult.breakdown.duplicates}</strong>
+                  </div>
+                  <div className="flex items-center justify-between bg-paper px-2.5 py-1.5 rounded-lg border border-rule/50">
+                    <span>Tanpa Bukti Dok:</span>
+                    <strong className="text-ink font-mono">{scanResult.breakdown.missingReceipts}</strong>
+                  </div>
+                  <div className="flex items-center justify-between bg-paper px-2.5 py-1.5 rounded-lg border border-rule/50">
+                    <span>Di Luar Periode:</span>
+                    <strong className="text-ink font-mono">{scanResult.breakdown.oddDates}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex justify-end pt-2">
+            <Button
+              onClick={() => setScanModalOpen(false)}
+              className="bg-terra text-white hover:bg-terra-hover px-5 text-xs font-semibold rounded-xl"
+            >
+              Lihat Daftar Temuan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

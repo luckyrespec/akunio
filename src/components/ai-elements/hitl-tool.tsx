@@ -57,18 +57,18 @@ export function HitlTool({
           ) : (
             <ShieldCheck className="size-4 text-emerald-600" />
           )}
-          <span>{allowAll ? "Mode Eksekusi Otomatis" : "Mode Izin Transaksi"}</span>
+          <span>{allowAll ? "Pencatatan Otomatis" : "Izin Setiap Transaksi"}</span>
         </div>
 
         <p className="mt-1.5 text-[11px] leading-relaxed text-ink-soft">
           {allowAll
-            ? "Akunio langsung memposting jurnal dan mengeksekusi transaksi secara otomatis tanpa meminta konfirmasi manual."
-            : "Aman dan terkendali. Setiap pencatatan transaksi, pembuatan jurnal, atau perubahan akun wajib Anda setujui terlebih dahulu."}
+            ? "Jurnal langsung dicatat ke buku besar tanpa konfirmasi tambahan."
+            : "Setiap draf transaksi atau perubahan akun wajib Anda setujui terlebih dahulu sebelum diposting."}
         </p>
 
         <div className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-canvas/70 px-2 py-1 text-[11px] font-medium text-ink-soft border border-rule/50">
           <Info className="size-3 text-terra shrink-0" />
-          <span>Klik tombol untuk beralih mode.</span>
+          <span>Klik tombol untuk mengganti mode.</span>
         </div>
       </PopoverContent>
     </Popover>

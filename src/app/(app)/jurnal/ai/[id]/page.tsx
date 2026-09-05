@@ -26,9 +26,9 @@ export default async function ReviewPage({
   if (status !== "PENDING") {
     return (
       <section className="max-w-2xl">
-        <Link href="/jurnal" className="inline-flex items-center gap-1 text-xs text-ink-soft underline">
+        <Link href="/jurnal?tab=draf" className="inline-flex items-center gap-1 text-xs text-ink-soft underline">
           <ArrowLeft className="size-3" />
-          Jurnal Umum
+          Draf Menunggu Review
         </Link>
         <h1 className="mt-2 font-display text-2xl sm:text-3xl font-semibold tracking-tight text-ink">
           Draft sudah diproses
@@ -101,9 +101,9 @@ export default async function ReviewPage({
 
   return (
     <section>
-      <Link href="/jurnal" className="inline-flex items-center gap-1 text-xs text-ink-soft underline">
+      <Link href="/jurnal?tab=draf" className="inline-flex items-center gap-1 text-xs text-ink-soft hover:text-terra transition-colors">
         <ArrowLeft className="size-3" />
-        Jurnal Umum
+        Kembali ke Draf Menunggu Review
       </Link>
       <div className="mt-2">
         <ReviewClient

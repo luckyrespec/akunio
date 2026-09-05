@@ -83,7 +83,7 @@ export function AsistenSidebar({
       <div className="flex h-14 items-center justify-between px-3.5 border-b border-rule shrink-0">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-terra" />
-          <span className="font-display font-semibold text-sm text-ink tracking-tight">Akunio AI</span>
+          <span className="font-display font-semibold text-sm text-ink tracking-tight">Asisten Akunio</span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -137,7 +137,7 @@ export function AsistenSidebar({
 
       {/* Chats Section Header */}
       <div className="px-3.5 pt-2 pb-1 text-[11px] font-semibold text-ink-soft uppercase tracking-wider">
-        Chats
+        Riwayat Percakapan
       </div>
 
       {/* Threads List */}

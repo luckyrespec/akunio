@@ -403,8 +403,8 @@ export default function AsistenClient({
                 emptyState={
                   <ConversationEmptyState
                     icon={<Sparkles className="size-10 text-terra" />}
-                    title="Ada yang bisa Akunio bantu hari ini?"
-                    description="Konsultasikan pembukuan, minta ringkasan laporan keuangan, atau catat transaksi langsung dari foto nota."
+                    title="Mulai pencatatan atau konsultasi"
+                    description="Tanyakan posisi keuangan, minta ringkasan laba rugi, atau catat transaksi dari nota pengeluaran."
                   >
                     <Suggestions className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-left mt-4 w-full">
                       <Suggestion
@@ -420,7 +420,7 @@ export default function AsistenClient({
                       <Suggestion
                         icon={<FileSpreadsheet className="size-4 text-emerald-700" />}
                         label="Laporan Laba Rugi"
-                        description="Lihat pendapatan dan total beban berjalan"
+                        description="Periksa pendapatan dan rincian beban berjalan"
                         suggestion="Tampilkan ringkasan laporan laba rugi bulan ini"
                         onClick={(prompt) => {
                           setInput(prompt);
@@ -430,8 +430,8 @@ export default function AsistenClient({
 
                       <Suggestion
                         icon={<FileText className="size-4 text-blue-700" />}
-                        label="Metrik Keuangan KPI"
-                        description="Cek posisi kas & bank serta laba bersih YTD"
+                        label="Posisi Kas & Laba"
+                        description="Cek saldo kas, bank, dan laba tahun berjalan"
                         suggestion="Berapa saldo kas dan performa laba tahun berjalan?"
                         onClick={(prompt) => {
                           setInput(prompt);
@@ -441,8 +441,8 @@ export default function AsistenClient({
 
                       <Suggestion
                         icon={<Shield className="size-4 text-purple-700" />}
-                        label="Audit Pembukuan"
-                        description="Deteksi anomali akun gantung atau saldo negatif"
+                        label="Cek Kesehatan Jurnal"
+                        description="Deteksi anomali akun gantung atau saldo minus"
                         suggestion="Cek kepatuhan dan diagnosa kesehatan pembukuan."
                         onClick={(prompt) => {
                           setInput(prompt);
@@ -549,7 +549,7 @@ export default function AsistenClient({
                           />
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Pilih Model AI (Akunio Kilat / Akunio Analis)</TooltipContent>
+                      <TooltipContent side="top">Pilih Mode (Cepat / Analis)</TooltipContent>
                     </Tooltip>
                   </PromptInputTools>
 

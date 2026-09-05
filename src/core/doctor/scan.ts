@@ -39,9 +39,21 @@ export async function runDoctorAuditScan(
   const entries = await listEntriesWithLines(q, orgId, 200, 0);
   const periods = await listPeriods(q, orgId);
 
+  // Kumpulkan ID entri yang telah dibalik (reversal) atau merupakan jurnal pembalik
+  const reversedEntryIds = new Set<string>();
+  for (const e of entries) {
+    if (e.reversalOfId) {
+      reversedEntryIds.add(e.reversalOfId);
+      reversedEntryIds.add(e.id);
+    }
+  }
+
+  // Entri yang aktif (bukan reversal atau dibalik) untuk deteksi duplikat
+  const activeEntriesForDuplicates = entries.filter((e) => !reversedEntryIds.has(e.id));
+
   // Cek duplikat
   const duplicateDrafts = duplicates(
-    entries.map((e) => ({
+    activeEntriesForDuplicates.map((e) => ({
       memo: e.memo,
       lines: e.lines.map((l) => ({
         accountCode: l.accountCode,
@@ -54,12 +66,12 @@ export async function runDoctorAuditScan(
   // Enrich duplicate evidence dengan data entry jika ada
   duplicateDrafts.forEach((d) => {
     const idx = (d.evidence as { index?: number })?.index;
-    if (idx !== undefined && entries[idx]) {
+    if (idx !== undefined && activeEntriesForDuplicates[idx]) {
       d.evidence = {
         ...d.evidence,
-        entryId: entries[idx].id,
-        entryNumber: entries[idx].number,
-        memo: entries[idx].memo,
+        entryId: activeEntriesForDuplicates[idx].id,
+        entryNumber: activeEntriesForDuplicates[idx].number,
+        memo: activeEntriesForDuplicates[idx].memo,
       };
     }
   });
@@ -122,47 +134,53 @@ export async function runDoctorAuditScan(
     ...missingReceiptDrafts,
   ];
 
-  // Hindari duplikasi temuan OPEN yang sama persis
+  // Hindari pembuatan ulang temuan yang sudah tercatat (OPEN, RESOLVED, atau DISMISSED)
   const { listFindings } = await import("@/server/db/repos/findings.repo");
-  const existingOpen = await listFindings(q, orgId, "open");
-  const existingKeys = new Set(
-    existingOpen.map((e) => {
-      const ev = (e.evidence as Record<string, unknown>) ?? {};
-      const keyDetail = ev.code || ev.entryId || ev.dateISO || JSON.stringify(ev);
-      return `${e.type}:${keyDetail}`;
-    }),
-  );
+  const allExisting = await listFindings(q, orgId);
+  const existingStatusMap = new Map<string, string>();
+  for (const e of allExisting) {
+    const ev = (e.evidence as Record<string, unknown>) ?? {};
+    const keyDetail = ev.code || ev.entryId || ev.dateISO || JSON.stringify(ev);
+    existingStatusMap.set(`${e.type}:${keyDetail}`, e.status);
+  }
 
   let newlyCreatedCount = 0;
   for (const draft of allDrafts) {
     const ev = draft.evidence ?? {};
     const keyDetail = ev.code || ev.entryId || ev.dateISO || JSON.stringify(ev);
     const key = `${draft.type}:${keyDetail}`;
-    if (!existingKeys.has(key)) {
+    // Jika belum pernah ada temuan sama sekali untuk entitas ini:
+    if (!existingStatusMap.has(key)) {
       await createFinding(q, orgId, draft);
-      existingKeys.add(key);
+      existingStatusMap.set(key, "open");
       newlyCreatedCount++;
     }
   }
 
-  // Hitung Health Score (0 - 100)
-  // Bobot penalti: HIGH: -15, MEDIUM: -7, LOW: -3
+  // Hitung Health Score & Breakdown HANYA dari temuan yang masih berstatus OPEN
+  const openDrafts = allDrafts.filter((draft) => {
+    const ev = draft.evidence ?? {};
+    const keyDetail = ev.code || ev.entryId || ev.dateISO || JSON.stringify(ev);
+    const key = `${draft.type}:${keyDetail}`;
+    return existingStatusMap.get(key) === "open";
+  });
+
   let penalty = 0;
-  penalty += abnormalDrafts.length * 15;
-  penalty += duplicateDrafts.length * 7;
-  penalty += missingReceiptDrafts.length * 5;
-  penalty += oddDateDrafts.length * 7;
+  penalty += openDrafts.filter((d) => d.type === "abnormalBalances").length * 15;
+  penalty += openDrafts.filter((d) => d.type === "duplicates").length * 7;
+  penalty += openDrafts.filter((d) => d.type === "missingReceipts").length * 5;
+  penalty += openDrafts.filter((d) => d.type === "oddDates").length * 7;
   const healthScore = Math.max(0, Math.min(100, 100 - penalty));
 
   return {
     totalScannedEntries: entries.length,
-    newFindingsCount: allDrafts.length,
+    newFindingsCount: newlyCreatedCount,
     healthScore,
     breakdown: {
-      abnormalBalances: abnormalDrafts.length,
-      duplicates: duplicateDrafts.length,
-      missingReceipts: missingReceiptDrafts.length,
-      oddDates: oddDateDrafts.length,
+      abnormalBalances: openDrafts.filter((d) => d.type === "abnormalBalances").length,
+      duplicates: openDrafts.filter((d) => d.type === "duplicates").length,
+      missingReceipts: openDrafts.filter((d) => d.type === "missingReceipts").length,
+      oddDates: openDrafts.filter((d) => d.type === "oddDates").length,
     },
   };
 }

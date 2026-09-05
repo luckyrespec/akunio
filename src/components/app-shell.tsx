@@ -42,12 +42,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAsisten = pathname.startsWith("/asisten");
   const isPengaturan = pathname.startsWith("/pengaturan");
   const isFaktur = pathname.startsWith("/faktur");
-  const fullBleed = isAsisten || isPengaturan || isFaktur;
+  const isAturan = pathname.startsWith("/aturan");
+  const isJurnal = pathname === "/jurnal";
+  const fullBleed = isAsisten || isPengaturan || isFaktur || isAturan || isJurnal;
+  const isFixedViewport = isAsisten || isAturan;
 
   // Avoid flash of wrong width before localStorage read
   if (!ready) {
     return (
-      <div className={cn("flex w-full bg-canvas", isAsisten ? "h-screen overflow-hidden" : "min-h-screen")}>
+      <div className={cn("flex w-full bg-canvas", isFixedViewport ? "h-screen overflow-hidden" : "min-h-screen")}>
         <a
           href="#konten-utama"
           className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-ink focus:px-3.5 focus:py-2 focus:text-xs focus:font-semibold focus:text-paper"
@@ -59,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           mobileOpen={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
         />
-        <div className={cn("flex min-h-0 flex-1 flex-col", isAsisten ? "h-full overflow-hidden" : "overflow-x-hidden")}>
+        <div className={cn("flex min-h-0 flex-1 flex-col", isFixedViewport ? "h-full overflow-hidden" : "overflow-x-hidden")}>
           <Topbar
             onToggleSidebar={toggle}
             onOpenMobile={() => setMobileMenuOpen(true)}
@@ -67,7 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <main
             id="konten-utama"
             className={
-              isAsisten
+              isFixedViewport
                 ? "flex-1 w-full min-h-0 overflow-hidden p-0 m-0 max-w-none flex flex-col"
                 : fullBleed
                 ? "flex-1 w-full min-h-0 p-0 m-0 max-w-none flex flex-col"
@@ -83,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className={cn("flex w-full bg-canvas", isAsisten ? "h-screen overflow-hidden" : "min-h-screen")}>
+    <div className={cn("flex w-full bg-canvas", isFixedViewport ? "h-screen overflow-hidden" : "min-h-screen")}>
       <a
         href="#konten-utama"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-ink focus:px-3.5 focus:py-2 focus:text-xs focus:font-semibold focus:text-paper"
@@ -96,7 +99,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
       />
-      <div className={cn("flex min-h-0 flex-1 flex-col", isAsisten ? "h-full overflow-hidden" : "overflow-x-hidden")}>
+      <div className={cn("flex min-h-0 flex-1 flex-col", isFixedViewport ? "h-full overflow-hidden" : "overflow-x-hidden")}>
         <Topbar
           onToggleSidebar={toggle}
           onOpenMobile={() => setMobileMenuOpen(true)}
@@ -104,7 +107,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main
           id="konten-utama"
           className={
-            isAsisten
+            isFixedViewport
               ? "flex-1 w-full min-h-0 overflow-hidden p-0 m-0 max-w-none flex flex-col"
               : fullBleed
               ? "flex-1 w-full min-h-0 p-0 m-0 max-w-none flex flex-col"

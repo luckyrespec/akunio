@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
-import { acceptDraftAction, rejectDraftAction } from "@/server/actions/ai.actions";
+import { AlertTriangle, BookOpen, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import {
+  acceptDraftAction,
+  getSakCitationDetailAction,
+  rejectDraftAction,
+} from "@/server/actions/ai.actions";
 import { similarity } from "@/core/ai/map-accounts";
 import { Money } from "@/core/money/money";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +20,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AccountSelect } from "@/components/account-select";
@@ -138,6 +150,49 @@ export function ReviewClient({
   const [confirmTolak, setConfirmTolak] = useState(false);
   const [confirmPosting, setConfirmPosting] = useState(false);
   const [restored, setRestored] = useState(false);
+
+  // SAK Citation modal state
+  const [activeCitation, setActiveCitation] = useState<{
+    bab: number;
+    babTitle: string;
+    description: string;
+    sectionTitle: string;
+    paragraphRange: string;
+    content: string;
+  } | null>(null);
+  const [citationLoading, setCitationLoading] = useState(false);
+  const [citationModalOpen, setCitationModalOpen] = useState(false);
+
+  async function handleOpenCitation(c: ReviewDraftCitation) {
+    setCitationLoading(true);
+    setCitationModalOpen(true);
+    try {
+      const res = await getSakCitationDetailAction(c.bab, c.paragraph);
+      if (res.ok && res.data) {
+        setActiveCitation(res.data);
+      } else {
+        setActiveCitation({
+          bab: parseInt(c.bab.replace(/\D/g, ""), 10) || 1,
+          babTitle: `SAK EMKM Bab ${c.bab}`,
+          description: "Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah",
+          sectionTitle: `Bab ${c.bab} Paragraf ${c.paragraph}`,
+          paragraphRange: c.paragraph,
+          content: res.error || "Rincian paragraf tidak dapat dimuat.",
+        });
+      }
+    } catch {
+      setActiveCitation({
+        bab: parseInt(c.bab.replace(/\D/g, ""), 10) || 1,
+        babTitle: `SAK EMKM Bab ${c.bab}`,
+        description: "Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah",
+        sectionTitle: `Bab ${c.bab} Paragraf ${c.paragraph}`,
+        paragraphRange: c.paragraph,
+        content: "Gagal memuat rincian paragraf dari basis data.",
+      });
+    } finally {
+      setCitationLoading(false);
+    }
+  }
 
   const initialRows: Row[] = useMemo(
     () =>
@@ -324,7 +379,7 @@ export function ReviewClient({
     startTransition(async () => {
       await rejectDraftAction(draftId);
       try { window.localStorage.removeItem(STORAGE_PREFIX + draftId); } catch { /* abaikan */ }
-      router.push("/jurnal");
+      router.push("/jurnal?tab=draf");
     });
   }
 
@@ -348,10 +403,10 @@ export function ReviewClient({
 
   const eyebrowStatus =
     diff.needsAccount > 0
-      ? `${diff.needsAccount} perlu dilengkapi`
+      ? `${diff.needsAccount} baris perlu alokasi akun`
       : !totals.balanced
-        ? "belum seimbang"
-        : "siap posting";
+        ? "Debit & kredit belum seimbang"
+        : "Neraca lajur seimbang · Siap posting";
 
   if (postedNumber) {
     return (
@@ -393,8 +448,8 @@ export function ReviewClient({
   return (
     <>
       <PageHeader
-        title="Review Draft Asisten"
-        eyebrow={`Draf AI · ${eyebrowStatus}`}
+        title="Review Draft Akunio"
+        eyebrow={eyebrowStatus}
         actions={
           <PageActions>
             {confirmTolak && (
@@ -432,57 +487,89 @@ export function ReviewClient({
         </div>
       )}
       <div className="grid gap-8 md:grid-cols-2">
-      {/* Kiri: apa yang dibaca asisten */}
+      {/* Kiri: telaah & analisis Akunio */}
       <div className="space-y-4">
-        <div className="rounded-lg border border-rule bg-paper p-4">
-          <p className="text-xs uppercase tracking-wide text-ink-soft">Apa yang dibaca asisten</p>
-          <p className="mt-2 text-sm leading-relaxed">{draft.explanation}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Badge variant="outline">
-              Keyakinan {Math.round(draft.overallConfidence * 100)}%
-            </Badge>
-            {documentMeta && (
-              <Badge variant="outline">
-                {documentMeta.fileName ? `Dokumen: ${documentMeta.fileName}` : `Dokumen: ${documentMeta.mime}`}
-              </Badge>
+        <div className="rounded-2xl border border-rule bg-paper p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between gap-2 border-b border-rule/50 pb-2.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+              Analisis &amp; Telaah Akunio
+            </p>
+            {draft.overallConfidence >= 0.85 ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                <span className="size-1.5 rounded-full bg-emerald-500" />
+                Keyakinan {Math.round(draft.overallConfidence * 100)}%
+              </span>
+            ) : draft.overallConfidence >= 0.7 ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                <span className="size-1.5 rounded-full bg-amber-500" />
+                Keyakinan {Math.round(draft.overallConfidence * 100)}%
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-terra/30 bg-terra/10 px-2.5 py-0.5 text-[11px] font-semibold text-terra">
+                <span className="size-1.5 rounded-full bg-terra" />
+                Keyakinan {Math.round(draft.overallConfidence * 100)}%
+              </span>
             )}
           </div>
+          <p className="text-sm leading-relaxed text-justify [text-justify:inter-word] text-ink/90">
+            {draft.explanation}
+          </p>
+          {documentMeta && (
+            <div className="pt-1 flex flex-wrap gap-2">
+              <Badge variant="outline" className="border-rule text-xs bg-canvas/60">
+                {documentMeta.fileName ? `Dokumen: ${documentMeta.fileName}` : `Dokumen: ${documentMeta.mime}`}
+              </Badge>
+            </div>
+          )}
         </div>
         {draft.mapping && draft.mapping.warnings.length > 0 && (
-          <div className="rounded-lg border border-credit/40 bg-paper p-4">
-            <p className="text-xs uppercase tracking-wide text-ink-soft">Perhatian pemetaan akun</p>
-            <ul className="mt-2 list-disc pl-5 text-sm text-credit">
+          <div className="rounded-2xl border border-credit/30 bg-paper p-4 shadow-xs">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Perhatian pemetaan akun</p>
+            <ul className="mt-2 list-disc pl-5 text-sm text-credit space-y-1">
               {draft.mapping.warnings.map((w) => <li key={w}>{w}</li>)}
             </ul>
           </div>
         )}
         {verifiedCitations.length > 0 && (
-          <div className="rounded-lg border border-rule bg-paper p-4">
-            <p className="text-xs uppercase tracking-wide text-ink-soft">
-              Dasar SAK{draft.sakVersion ? ` · ${draft.sakVersion}` : ""}
-            </p>
-            <ul className="mt-2 space-y-1 text-sm text-ink">
+          <div className="rounded-2xl border border-rule bg-paper p-4 sm:p-5 shadow-xs">
+            <div className="flex items-center justify-between gap-2 border-b border-rule/50 pb-2.5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                Dasar SAK{draft.sakVersion ? ` · ${draft.sakVersion}` : ""}
+              </p>
+              <span className="text-[11px] text-ink-soft/75">Klik untuk baca aturan</span>
+            </div>
+            <ul className="mt-2.5 space-y-2 text-sm text-ink">
               {verifiedCitations.map((c, i) => (
                 <li key={`${c.docId}-${c.bab}-${c.paragraph}-${i}`}>
-                  {citationLabel(c)}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCitation(c)}
+                    className="group inline-flex w-full items-center justify-between gap-2 rounded-xl border border-rule bg-canvas/40 px-3.5 py-2.5 text-left text-xs font-medium text-ink transition hover:border-terra/40 hover:bg-paper hover:text-terra"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <BookOpen className="size-3.5 shrink-0 text-ink-soft transition group-hover:text-terra" />
+                      <span>{citationLabel(c)}</span>
+                    </span>
+                    <ExternalLink className="size-3.5 shrink-0 text-ink-soft opacity-0 transition group-hover:opacity-100 group-hover:text-terra" />
+                  </button>
                 </li>
               ))}
             </ul>
           </div>
         )}
         {draft.lines.some((l) => l.confidence < 0.7 || l.unresolved) && (
-          <p className="text-xs text-ink-soft leading-relaxed">
-            Garis terracotta berarti akun belum dipilih dan wajib dilengkapi. Garis amber berarti
-            keyakinan di bawah 70% — periksa sebelum posting.
+          <p className="text-xs text-ink-soft leading-relaxed px-1">
+            Garis terracotta menandakan akun belum dipilih dan wajib ditentukan. Garis amber menandakan
+            keyakinan di bawah 70% — mohon teliti sebelum memposting.
           </p>
         )}
 
         {/* Kartu kesiapan posting: tiga syarat terkunci dalam satu pandang */}
-        <div className="rounded-xl border border-rule bg-paper p-4 shadow-xs">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-soft">
+        <div className="rounded-2xl border border-rule bg-paper p-4 sm:p-5 shadow-xs">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-soft border-b border-rule/50 pb-2">
             Kesiapan Posting
           </p>
-          <ul aria-live="polite" className="mt-2.5 space-y-2 text-xs">
+          <ul aria-live="polite" className="mt-3 space-y-2.5 text-xs">
             <ReadinessRow
               ok={rows.every((r) => r.accountId !== "")}
               label={
@@ -688,25 +775,25 @@ export function ReviewClient({
           </table>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-xl border border-rule bg-canvas/40 p-4 text-sm">
-          <div className="flex items-center justify-between sm:justify-start gap-3 tnum">
-            <div>
-              <span className="text-xs uppercase text-ink-soft">Debit: </span>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-2xl border border-rule bg-paper p-4 text-sm shadow-xs">
+          <div className="flex items-center justify-between sm:justify-start gap-4 tnum">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Debit</span>
               <span className="text-base font-bold text-ink">{Money.fromMinor(totals.d).formatIdr()}</span>
             </div>
-            <span className="text-rule">|</span>
-            <div>
-              <span className="text-xs uppercase text-ink-soft">Kredit: </span>
+            <span className="text-rule text-sm">/</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Kredit</span>
               <span className="text-base font-bold text-ink">{Money.fromMinor(totals.c).formatIdr()}</span>
             </div>
           </div>
-          <Badge className={`inline-flex items-center gap-1 font-medium ${totals.balanced ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border border-terra/20 bg-terra/10 text-terra"}`}>
-            {totals.balanced && <CheckCircle2 className="size-3" />}
+          <Badge className={`inline-flex items-center gap-1.5 font-medium px-3 py-1 rounded-full ${totals.balanced ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border border-terra/30 bg-terra/10 text-terra"}`}>
+            {totals.balanced && <CheckCircle2 className="size-3.5" />}
             {totals.invalid ? "Nominal tak valid" : totals.balanced ? "Seimbang" : "Belum seimbang"}
           </Badge>
         </div>
         {!totals.balanced && (
-          <p className="text-xs text-ink-soft leading-relaxed">
+          <p className="text-xs text-ink-soft leading-relaxed px-1">
             {totals.invalid
               ? "Ada nominal yang bukan angka rupiah — perbaiki penulisannya."
               : "Lengkapi akun tiap baris dan pastikan total debit sama dengan kredit untuk memposting."}
@@ -714,9 +801,9 @@ export function ReviewClient({
         )}
 
         {hasDiff && (
-          <div className="rounded-xl border border-rule bg-paper p-4 text-sm shadow-xs">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-medium text-ink">
+          <div className="rounded-2xl border border-rule bg-paper p-4 sm:p-5 text-sm shadow-xs">
+            <div className="flex items-center justify-between gap-3 border-b border-rule/50 pb-2.5">
+              <p className="font-semibold text-xs uppercase tracking-wider text-ink-soft">
                 Perubahan Anda vs draft AI ({diffSummary})
               </p>
               <button
@@ -727,14 +814,16 @@ export function ReviewClient({
                 Kembalikan ke draf AI
               </button>
             </div>
-            <ul className="mt-2 space-y-1 text-xs text-ink-soft">
+            <ul className="mt-3 space-y-1.5 text-xs text-ink-soft">
               {diff.rows.filter((r) => r.state !== "SAME").map((r, i) => (
                 <li key={i} className="flex items-center gap-2">
                   <span className={`inline-block size-1.5 rounded-full ${r.state === "CHANGED" ? "bg-amber-500" : r.state === "ADDED" ? "bg-emerald-500" : "bg-terra"}`} />
-                  {r.state === "CHANGED" && `Diubah: ${r.accountCode}`}
-                  {r.state === "ADDED" && (r.accountCode ? `Ditambah: ${r.accountCode}` : "Baris baru (akun belum dipilih)")}
-                  {r.state === "REMOVED" && `Dihapus: ${r.accountCode}`}
-                  {r.state === "NEEDS_ACCOUNT" && `Lengkapi akun: ${r.accountCode}`}
+                  <span className="text-ink font-medium">
+                    {r.state === "CHANGED" && `Diubah: ${r.accountCode}`}
+                    {r.state === "ADDED" && (r.accountCode ? `Ditambah: ${r.accountCode}` : "Baris baru (akun belum dipilih)")}
+                    {r.state === "REMOVED" && `Dihapus: ${r.accountCode}`}
+                    {r.state === "NEEDS_ACCOUNT" && `Lengkapi akun: ${r.accountCode}`}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -745,44 +834,64 @@ export function ReviewClient({
       </div>
       </div>
 
-      {/* Bilah aksi lengket: total + status + tombol selalu dalam jangkauan */}
-      <div className="sticky bottom-4 z-20 mt-6 flex flex-col gap-2 rounded-2xl border border-rule bg-paper/95 p-3 shadow-md backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 text-xs tnum">
-          <span className="text-ink-soft">Total <strong className="text-ink">{Money.fromMinor(totals.d).formatIdr()}</strong></span>
-          <span className="text-ink-soft">·</span>
-          {totals.balanced ? (
-            <span className="font-semibold text-debit">Seimbang</span>
-          ) : (
-            <span className="font-medium text-ink-soft">
-              {diff.needsAccount > 0
-                ? `${diff.needsAccount} akun belum dipilih`
-                : totals.invalid
-                  ? "Nominal belum valid"
-                  : "Debit dan kredit belum sama"}
-            </span>
-          )}
-        </div>
-        <PageActions>
-          <PageActionButton
-            variant="ghost"
-            disabled={pending}
-            onClick={() => {
-              tolak();
-              window.setTimeout(() => setConfirmTolak(false), 6000);
-            }}
-          >
-            {confirmTolak ? "Klik lagi untuk menolak" : "Tolak"}
-          </PageActionButton>
-          <PageActionButton
-            variant="primary"
-            loading={pending}
-            disabled={!canPost}
-            onClick={() => setConfirmPosting(true)}
-          >
-            {pending ? "Memposting..." : "Posting"}
-          </PageActionButton>
-        </PageActions>
-      </div>
+      {/* Drawer Sheet Rincian Standar SAK EMKM */}
+      <Sheet open={citationModalOpen} onOpenChange={setCitationModalOpen}>
+        <SheetContent side="right" className="flex flex-col gap-0 p-0 sm:max-w-lg">
+          <SheetHeader className="p-6 pb-4">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-terra">
+              <BookOpen className="size-4" />
+              <span>Standar Akuntansi Keuangan SAK EMKM</span>
+            </div>
+            <SheetTitle className="font-display text-xl font-bold text-ink mt-1">
+              {citationLoading ? (
+                "Memuat Aturan SAK..."
+              ) : (
+                `Bab ${activeCitation?.bab}: ${activeCitation?.babTitle}`
+              )}
+            </SheetTitle>
+            <SheetDescription className="text-xs text-ink-soft leading-relaxed">
+              {activeCitation?.description || "Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah"}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto p-6 pt-4 space-y-4">
+            {citationLoading ? (
+              <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-ink-soft">
+                <Loader2 className="size-6 animate-spin text-terra" />
+                <p className="text-xs">Mengambil teks rincian standar dari basis data...</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between rounded-xl border border-rule bg-canvas/60 px-4 py-3 text-xs">
+                  <span className="font-semibold text-ink">
+                    {activeCitation?.sectionTitle || `Bab ${activeCitation?.bab}`}
+                  </span>
+                  {activeCitation?.paragraphRange && (
+                    <span className="rounded-lg bg-paper px-2.5 py-1 text-[11px] font-semibold text-terra border border-rule shadow-2xs">
+                      Paragraf {activeCitation.paragraphRange}
+                    </span>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-rule bg-canvas/30 p-5 text-xs sm:text-sm leading-relaxed text-ink/90 text-justify [text-justify:inter-word] whitespace-pre-line font-sans">
+                  {activeCitation?.content || "Tidak ada teks standar yang tersedia."}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <SheetFooter className="p-6 pt-4 border-t border-rule/50 bg-paper">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCitationModalOpen(false)}
+              className="w-full text-xs font-medium"
+            >
+              Tutup Rujukan
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Konfirmasi posting: ringkasan terkunci sebelum jurnal dikunci permanen */}
       <Dialog open={confirmPosting} onOpenChange={setConfirmPosting}>

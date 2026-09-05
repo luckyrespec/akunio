@@ -9,7 +9,7 @@ import { CommandPalette } from "@/components/command-palette";
 const LABELS: Record<string, string> = {
   dasbor: "Dasbor",
   jurnal: "Jurnal",
-  ai: "Asisten AI",
+  ai: "Asisten Akunio",
   baru: "Tulis Jurnal",
   "buku-besar": "Buku Besar",
   laporan: "Laporan",

@@ -414,8 +414,8 @@ export function TutupBukuClient({
                       Bersih
                     </Badge>
                   ) : (
-                    <Link href="/asisten">
-                      <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5">
+                    <Link href="/jurnal?tab=draf">
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5 cursor-pointer">
                         Tinjau Draf
                         <ArrowRight className="size-3 ml-1" />
                       </Button>

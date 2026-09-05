@@ -13,7 +13,7 @@ describe("proposal labels", () => {
   });
   it("formats verified citations", () => {
     expect(citationLabel({ docId: "SAK-EMKM-2024", bab: "7", paragraph: "7.16" }))
-      .toBe("Dok SAK-EMKM-2024 Bab 7 par. 7.16");
+      .toBe("SAK EMKM 2024 Bab 7 Paragraf 7.16");
   });
   it("formats proposal detail from draft data only", () => {
     expect(

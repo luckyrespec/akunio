@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Sparkles, FileText, Image as ImageIcon, FileSpreadsheet, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { Sparkles, FileText, Image as ImageIcon, FileSpreadsheet, RotateCcw, BookOpen } from "lucide-react";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ai-elements/reasoning";
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
@@ -177,11 +178,55 @@ export function NaraMessageFeed({
                   {m.citations && m.citations.length > 0 && (
                     <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-rule/60 pt-2.5 text-[11px] text-ink-soft">
                       <span className="font-semibold text-ink">Sumber Referensi:</span>
-                      {m.citations.map((c, i) => (
-                        <span key={i} className="rounded bg-canvas px-1.5 py-0.5 font-mono border border-rule/50">
-                          [{c.kind} {c.section ?? c.ref}]
-                        </span>
-                      ))}
+                      {m.citations.map((c, i) => {
+                        const section = c.section ?? "";
+                        const babMatch = /SAK-EMKM-Bab(\d+)/i.exec(section);
+
+                        if (babMatch) {
+                          const babNum = babMatch[1];
+                          // Ekstrak range paragraf jika ada di excerpt atau content (cth: "Paragraf 2.3-2.4" atau "Paragraf 2.2")
+                          const pMatch = /\(Paragraf\s+([^\)]+)\)/i.exec(c.excerpt ?? "");
+                          const pText = pMatch ? ` §${pMatch[1]}` : "";
+                          const label = `SAK EMKM Bab ${babNum}${pText}`;
+
+                          return (
+                            <Link
+                              key={i}
+                              href={`/aturan?bab=${babNum}`}
+                              title={c.excerpt ? `${c.excerpt.slice(0, 140)}...` : `Buka SAK EMKM Bab ${babNum}`}
+                              className="inline-flex items-center gap-1 rounded-md bg-canvas hover:bg-paper-raised px-2 py-0.5 font-medium border border-rule/70 text-terra hover:text-terra-hover hover:border-terra/40 transition-colors shadow-2xs cursor-pointer group"
+                            >
+                              <BookOpen className="size-3 text-terra/70 group-hover:text-terra" />
+                              <span>{label}</span>
+                            </Link>
+                          );
+                        }
+
+                        if (c.kind === "ifrs") {
+                          return (
+                            <Link
+                              key={i}
+                              href="/aturan"
+                              title={c.excerpt ? `${c.excerpt.slice(0, 140)}...` : "Buka Standar SAK EMKM"}
+                              className="inline-flex items-center gap-1 rounded-md bg-canvas hover:bg-paper-raised px-2 py-0.5 font-medium border border-rule/70 text-terra hover:text-terra-hover transition-colors shadow-2xs cursor-pointer group"
+                            >
+                              <BookOpen className="size-3 text-terra/70 group-hover:text-terra" />
+                              <span>Standar SAK EMKM</span>
+                            </Link>
+                          );
+                        }
+
+                        const label = c.kind === "JOURNAL" ? `Jurnal #${c.ref.slice(0, 8)}` : `[${c.kind}]`;
+                        return (
+                          <span
+                            key={i}
+                            className="rounded bg-canvas px-1.5 py-0.5 font-mono border border-rule/50 text-[10px]"
+                            title={c.excerpt}
+                          >
+                            {label}
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </MessageContent>

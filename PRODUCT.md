@@ -24,9 +24,9 @@ Alur: input transaksi (nota / PDF, teks / kasir, jurnal manual) → validasi kes
 
 ## Capabilities and Constraints
 
-Fungsionalitas terkonfirmasi: jurnal manual, `jurnal/ai` chat dan review diff per id, buku-besar, `laporan/*`, faktur, kontak, aset, rekonsiliasi, tutup-buku, temuan (doctor), pengaturan (arsip COA, periode), asisten, onboarding beserta daftar / masuk / verifikasi, `api/nara` dan `api/advisor`.
+Fungsionalitas terkonfirmasi: dasbor, jurnal manual, `jurnal/ai` chat dan review diff per id, buku-besar, `laporan/*`, faktur, kontak, aset, persediaan, aturan, rekonsiliasi, tutup-buku, temuan (doctor), pengaturan (arsip COA, periode), asisten, onboarding beserta daftar / masuk / verifikasi, `api/nara` dan `api/advisor`.
 
-Batasan keras: total Debit harus sama dengan total Kredit sebelum posting; jurnal `POSTED` terkunci permanen dan koreksi hanya via jurnal pembalik tertaut `reversal_of_id`; unggahan `image/*` dan `application/pdf` maksimal 5MB; uang `numeric(18,2)` dihitung sebagai minor BigInt; isolasi tenant via `org_id` dan RLS; AI `store:true` + `previous_interaction_id` per `chat_threads.gemini_interaction_id` (memory server-side anti-lupa, retensi Google 55 hari berbayar / 1 hari gratis) dengan retry 2.
+Batasan keras: total Debit harus sama dengan total Kredit sebelum posting; jurnal `POSTED` terkunci permanen dan koreksi hanya via jurnal pembalik tertaut `reversal_of_id`; unggahan maksimal 5MB (gambar, PDF, csv/txt/xls/xlsx); uang `numeric(18,2)` dihitung sebagai minor BigInt; isolasi tenant via `org_id` dan RLS; AI `store:true` + `previous_interaction_id` per `chat_threads.gemini_interaction_id` (memory server-side anti-lupa, retensi Google 55 hari berbayar / 1 hari gratis) dengan retry 2.
 
 ## Brand Commitments
 

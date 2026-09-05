@@ -68,7 +68,7 @@ components:
 
 Akunio terlihat seperti meja pembukuan yang tenang: kertas matte hangat, tinta tegas, satu aksen terra bata yang jarang muncul. Kepadatan operasional dijaga agar angka mudah dipindai, bukan dipamerkan. Setiap permukaan terasa seperti alat kerja akuntan, bukan brosur pemasaran.
 
-Filosofi: tenang dan presisi. Tidak ada kilau, tidak ada gradien neon, tidak ada sudut playful. Gerak dibatasi maksimal 240ms untuk UI interaktif dan menghormati `prefers-reduced-motion`. Yang ditolak secara eksplisit: kaca glossy, neon SaaS, dan dekorasi yang mengalihkan perhatian dari angka.
+Filosofi: tenang dan presisi. Tidak ada kilau, tidak ada gradien neon, tidak ada sudut playful. Gerak dibatasi maksimal 240ms untuk UI interaktif dan menghormati `prefers-reduced-motion`. Satu pengecualian sinematik: layar auth memakai gerak ambien lambat (transform-only, 22–34 detik) yang mati otomatis saat reduced-motion. Yang ditolak secara eksplisit: kaca glossy, neon SaaS, dan dekorasi yang mengalihkan perhatian dari angka.
 
 **Key Characteristics:**
 - Kertas matte hangat dengan butir ultra-halus, terang tapi tidak mengkilap.
@@ -127,7 +127,7 @@ Palet karakter arsip kertas: satu aksen terra bata di atas netral kertas-tinta h
 
 Model spasial full-bleed cair dengan batas baca: kanvas normal dibatasi `max-width 1600px` dengan padding horizontal 16px (mobile), 24px (sm), 32px (lg) dan vertikal 20px / 28px (lg). Mode imersif (asisten, layar penuh) melepas batas menjadi `max-w-none` tanpa padding. Ritme gutter memakai `--gutter 24px` dan `--gutter-lg 32px`; jarak kartu memakai `--card-spacing 16px` (12px untuk varian kecil). Konten baca seperti laporan dibatasi `max-width 3xl` agar baris tetap nyaman.
 
-Tabel data mengikuti resep Swiss 2.0 soft: header kecil uppercase berwarna tinta lembut, sel memakai border bawah `border-border/60`, lebar minimum 640px dengan scroll horizontal di layar kecil. Grid formulir memakai gap kartu; dialog dibatasi 480–560px; drawer asisten 420–460px dari kanan dengan kurva `--ease-drawer`. Gerak spasial mengikuti tata gerak global: masuk/keluar memakai ease-out, gerak di layar memakai ease-in-out, interaksi maksimal 240ms.
+Tabel data mengikuti resep Swiss 2.0 soft: header kecil uppercase berwarna tinta lembut, sel memakai border bawah `border-border/60`, lebar minimum 640px dengan scroll horizontal di layar kecil. Grid formulir memakai gap kartu; dialog formulir dibatasi 420–480px dan palet perintah melebar hingga 900px; drawer asisten 420px (sm) / 460px (md) dari kanan dengan kurva `--ease-drawer`. Gerak spasial mengikuti tata gerak global: masuk/keluar memakai ease-out, gerak di layar memakai ease-in-out, interaksi maksimal 240ms.
 
 ## Elevation & Depth
 
@@ -153,13 +153,14 @@ Setiap komponen tactile dan percaya diri: respons nyata saat ditekan, fokus yang
 ### Buttons
 
 - **Shape:** sudut lg 16px (varian xs/sm dijepit ke 10/12px).
-- **Primary:** latar tinta/primer dengan teks kertas; tinggi 36px, padding horizontal 14px; hover menggelap ke 80%.
-- **Hover / Focus:** cincin fokus 3px `ring/50`; tombol aktif sedikit turun 1px. Cincin tidak boleh dihilangkan.
+- **Primary:** latar tinta/primer dengan teks kertas; tinggi 36px (`h-9`), padding horizontal 14px (`px-3.5`); hover menggelap ke 80%.
+- **Sizes:** xs 24px, sm 32px, default 36px, lg 40px; varian ikon persegi mengikuti tinggi yang sama.
+- **Hover / Focus:** cincin fokus `ring-3 ring-ring/50` pada tombol; tombol aktif sedikit turun 1px. Cincin tidak boleh dihilangkan.
 - **Secondary / Ghost / Tertiary:** secondary memakai permukaan sekunder; outline memakai border garis dengan latar aplikasi; ghost transparan dengan hover muted; destructive memakai tinta destruktif 10–20% dengan teks destruktif; link memakai teks primer bergaris bawah.
 
 ### Chips
 
-- **Style:** badge memakai latar muted dengan teks tinta; varian destruktif memakai tinta destruktif 10–20%.
+- **Style:** badge `h-5` sudut penuh (`rounded-4xl`) memakai latar muted dengan teks tinta; varian destruktif memakai tinta destruktif 10–20%.
 - **State:** status akuntansi memakai pasangan debit-daun / kredit-bata, bukan terra.
 
 ### Cards / Containers
@@ -178,8 +179,24 @@ Setiap komponen tactile dan percaya diri: respons nyata saat ditekan, fokus yang
 
 ### Navigation
 
-- **Style:** sidebar 288px (mobile 85vw) berlatar kertas dengan border garis; item memakai tipografi 14px dengan ikon 16px, hover muted, aktif memakai latar muted dengan teks tinta.
-- **Topbar:** palet perintah Cmd+K memakai dialog 560px berlatar kertas dengan bayangan `0 8px 40px rgb(35 42 51 / 0.12)`; status collapse sidebar tersimpan di `neraca:sidebar-collapsed`.
+- **Style:** sidebar desktop 256px (`w-64`) melipat ke 68px, berlatar kertas dengan border garis; item memakai tipografi 14px dengan ikon 16px, hover muted, aktif memakai latar muted dengan teks tinta. Drawer mobile 288px (`w-72`, maksimal 85vw).
+- **Topbar:** palet perintah Cmd+K memakai dialog hingga 900px (`sm:max-w-[900px]`) berlatar kertas dengan bayangan `0 8px 40px rgb(35 42 51 / 0.12)`; status collapse sidebar tersimpan di `neraca:sidebar-collapsed`.
+
+### Dialogs
+
+- **Style:** permukaan popover/kertas dengan cincin `ring-1 ring-foreground/10`, sudut xl; dialog basis `sm:max-w-sm`, dialog formulir 420–480px; footer memakai border atas dengan latar muted 50%.
+- **Motion:** fade + zoom 100ms (`duration-100`); overlay hitam 10% dengan blur halus.
+
+### Ambient Auth Motion
+
+- **Style:** tiga keyframe transform-only di layar auth — `auth-drift` 26s, `beams-pan` 34s, `orb-drift` 22s, semuanya infinite alternate.
+- **Rule:** tidak pernah memakai properti selain transform/opacity; `prefers-reduced-motion` mematikan semuanya kecuali `.motion-keep-fade`.
+
+### Utilities
+
+- **Focus ring:** `.focus-ring` memberi outline terra 55% untuk kontrol kustom (nav, chip, tab, segmen); tombol dan input shadcn sudah membawa ring sendiri.
+- **Scrollbar:** `.paper-scrollbar` 5px tipis tinta-lembut transparan; hover menguatkan ke 55%.
+- **Print:** laporan memakai kertas A4 portrait dengan margin 1.5cm/1.2cm; header, nav, aside, dan topbar disembunyikan; `rule-double` menebal menjadi 3px hitam.
 
 ### Signature Component
 
@@ -191,14 +208,14 @@ Setiap komponen tactile dan percaya diri: respons nyata saat ditekan, fokus yang
 
 - **Do** pakai `.tnum` dan rata kanan untuk setiap nominal uang.
 - **Do** batasi terra bata untuk aksi dan fokus; data memakai tinta dan semantik debit-kredit.
-- **Do** pertahankan cincin fokus 3px pada semua kontrol interaktif.
+- **Do** pertahankan cincin fokus pada semua kontrol interaktif (ring-3 tombol, ring-2 input, `.focus-ring` untuk kustom).
 - **Do** cetak laporan selalu dalam gaya kertas terang.
 - **Do** hormati `prefers-reduced-motion`: kolapskan gerak ke 0.01ms kecuali `.motion-keep-fade`.
 
 ### Don't:
 
 - **Don't** memakai kaca glossy, gradien neon, atau sudut playful — anti-referensi yang dikonfirmasi.
-- **Don't** memakai ease-in untuk UI atau melebihi 240ms pada interaksi (400ms/320ms hanya untuk marketing/eksplanatori).
+- **Don't** memakai ease-in untuk UI atau melebihi 240ms pada interaksi (400ms/320ms hanya untuk marketing/eksplanatori; ambien auth adalah pengecualian yang berdiri sendiri).
 - **Don't** menumpuk dua pesan sistem visual: satu layar, satu aksen, satu hierarki angka.
 - **Don't** memakai warna chart grayscale untuk data debit-kredit; chart abu hanya untuk visualisasi netral.
 - **Don't** menulis ulang nilai token di prosa dengan angka berbeda — frontmatter adalah normatif.

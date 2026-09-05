@@ -27,7 +27,7 @@ export function HitlPolicySelector({
       if (!res.ok) {
         throw new Error(res.error || "Gagal menyimpan.");
       }
-      setMsg("Kebijakan AI berhasil diperbarui.");
+      setMsg("Pengaturan otorisasi berhasil diperbarui.");
     } catch (err) {
       setSelected(previous);
       setMsg(err instanceof Error ? err.message : "Terjadi kesalahan.");
@@ -41,10 +41,10 @@ export function HitlPolicySelector({
       <div>
         <h3 className="font-display text-base font-semibold text-ink flex items-center gap-2">
           <ShieldCheck className="size-4 text-terra" />
-          <span>Kebijakan Persetujuan & Otomatisasi AI (Akunio)</span>
+          <span>Otorisasi &amp; Persetujuan Jurnal</span>
         </h3>
         <p className="mt-1 text-xs text-ink-soft">
-          Atur tingkat izin otomatisasi untuk pencatatan transaksi yang dieksekusi oleh Asisten AI (Akunio) di seluruh aplikasi.
+          Atur tingkat izin verifikasi untuk pencatatan transaksi yang disiapkan oleh asisten pembukuan.
         </p>
       </div>
 
@@ -61,11 +61,11 @@ export function HitlPolicySelector({
           )}
         >
           <div className="flex w-full items-center justify-between">
-            <span className="font-semibold text-xs text-ink">Mode Izin Transaksi</span>
+            <span className="font-semibold text-xs text-ink">Izin Setiap Posting</span>
             <ShieldCheck className="size-4 text-emerald-600" />
           </div>
           <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">
-            (Rekomendasi) AI boleh membaca data dan menyiapkan draf, tetapi setiap posting jurnal selalu bertanya dulu.
+            (Disarankan) Asisten boleh membaca data dan menyiapkan draf, namun posting jurnal selalu meminta persetujuan Anda.
           </p>
         </button>
 
@@ -85,7 +85,7 @@ export function HitlPolicySelector({
             <ShieldAlert className="size-4 text-amber-600" />
           </div>
           <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">
-            AI selalu bertanya dulu — termasuk untuk sekadar membaca laporan — sebelum menjalankan apa pun.
+            Setiap tindakan, termasuk membaca laporan dan menyusun draf, memerlukan izin manual.
           </p>
         </button>
 
@@ -101,11 +101,11 @@ export function HitlPolicySelector({
           )}
         >
           <div className="flex w-full items-center justify-between">
-            <span className="font-semibold text-xs text-ink">Eksekusi Otomatis</span>
+            <span className="font-semibold text-xs text-ink">Otomatisasi Penuh</span>
             <Zap className="size-4 text-purple-600" />
           </div>
           <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">
-            AI dapat memposting jurnal ke buku besar tanpa bertanya dulu. Hanya untuk yang benar-benar percaya.
+            Jurnal langsung diposting ke buku besar tanpa konfirmasi tambahan.
           </p>
         </button>
       </div>

@@ -112,7 +112,7 @@ export default async function DasborPage() {
       tint: "bg-terra/10 text-terra",
       title: `${pendingDrafts.length} draf menunggu review`,
       desc: "Periksa akun sebelum posting ke buku besar.",
-      href: "/asisten",
+      href: "/jurnal?tab=draf",
       cta: "Tinjau",
     },
     data.findings.length > 0 && {
@@ -159,7 +159,7 @@ export default async function DasborPage() {
               + Tulis Jurnal
             </Link>
             <Link href="/asisten" className="inline-flex items-center justify-center rounded-lg border border-rule bg-paper px-3.5 py-2 text-xs font-medium text-ink shadow-xs hover:bg-canvas transition-colors">
-              Asisten AI
+              Buka Asisten
             </Link>
           </div>
         }
@@ -336,7 +336,7 @@ export default async function DasborPage() {
             ) : (
               <div className="mt-4 flex flex-1 items-center gap-3 rounded-xl bg-canvas/60 px-4 py-5 text-xs text-ink-soft">
                 <Inbox className="size-5 shrink-0 text-ink-soft/60" />
-                <span>Belum ada jurnal POSTED — tulis jurnal pertama Anda atau minta Akunio menyusun draf.</span>
+                <span>Belum ada transaksi tercatat. Tulis jurnal manual atau minta Asisten menyusun draf.</span>
               </div>
             )}
           </div>

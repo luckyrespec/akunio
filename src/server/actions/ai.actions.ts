@@ -1,4 +1,5 @@
 "use server";
+import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
@@ -246,8 +247,37 @@ export async function acceptDraftAction(
         subjectType: "ai_draft", subjectId: draftId,
         data: { number: posted.number },
       });
+
+      // Jika draf berasal dari rekomendasi Akunio Doctor, tandai temuan & proposal terkait selesai
+      const findingId = (draft.draft as { findingId?: string })?.findingId;
+      const proposalId = (draft.draft as { proposalId?: string })?.proposalId;
+      if (findingId) {
+        const { resolveFinding, updateProposalStatus } = await import("@/server/db/repos/findings.repo");
+        try {
+          await resolveFinding(tx, ctx.orgId, findingId);
+          if (proposalId) {
+            await updateProposalStatus(tx, ctx.orgId, proposalId, "accepted");
+          }
+          await appendAudit(tx, {
+            orgId: ctx.orgId,
+            actor: ctx.userEmail,
+            action: "FINDING_RESOLVED",
+            subjectType: "ai_finding",
+            subjectId: findingId,
+            data: { postedEntryId: posted.id, postedNumber: posted.number, proposalId },
+          });
+        } catch (err) {
+          console.error("Gagal menandai temuan selesai:", err);
+        }
+      }
+
       return posted;
     });
+    try {
+      revalidatePath("/temuan");
+      revalidatePath("/jurnal");
+      revalidatePath(`/jurnal/ai/${draftId}`);
+    } catch {}
     return { ok: true, number: out.number };
   } catch (e) {
     if (isRedirectError(e)) throw e;
@@ -267,3 +297,43 @@ export async function acceptDraftAction(
     return { ok: false, error: "Terjadi kesalahan tak terduga." };
   }
 }
+
+export async function getSakCitationDetailAction(babStr: string, paragraphStr: string) {
+  try {
+    await requireContext();
+    const { getSakChapterByBab } = await import("@/server/db/repos/sak-docs.repo");
+    const babNum = parseInt(babStr.replace(/\D/g, ""), 10);
+    if (!babNum || isNaN(babNum)) {
+      return { ok: false, error: "Nomor bab tidak valid" };
+    }
+    const chapter = await getSakChapterByBab(babNum);
+    if (!chapter) {
+      return { ok: false, error: "Bab aturan tidak ditemukan" };
+    }
+
+    // Cari chunk yang paling spesifik memuat nomor paragraf tersebut
+    const cleanP = paragraphStr.trim();
+    let targetChunk = chapter.chunks.find((c) =>
+      c.content.includes(`${cleanP}.`) || c.content.includes(cleanP) || c.paragraphRange.includes(cleanP)
+    );
+    if (!targetChunk && chapter.chunks.length > 0) {
+      targetChunk = chapter.chunks[0];
+    }
+
+    return {
+      ok: true,
+      data: {
+        bab: chapter.bab,
+        babTitle: chapter.title,
+        description: chapter.description,
+        sectionTitle: targetChunk?.title ?? `Bab ${chapter.bab}`,
+        paragraphRange: targetChunk?.paragraphRange ?? "",
+        content: targetChunk?.content ?? "",
+      },
+    };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    return { ok: false, error: e instanceof Error ? e.message : "Gagal memuat aturan SAK" };
+  }
+}
+

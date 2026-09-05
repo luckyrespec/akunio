@@ -10,14 +10,20 @@ import {
   resolveFindingAction,
 } from "../actions";
 
-/** Tombol aksi temuan sejajar header — konsisten dengan halaman lain. */
+interface TemuanDetailActionsProps {
+  findingId: string;
+  findingType?: string;
+  status: string;
+  onTriggerUpload?: () => void;
+}
+
+/** Tombol aksi temuan sejajar header — unik sesuai jenis permasalahan. */
 export function TemuanDetailActions({
   findingId,
+  findingType,
   status,
-}: {
-  findingId: string;
-  status: string;
-}) {
+  onTriggerUpload,
+}: TemuanDetailActionsProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -28,8 +34,6 @@ export function TemuanDetailActions({
       try {
         const r = await fn();
         if (!r.ok) {
-          // Ruling R7: kode SCREAMING_SNAKE mentah Task 7 dipetakan ke
-          // kalimat Bahasa Indonesia yang ramah.
           setError(r.error ? findingErrorMessage(r.error) : "Aksi gagal. Coba lagi.");
           return;
         }
@@ -47,24 +51,56 @@ export function TemuanDetailActions({
 
   if (status !== "open") return null;
 
+  // Konfigurasi tombol utama sesuai jenis permasalahan
+  let primaryLabel = "Buat Draf Koreksi Jurnal";
+  let primaryPendingLabel = "Menyiapkan Draf...";
+  let primaryAction = () => run(() => proposeCorrectionAction(findingId));
+
+  if (findingType === "missingReceipts") {
+    primaryLabel = "Unggah Dokumen Lampiran";
+    primaryAction = () => {
+      if (onTriggerUpload) {
+        onTriggerUpload();
+      } else {
+        const el = document.getElementById("upload-lampiran-section");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }
+    };
+  } else if (findingType === "duplicates") {
+    primaryLabel = "Buat Draf Jurnal Pembalik";
+    primaryPendingLabel = "Menyiapkan Pembalik...";
+  } else if (findingType === "abnormalBalances") {
+    primaryLabel = "Buat Jurnal Penyesuaian";
+    primaryPendingLabel = "Menyiapkan Reklasifikasi...";
+  } else if (findingType === "oddDates") {
+    primaryLabel = "Buat Draf Pisah Batas";
+    primaryPendingLabel = "Menyiapkan Pisah Batas...";
+  } else if (findingType === "ratioAnomalies") {
+    primaryLabel = "Konfirmasi & Selesaikan";
+    primaryPendingLabel = "Menyelesaikan...";
+    primaryAction = () => run(() => resolveFindingAction(findingId));
+  }
+
   return (
     <PageActions>
       <PageActionButton variant="ghost" disabled={pending} onClick={() => run(() => dismissFindingAction(findingId))}>
         Abaikan
       </PageActionButton>
-      <PageActionButton
-        variant="secondary"
-        disabled={pending}
-        onClick={() => run(() => resolveFindingAction(findingId))}
-      >
-        Tandai Selesai
-      </PageActionButton>
+      {findingType !== "ratioAnomalies" && (
+        <PageActionButton
+          variant="secondary"
+          disabled={pending}
+          onClick={() => run(() => resolveFindingAction(findingId))}
+        >
+          Tandai Selesai
+        </PageActionButton>
+      )}
       <PageActionButton
         variant="primary"
         loading={pending}
-        onClick={() => run(() => proposeCorrectionAction(findingId))}
+        onClick={primaryAction}
       >
-        {pending ? "Menyiapkan Draf..." : "Buat Draf Koreksi Jurnal"}
+        {pending ? primaryPendingLabel : primaryLabel}
       </PageActionButton>
       {error && (
         <p role="alert" className="w-full text-xs text-terra">

@@ -147,7 +147,7 @@ function generateSmartTitle(prompt: string): string {
 
     // Gather contextual data
     let ragContext = "";
-    let citations: Array<{ kind: string; ref: string; excerpt: string; score: number }> = [];
+    let citations: Array<{ kind: string; ref: string; excerpt: string; score: number; section?: string }> = [];
     try {
       const queryEmbedding = await embed(trimmedMsg || "akuntansi");
       const hits = await hybridSearch(ctx.orgId, queryEmbedding, trimmedMsg || "akuntansi", 5);
@@ -157,6 +157,7 @@ function generateSmartTitle(prompt: string): string {
         ref: h.id,
         excerpt: h.excerpt,
         score: h.score,
+        section: h.section,
       }));
     } catch {}
 

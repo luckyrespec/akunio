@@ -35,7 +35,7 @@ export function ModelSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const currentLabel = value === "deep" ? "Akunio Analis" : "Akunio Kilat";
+  const currentLabel = value === "deep" ? "Mode Analis" : "Mode Cepat";
   const CurrentIcon = value === "deep" ? Brain : Zap;
 
   return (
@@ -68,8 +68,8 @@ export function ModelSelector({
           >
             <Zap className="mt-0.5 size-4 text-amber-600 shrink-0" />
             <div>
-              <div className="font-semibold text-ink">Akunio Kilat (Flash)</div>
-              <div className="text-[11px] text-ink-soft">Eksekusi cepat untuk tugas dan pencarian rutin</div>
+              <div className="font-semibold text-ink">Mode Cepat</div>
+              <div className="text-[11px] text-ink-soft">Pencatatan harian dan konsultasi langsung</div>
             </div>
           </button>
 
@@ -86,8 +86,8 @@ export function ModelSelector({
           >
             <Brain className="mt-0.5 size-4 text-purple-600 shrink-0" />
             <div>
-              <div className="font-semibold text-ink">Akunio Analis (Deep Thinking)</div>
-              <div className="text-[11px] text-ink-soft">Penalaran bertahap untuk audit & rekonsiliasi kompleks</div>
+              <div className="font-semibold text-ink">Mode Analis</div>
+              <div className="text-[11px] text-ink-soft">Penalaran bertahap untuk audit dan rekonsiliasi</div>
             </div>
           </button>
         </div>

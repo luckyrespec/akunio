@@ -5,19 +5,20 @@ import { countEntries } from "@/server/db/repos/journals.repo";
 import { PageHeader } from "@/components/page-header";
 import { TemuanClient } from "./temuan-client";
 import type { FindingView } from "./finding-meta";
+import { cn } from "@/lib/utils";
 
 export default async function TemuanPage() {
   const ctx = await requireContext();
-  const [openFindings, allFindings, totalJournals] = await Promise.all([
-    listFindings(db, ctx.orgId, "open"),
+  const [allFindings, totalJournals] = await Promise.all([
     listFindings(db, ctx.orgId),
     countEntries(db, ctx.orgId),
   ]);
 
+  const openFindings = allFindings.filter((f) => f.status === "open");
   const resolvedCount = allFindings.filter((f) => f.status === "resolved").length;
   const dismissedCount = allFindings.filter((f) => f.status === "dismissed").length;
 
-  const serialized: FindingView[] = openFindings.map((f) => ({
+  const serialized: FindingView[] = allFindings.map((f) => ({
     id: f.id,
     type: f.type,
     severity: f.severity as FindingView["severity"],
@@ -30,16 +31,16 @@ export default async function TemuanPage() {
     <section>
       <PageHeader
         title="Diagnosa & Anomali"
-        eyebrow="Doctor AI — Pemindaian integritas pembukuan, deteksi anomali kepatuhan, dan draf usulan koreksi otomatis"
+        eyebrow="Pemeriksaan integritas pembukuan, deteksi anomali saldo, dan usulan koreksi jurnal otomatis."
         actions={
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-canvas px-3 py-1 text-xs text-ink-soft">
-              <span className="size-2 rounded-full bg-terra" />
+              <span className={cn("size-2 rounded-full", openFindings.length > 0 ? "bg-terra" : "bg-debit")} />
               <strong className="text-ink font-semibold">{openFindings.length}</strong> Perlu Tindakan
             </span>
             {resolvedCount > 0 && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-debit/20 bg-debit/10 px-3 py-1 text-xs text-debit font-medium">
-                {resolvedCount} Terselesaikan
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-debit/20 bg-debit/10 px-3 py-1 text-xs text-debit font-medium">
+                ✓ {resolvedCount} Terselesaikan
               </span>
             )}
           </div>

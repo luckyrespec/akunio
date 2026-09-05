@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-const EMBED_MODEL = process.env.GEMINI_EMBED_MODEL ?? "gemini-embedding-001";
+const EMBED_MODEL = process.env.GEMINI_EMBED_MODEL ?? "gemini-embedding-2";
 
 export async function embed(text: string): Promise<number[]> {
   const apiKey = process.env.GEMINI_API_KEY;
