@@ -33,11 +33,15 @@ export function CalkActions({ periodName }: CalkActionsProps) {
 
   const handleRefreshAi = () => {
     setIsRefreshing(true);
-    // Refresh Next.js server component to re-execute generateCalkNarrative
-    router.refresh();
+    const url = new URL(window.location.href);
+    url.searchParams.set("refresh", "1");
+    router.replace(url.pathname + url.search);
     setTimeout(() => {
+      // Hapus refresh parameter agar navigasi/refresh manual berikutnya tetap menggunakan cache
+      url.searchParams.delete("refresh");
+      window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
       setIsRefreshing(false);
-    }, 1500);
+    }, 1200);
   };
 
   return (

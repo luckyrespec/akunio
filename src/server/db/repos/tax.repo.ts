@@ -197,7 +197,13 @@ export async function upsertMonthlyTaxSummary(
 
   // Cari apakah sudah ada draf / bukti bayar sebelumnya
   const existing = await getTaxSummaryByMonth(q, orgId, periodMonth);
-  const status = existing?.status === "PAID" ? "PAID" : existing?.status === "ACCRUED" ? "ACCRUED" : existing?.accrualDraftId ? "DRAFTED" : "UNPROCESSED";
+  if (existing?.status === "PAID") {
+    // SAK EMKM & Aturan Pajak: Rekonsiliasi NTPN yang sudah disetor bersifat final/beku (frozen).
+    // Nilai omzet dan pajak terutang yang sudah dibayar tidak boleh ditimpa otomatis.
+    return existing;
+  }
+
+  const status = existing?.status === "ACCRUED" ? "ACCRUED" : existing?.accrualDraftId ? "DRAFTED" : "UNPROCESSED";
 
   const [row] = await q
     .insert(taxSummaries)

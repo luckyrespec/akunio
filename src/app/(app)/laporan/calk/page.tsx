@@ -22,10 +22,11 @@ import { CalkActions } from "@/components/calk/calk-actions";
 export default async function CalkPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; refresh?: string }>;
 }) {
   const ctx = await requireContext();
   const sp = await searchParams;
+  const forceRefresh = sp.refresh === "1" || sp.refresh === "true";
 
   const data = await db.transaction(async (tx) => {
     const [org] = await tx
@@ -38,7 +39,7 @@ export default async function CalkPage({
     const period = await loadPeriodOrDefault(tx, ctx.orgId, sp.period);
     const options = await listPeriods(tx, ctx.orgId);
     const lines = await postedLinesThrough(tx, ctx.orgId, period.endsOn);
-    const narrative = await generateCalkNarrative(tx, ctx.orgId, period.endsOn);
+    const narrative = await generateCalkNarrative(tx, ctx.orgId, period.endsOn, { forceRefresh });
 
     const year = parseInt(period.endsOn.slice(0, 4), 10);
     const taxSettings = await getTaxSettings(tx, ctx.orgId);

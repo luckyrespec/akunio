@@ -161,16 +161,33 @@ export async function aggregateCalkFinancialData(
 export async function generateCalkNarrative(
   q: Queryable,
   orgId: string,
-  periodEndsOn: string
+  periodEndsOn: string,
+  options?: { forceRefresh?: boolean }
 ): Promise<CalkNarrative> {
   const finData = await aggregateCalkFinancialData(q, orgId, periodEndsOn);
 
-  // Jika AI_MOCK=1 atau tidak ada API Key, gunakan deterministic mock yang kaya & akurat
-  if (process.env.AI_MOCK === "1" || !process.env.GEMINI_API_KEY) {
-    return buildDeterministicCalkMock(finData);
+  // 1. Cek cache narasi di settings organisasi jika tidak dipaksa refresh
+  if (!options?.forceRefresh) {
+    const [org] = await q
+      .select({ settings: organizations.settings })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    const orgSettings = (org?.settings ?? {}) as Record<string, unknown>;
+    const calkCache = (orgSettings.calkCache ?? {}) as Record<string, CalkNarrative>;
+    if (calkCache[periodEndsOn]) {
+      return calkCache[periodEndsOn];
+    }
   }
 
-  const prompt = `Anda adalah seorang Akuntan Publik Senior dan Auditor Berlisensi di Indonesia yang menguasai Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah (SAK EMKM) 2024 serta peraturan perpajakan UMKM (PP No. 55 Tahun 2022 jo. UU HPP).
+  let resultNarrative: CalkNarrative;
+
+  // Jika AI_MOCK=1 atau tidak ada API Key, gunakan deterministic mock yang kaya & akurat
+  if (process.env.AI_MOCK === "1" || !process.env.GEMINI_API_KEY) {
+    resultNarrative = buildDeterministicCalkMock(finData);
+  } else {
+    const prompt = `Anda adalah seorang Akuntan Publik Senior dan Auditor Berlisensi di Indonesia yang menguasai Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah (SAK EMKM) 2024 serta peraturan perpajakan UMKM (PP No. 55 Tahun 2022 jo. UU HPP).
 
 Tugas Anda: Susunlah Catatan Atas Laporan Keuangan (CALK) yang profesional, mengalir alami, tidak kaku (anti AI-slop), dan berbasis angka-angka riil berikut:
 
@@ -200,25 +217,55 @@ ATURAN WAJIB SAK EMKM:
 2. Gunakan gaya bahasa audit resmi Indonesia yang berwibawa, jernih, kontekstual, dan mudah dipahami oleh perbankan atau otoritas pajak.
 3. Kembalikan JSON sesuai schema yang telah ditentukan.`;
 
-  try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const response = await ai.interactions.create({
-      model: MODEL,
-      input: [{ type: "user_input", content: [{ type: "text", text: prompt }] as never }] as never,
-      response_format: {
-        type: "text",
-        mime_type: "application/json",
-        schema: calkNarrativeJsonSchema,
-      },
-    });
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.interactions.create({
+        model: MODEL,
+        input: [{ type: "user_input", content: [{ type: "text", text: prompt }] as never }] as never,
+        response_format: {
+          type: "text",
+          mime_type: "application/json",
+          schema: calkNarrativeJsonSchema,
+        },
+      });
 
-    const parsed = JSON.parse(response.output_text ?? "{}") as CalkNarrative;
-    if (parsed.generalInfo && parsed.accountingBasis && parsed.incomeTaxNote) {
-      return parsed;
+      const parsed = JSON.parse(response.output_text ?? "{}") as CalkNarrative;
+      if (parsed.generalInfo && parsed.accountingBasis && parsed.incomeTaxNote) {
+        resultNarrative = parsed;
+      } else {
+        resultNarrative = buildDeterministicCalkMock(finData);
+      }
+    } catch (err) {
+      console.warn("AI generation failed or rate limited, falling back to deterministic mock:", err);
+      resultNarrative = buildDeterministicCalkMock(finData);
     }
-  } catch (err) {
-    console.warn("AI generation failed or rate limited, falling back to deterministic mock:", err);
   }
 
-  return buildDeterministicCalkMock(finData);
+  // 2. Simpan ke database cache organisasi agar render berikutnya cepat dan hemat API
+  try {
+    const [org] = await q
+      .select({ settings: organizations.settings })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    const currentSettings = ((org?.settings ?? {}) as Record<string, unknown>) || {};
+    const existingCache = ((currentSettings.calkCache ?? {}) as Record<string, CalkNarrative>) || {};
+    const updatedSettings = {
+      ...currentSettings,
+      calkCache: {
+        ...existingCache,
+        [periodEndsOn]: resultNarrative,
+      },
+    };
+
+    await q
+      .update(organizations)
+      .set({ settings: updatedSettings })
+      .where(eq(organizations.id, orgId));
+  } catch (cacheErr) {
+    console.warn("Failed to persist CALK narrative cache:", cacheErr);
+  }
+
+  return resultNarrative;
 }

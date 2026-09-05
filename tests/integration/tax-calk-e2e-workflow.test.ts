@@ -144,6 +144,14 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("tax and calk end-to-end work
     expect(narrative.incomeTaxNote).toContain(ntpnCode);
     expect(narrative.incomeTaxNote).toContain("tidak mengakui aset atau liabilitas pajak tangguhan");
 
+    // Verifikasi Caching Narasi: pemanggilan kedua tanpa forceRefresh mengambil dari cache
+    const cachedNarrative = await generateCalkNarrative(db, orgId, "2026-02-28");
+    expect(cachedNarrative.generalInfo).toBe(narrative.generalInfo);
+
+    // Pemanggilan dengan forceRefresh: true berhasil memperbarui cache
+    const refreshedNarrative = await generateCalkNarrative(db, orgId, "2026-02-28", { forceRefresh: true });
+    expect(refreshedNarrative.generalInfo).toBeDefined();
+
     // 7. Ekspor dokumen Word (.docx)
     const docxBuffer = await buildCalkDocx({
       ...finData,

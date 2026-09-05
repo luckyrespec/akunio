@@ -162,4 +162,28 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("tax.repo integration tests",
     expect(lines.rows[1].code).toBe("1120");
     expect(lines.rows[1].credit).toBe("500000.00");
   });
+
+  it("freezes tax calculation when status is PAID even if backdated transactions occur", async () => {
+    const kasId = await getAccountId("1110");
+    const revId = await getAccountId("4100");
+
+    // Catat transaksi penjualan susulan di bulan Maret 2026 (yang statusnya sudah PAID)
+    await postJournalEntry(db, orgId, "owner@barokah.com", {
+      dateISO: "2026-03-30",
+      memo: "Penjualan susulan Maret setelah setor NTPN",
+      lines: [
+        { accountId: kasId, debitMinor: toMinor(50_000_000), creditMinor: 0n },
+        { accountId: revId, debitMinor: 0n, creditMinor: toMinor(50_000_000) },
+      ],
+    });
+
+    // Panggil upsert ulang untuk periode yang sudah PAID
+    const frozenSummary = await upsertMonthlyTaxSummary(db, orgId, "2026-03");
+
+    // Nominal harus tetap beku (frozen) sesuai data pelunasan NTPN sebelumnya
+    expect(frozenSummary.status).toBe("PAID");
+    expect(frozenSummary.ntpn).toBe("NTPN9876543210ABCDEF");
+    expect(frozenSummary.grossRevenueMinor).toBe(toMinor(350_000_000));
+    expect(frozenSummary.taxDueMinor).toBe(toMinor(500_000));
+  });
 });
