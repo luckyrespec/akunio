@@ -24,10 +24,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS tax_summaries_org_month_uq
 CREATE INDEX IF NOT EXISTS tax_summaries_org_year_idx
   ON tax_summaries (org_id, tax_year);
 
--- Perbarui constraint source di journal_entries agar mencakup 'TAX'
+-- Perbarui constraint source di journal_entries agar mencakup 'TAX' + kas-bank
 ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS je_source_chk;
 ALTER TABLE journal_entries ADD CONSTRAINT je_source_chk
-  CHECK (source IN ('MANUAL','AI','DOCUMENT','IMPORT','STOCK_OPNAME','TAX'));
+  CHECK (source IN ('MANUAL','AI','DOCUMENT','IMPORT','STOCK_OPNAME','TAX','KAS_BAYAR','KAS_TERIMA','KAS_TRANSFER'));
 
 ALTER TABLE tax_summaries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tax_summaries FORCE ROW LEVEL SECURITY;

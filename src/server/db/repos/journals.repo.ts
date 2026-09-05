@@ -404,3 +404,25 @@ export async function createDraftJournalEntry(
   return { id: entry.id, number };
 }
 
+/** Posting jurnal DRAFT yang sudah ada (dipakai modul kas-bank untuk draft). */
+export async function postDraftEntry(
+  q: Queryable,
+  orgId: string,
+  actorEmail: string,
+  entryId: string,
+): Promise<PostResult> {
+  const [entry] = await q.select().from(journalEntries)
+    .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.id, entryId)))
+    .limit(1);
+  if (!entry) throw new PostingError([{ code: "JURNAL_TIDAK_DITEMUKAN" }]);
+  if (entry.status === "POSTED") return { id: entry.id, number: entry.number };
+  const period = await findPeriodByDate(q, orgId, entry.entryDate);
+  if (!period || period.status !== "OPEN") throw new PostingError([{ code: "PERIODE_TUTUP" }]);
+  const [updated] = await q.update(journalEntries)
+    .set({ status: "POSTED", postedAt: new Date(), postedBy: actorEmail })
+    .where(and(eq(journalEntries.id, entry.id), eq(journalEntries.status, "DRAFT")))
+    .returning({ id: journalEntries.id, number: journalEntries.number });
+  if (!updated) throw new PostingError([{ code: "GAGAL_POSTING" }]);
+  return updated;
+}
+
