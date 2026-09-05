@@ -177,7 +177,7 @@ export function ReconciliationWorksheet({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Link
-            href="/rekonsiliasi"
+            href="/kas-bank/rekonsiliasi"
             className="flex items-center gap-1.5 text-xs text-ink-soft hover:text-ink transition-colors mb-2"
           >
             <ArrowLeft className="size-3.5" />

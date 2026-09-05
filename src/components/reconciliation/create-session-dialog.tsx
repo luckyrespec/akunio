@@ -92,7 +92,7 @@ export function CreateSessionDialog({
       onOpenChange(false);
       onSuccess?.();
       if (res.data?.id) {
-        router.push(`/rekonsiliasi/${res.data.id}`);
+        router.push(`/kas-bank/rekonsiliasi/${res.data.id}`);
       }
     } catch (err) {
       setError(

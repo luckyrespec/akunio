@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import {
   IconDashboard,
   IconReceipt,
@@ -30,11 +32,17 @@ import {
 
 import { AkunioMark } from "@/components/brand/akunio-logo";
 
+type NavChild = {
+  href: string;
+  label: string;
+};
+
 type NavItem = {
   href: string;
   label: string;
   icon: typeof IconDashboard;
   match?: (p: string) => boolean;
+  children?: NavChild[];
 };
 
 type NavGroup = {
@@ -50,7 +58,19 @@ const NAVIGATION_GROUPS: NavGroup[] = [
     items: [
       { href: "/faktur", label: "Faktur & Tagihan", icon: IconReceipt },
       { href: "/persediaan", label: "Persediaan & Stok", icon: IconInventory, match: (p: string) => p.startsWith("/persediaan") },
-      { href: "/rekonsiliasi", label: "Rekonsiliasi Bank", icon: IconReconciliation },
+      {
+        href: "/kas-bank/pembayaran",
+        label: "Kas & Bank",
+        icon: IconReconciliation,
+        match: (p: string) => p.startsWith("/kas-bank") || p.startsWith("/rekonsiliasi"),
+        children: [
+          { href: "/kas-bank/pembayaran", label: "Pembayaran" },
+          { href: "/kas-bank/penerimaan", label: "Penerimaan" },
+          { href: "/kas-bank/transfer", label: "Transfer Bank" },
+          { href: "/kas-bank/histori", label: "Histori Bank" },
+          { href: "/kas-bank/rekonsiliasi", label: "Rekonsiliasi Bank" },
+        ],
+      },
       { href: "/kontak", label: "Kontak", icon: IconContacts },
     ],
   },
@@ -83,8 +103,111 @@ const NAVIGATION_GROUPS: NavGroup[] = [
   },
 ];
 
-export function SidebarNav({
+function ParentNavItem({
+  item,
+  isDrawer,
   collapsed,
+  isActive,
+  onCloseMobile,
+}: {
+  item: NavItem;
+  isDrawer: boolean;
+  collapsed: boolean;
+  isActive: (href: string, match?: (p: string) => boolean) => boolean;
+  onCloseMobile?: () => void;
+}) {
+  const Icon = item.icon;
+  const active = isActive(item.href, item.match);
+  const [expanded, setExpanded] = useState(active);
+  const showText = isDrawer || !collapsed;
+
+  if (!showText) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            href={item.href}
+            onClick={() => {
+              if (isDrawer && onCloseMobile) onCloseMobile();
+            }}
+            className={cn(
+              "group flex items-center gap-2.5 rounded-xl px-2 py-2 text-xs font-medium transition-colors focus-ring justify-center",
+              active
+                ? "bg-canvas text-terra font-semibold border border-rule shadow-2xs"
+                : "text-ink-soft hover:bg-canvas/60 hover:text-ink border border-transparent"
+            )}
+          >
+            <Icon
+              className={cn(
+                "size-4 shrink-0 transition-colors",
+                active ? "text-terra" : "text-ink-soft group-hover:text-ink"
+              )}
+            />
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {(item.children ?? []).map((c) => c.label).join(" · ")}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className={cn(
+          "group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors focus-ring",
+          active
+            ? "bg-canvas text-terra font-semibold border border-rule shadow-2xs"
+            : "text-ink-soft hover:bg-canvas/60 hover:text-ink border border-transparent"
+        )}
+      >
+        <Icon
+          className={cn(
+            "size-4 shrink-0 transition-colors",
+            active ? "text-terra" : "text-ink-soft group-hover:text-ink"
+          )}
+        />
+        <span className="truncate flex-1 text-left">{item.label}</span>
+        <ChevronDown
+          className={cn(
+            "size-3.5 shrink-0 transition-transform motion-safe:duration-200",
+            expanded && "rotate-180"
+          )}
+        />
+      </button>
+      {expanded && (
+        <div className="ml-4 flex flex-col gap-0.5 border-l border-rule/70 pl-2">
+          {(item.children ?? []).map((child) => {
+            const childActive = isActive(child.href);
+            return (
+              <Link
+                key={child.href}
+                href={child.href}
+                onClick={() => {
+                  if (isDrawer && onCloseMobile) onCloseMobile();
+                }}
+                className={cn(
+                  "truncate rounded-lg px-2.5 py-1.5 text-xs transition-colors focus-ring",
+                  childActive
+                    ? "bg-canvas text-terra font-semibold border border-rule shadow-2xs"
+                    : "text-ink-soft hover:bg-canvas/60 hover:text-ink border border-transparent"
+                )}
+              >
+                {child.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SidebarNav({  collapsed,
   onToggle,
   mobileOpen,
   onCloseMobile,
@@ -225,6 +348,18 @@ export function SidebarNav({
               {/* Item-item Navigasi */}
               <div className="flex flex-col gap-0.5">
                 {group.items.map((item) => {
+                  if (item.children) {
+                    return (
+                      <ParentNavItem
+                        key={item.href}
+                        item={item}
+                        isDrawer={isDrawer}
+                        collapsed={!isDrawer && !!collapsed}
+                        isActive={isActive}
+                        onCloseMobile={onCloseMobile}
+                      />
+                    );
+                  }
                   const Icon = item.icon;
                   const active = isActive(item.href, item.match);
                   return (

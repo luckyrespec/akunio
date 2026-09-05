@@ -65,7 +65,7 @@ export async function startReconciliationSessionAction(formData: FormData) {
       await saveStatementLinesRepo(db, session.id, linesToInsert);
     }
 
-    revalidatePath("/rekonsiliasi");
+    revalidatePath("/kas-bank/rekonsiliasi");
     return { ok: true as const, data: session };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal memulai sesi rekonsiliasi." };
@@ -126,8 +126,8 @@ export async function runAutoMatchAction(reconciliationId: string) {
       );
     }
 
-    revalidatePath(`/rekonsiliasi/${reconciliationId}`);
-    revalidatePath("/rekonsiliasi");
+    revalidatePath(`/kas-bank/rekonsiliasi/${reconciliationId}`);
+    revalidatePath("/kas-bank/rekonsiliasi");
     return { ok: true as const, data: result };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal menjalankan auto-match." };
@@ -138,7 +138,7 @@ export async function confirmMatchAction(statementLineId: string, journalLineId:
   try {
     await requireContext(["OWNER", "ACCOUNTANT"]);
     await linkMatchedLineRepo(db, statementLineId, journalLineId, 100);
-    revalidatePath("/rekonsiliasi");
+    revalidatePath("/kas-bank/rekonsiliasi");
     return { ok: true as const };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal mencocokkan baris." };
@@ -149,7 +149,7 @@ export async function unlinkMatchAction(statementLineId: string) {
   try {
     await requireContext(["OWNER", "ACCOUNTANT"]);
     await unlinkMatchedLineRepo(db, statementLineId);
-    revalidatePath("/rekonsiliasi");
+    revalidatePath("/kas-bank/rekonsiliasi");
     return { ok: true as const };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal membatalkan pencocokan." };
@@ -169,7 +169,7 @@ export async function createQuickAdjustmentAction(
       journalId = await createBankInterestJournal(db, ctx.orgId, statementLineId, ctx.userEmail);
     }
 
-    revalidatePath("/rekonsiliasi");
+    revalidatePath("/kas-bank/rekonsiliasi");
     revalidatePath("/jurnal");
     revalidatePath("/buku-besar");
     return { ok: true as const, journalId };
@@ -188,8 +188,8 @@ export async function finalizeReconciliationAction(reconciliationId: string) {
 
     // Check if difference is 0 or all lines matched
     const completed = await finalizeReconciliationRepo(db, ctx.orgId, reconciliationId, ctx.userEmail);
-    revalidatePath("/rekonsiliasi");
-    revalidatePath(`/rekonsiliasi/${reconciliationId}`);
+    revalidatePath("/kas-bank/rekonsiliasi");
+    revalidatePath(`/kas-bank/rekonsiliasi/${reconciliationId}`);
     return { ok: true as const, data: completed };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal menyelesaikan rekonsiliasi." };

@@ -20,6 +20,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
+import { IconReview } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -371,7 +372,7 @@ export function TutupBukuClient({
                       Selesai
                     </Badge>
                   ) : (
-                    <Link href="/rekonsiliasi">
+                    <Link href="/kas-bank/rekonsiliasi">
                       <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5">
                         Selesaikan
                         <ArrowRight className="size-3 ml-1" />
@@ -415,9 +416,10 @@ export function TutupBukuClient({
                     </Badge>
                   ) : (
                     <Link href="/jurnal?tab=draf">
-                      <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5 cursor-pointer">
-                        Tinjau Draf
-                        <ArrowRight className="size-3 ml-1" />
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5 cursor-pointer gap-1">
+                        <IconReview className="size-3" />
+                        <span>Tinjau Draf</span>
+                        <ArrowRight className="size-3 ml-0.5" />
                       </Button>
                     </Link>
                   )}

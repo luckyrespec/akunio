@@ -76,7 +76,7 @@ export function ReconciliationDashboard({
               {inProgressCount > 1 && ` · +${inProgressCount - 1} sesi berjalan lain`}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Link href={`/rekonsiliasi/${spotlight.id}`}>
+              <Link href={`/kas-bank/rekonsiliasi/${spotlight.id}`}>
                 <Button size="sm" className="h-8 bg-terra text-xs text-white hover:bg-terra/90">
                   {spotlight.status === "IN_PROGRESS" ? "Lanjutkan Worksheet" : "Buka Worksheet"}
                 </Button>
@@ -209,7 +209,7 @@ export function ReconciliationDashboard({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link href={`/rekonsiliasi/${s.id}`}>
+                        <Link href={`/kas-bank/rekonsiliasi/${s.id}`}>
                           <Button
                             variant="outline"
                             size="sm"
