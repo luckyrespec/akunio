@@ -149,16 +149,43 @@ export async function acceptDraftAction(
       if (!draft) throw new Error("DRAFT_TIDAK_DITEMUKAN");
       if (draft.status !== "PENDING") throw new Error("DRAFT_SUDAH_DIPROSES");
 
-      // Usulan akun COA dari Doctor SAK: validasi + buat semuanya DAHULU dalam
-      // transaksi yang sama, lalu petakan ulang baris yang accountId-nya kosong
-      // ke akun baru tersebut (posisi baris ↔ kode draf, atau kode usulan yang
-      // dikirim sebagai accountId) — baru posting. Gagal di langkah mana pun
-      // → throw, transaksi rollback, tak ada akun yatim.
+      // Usulan akun COA dari Doctor SAK: validasi + buat yang MASIH DIRUJUK
+      // DAHULU dalam transaksi yang sama, lalu petakan ulang baris yang
+      // accountId-nya kosong ke akun baru tersebut (posisi baris ↔ kode draf,
+      // atau kode usulan yang dikirim sebagai accountId) — baru posting.
+      // Gagal di langkah mana pun → throw, transaksi rollback, tak ada akun
+      // yatim. D8: saring dulu ke usulan yang masih dirujuk baris yang BELUM
+      // diselesaikan manual (submitted lines[i].accountId kosong dan kode
+      // draf raw.lines[i].accountCode sama dengan kode usulan, serta kode
+      // itu tidak sudah ada sebagai akun — bisa dipetakan ulang ke akun
+      // lama). Baris yang user petakan manual ke akun nyata dilewati penuh:
+      // draf yang semua barisnya resolved manual diposting sebagai jurnal
+      // biasa tanpa membuat akun apa pun. R6 tetap: usulan yang masih
+      // dirujuk divalidasi ketat (placeholder gagal tertutup).
       const raw = draft.draft as {
         lines?: Array<{ accountCode?: string }>;
         accountProposals?: AccountProposal[];
       } | null;
-      const proposals = Array.isArray(raw?.accountProposals) ? raw.accountProposals : [];
+      const allProposals = Array.isArray(raw?.accountProposals) ? raw.accountProposals : [];
+      const existingRows = allProposals.length > 0
+        ? await tx.select({ id: accountsTable.id, code: accountsTable.code })
+          .from(accountsTable).where(eq(accountsTable.orgId, ctx.orgId))
+        : [];
+      const existingByCode = new Map(existingRows.map((r) => [r.code.trim(), r.id]));
+      const existingByLower = new Map(
+        existingRows.map((r) => [r.code.trim().toLowerCase(), r.id]),
+      );
+      const proposals = allProposals.filter((p) => {
+        const pCode = p.code.trim();
+        if (existingByCode.has(pCode) || existingByLower.has(pCode.toLowerCase())) return false;
+        return edited.lines.some((l, i) => {
+          const submitted = l.accountId.trim();
+          if (submitted === "") {
+            return raw?.lines?.[i]?.accountCode?.trim() === pCode;
+          }
+          return submitted === pCode;
+        });
+      });
       const codeToId = new Map<string, string>();
       if (proposals.length > 0) {
         const { validateAccountProposal } = await import("@/server/accounts/propose");
@@ -193,9 +220,13 @@ export async function acceptDraftAction(
         idempotencyKey: crypto.randomUUID(),
         lines: edited.lines.map((l, i) => {
           let accountId = l.accountId;
-          if (!accountId) {
+          if (accountId.trim() === "") {
             const code = raw?.lines?.[i]?.accountCode?.trim();
-            const resolved = code ? codeToId.get(code) : undefined;
+            const resolved = code
+              ? (codeToId.get(code)
+                ?? existingByCode.get(code)
+                ?? existingByLower.get(code.toLowerCase()))
+              : undefined;
             if (resolved) accountId = resolved;
           } else {
             const resolved = codeToId.get(accountId.trim());

@@ -25,6 +25,7 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("sak correction pipeline", ()
   const year = new Date().getFullYear();
 
   beforeAll(async () => {
+    delete process.env.TEST_CTX_ORG;
     await truncateAll();
     await clearSakTables(admin);
     // Deterministik tanpa API live: retrieval pakai fallback kata kunci,

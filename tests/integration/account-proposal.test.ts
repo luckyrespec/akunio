@@ -99,6 +99,51 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("account proposal atomicity",
     expect(st.rows[0].status).toBe("PENDING");
   });
 
+  it("acceptDraftAction posts fully manually-resolved drafts without creating placeholder accounts (D8)", async () => {
+    const { db } = await import("@/server/db");
+    const { createDraft } = await import("@/server/db/repos/drafts.repo");
+    const mod = await import("@/server/actions/ai.actions");
+    const year = new Date().getFullYear();
+    const before = await admin.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM accounts WHERE org_id=$1`, [orgId]);
+    const draft = await db.transaction((tx) =>
+      createDraft(tx as never, {
+        orgId, kind: "TEXT", inputText: "koreksi temuan",
+        draft: {
+          dateISO: `${year}-06-03`, memo: "koreksi",
+          lines: [
+            { accountCode: "1191", debitText: "10.000", creditText: "", confidence: 0.45, reason: "x" },
+            { accountCode: "1110", debitText: "", creditText: "10.000", confidence: 1.0, reason: "x" },
+          ],
+          overallConfidence: 0.7, explanation: "koreksi temuan",
+          accountProposals: [
+            {
+              code: "1191", name: "Akun 1191", type: "ASET", normal: "D",
+              parentCode: "1100", reason: "masih placeholder",
+            },
+          ],
+        },
+        model: "doctor-sak",
+      }));
+    const rows = await admin.query<{ id: string; code: string }>(
+      `SELECT id, code FROM accounts WHERE org_id=$1`, [orgId]);
+    const byCode = Object.fromEntries(rows.rows.map((r) => [r.code, r.id]));
+    const res = await mod.acceptDraftAction(draft.id, {
+      dateISO: `${year}-06-03`, memo: "koreksi",
+      lines: [
+        { accountId: byCode["5200"], debitText: "10.000", creditText: "" },
+        { accountId: byCode["1110"], debitText: "", creditText: "10.000" },
+      ],
+    });
+    expect(res.ok).toBe(true);
+    const after = await admin.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM accounts WHERE org_id=$1`, [orgId]);
+    expect(Number(after.rows[0].n)).toBe(Number(before.rows[0].n));
+    const ghost = await admin.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM accounts WHERE org_id=$1 AND code='1191'`, [orgId]);
+    expect(Number(ghost.rows[0].n)).toBe(0);
+  });
+
   it("acceptDraftAction creates proposed accounts then posts atomically", async () => {
     const { db } = await import("@/server/db");
     const { createDraft } = await import("@/server/db/repos/drafts.repo");
