@@ -3,6 +3,10 @@ import { db } from "@/server/db";
 import { getCashHistoryRepo } from "@/server/db/repos/cash-bank.repo";
 import { accounts } from "@/server/db/schema/org";
 import { Money } from "@/core/money/money";
+import { HistoryTable } from "@/components/kas-bank/history-table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { eq, and, or } from "drizzle-orm";
 
 function monthRange(d: Date): { dari: string; sampai: string } {
@@ -36,13 +40,6 @@ export default async function HistoriPage({
     ? await getCashHistoryRepo(db, ctx.orgId, akun, dari, sampai)
     : null;
 
-  let totalMasuk = 0n;
-  let totalKeluar = 0n;
-  for (const r of history?.rows ?? []) {
-    totalMasuk += r.debitMinor;
-    totalKeluar += r.creditMinor;
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -53,53 +50,64 @@ export default async function HistoriPage({
           Mutasi kas/bank versi pembukuan — dasar pencocokan rekonsiliasi.
         </p>
       </div>
+
+      <form method="get" className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="hist-akun" className="text-xs font-medium text-ink">
+            Akun
+          </Label>
+          <select
+            id="hist-akun"
+            name="akun"
+            defaultValue={akun}
+            className="rounded-md border border-rule bg-canvas px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-terra"
+          >
+            {cashAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} - {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="hist-dari" className="text-xs font-medium text-ink">
+            Dari
+          </Label>
+          <Input
+            id="hist-dari"
+            name="dari"
+            type="date"
+            defaultValue={dari}
+            className="text-xs bg-canvas"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label
+            htmlFor="hist-sampai"
+            className="text-xs font-medium text-ink"
+          >
+            Sampai
+          </Label>
+          <Input
+            id="hist-sampai"
+            name="sampai"
+            type="date"
+            defaultValue={sampai}
+            className="text-xs bg-canvas"
+          />
+        </div>
+        <Button type="submit" size="sm" variant="outline" className="text-xs">
+          Tampilkan
+        </Button>
+      </form>
+
       {history && (
-        <>
-          <p className="text-sm text-ink-soft">
-            {history.account.code} {history.account.name} · Saldo awal{" "}
-            {Money.formatIdr(history.openingMinor)} · Masuk{" "}
-            {Money.formatIdr(totalMasuk)} · Keluar{" "}
-            {Money.formatIdr(totalKeluar)}
-          </p>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-ink-soft">
-                <th className="py-2 pr-4 font-medium">Tanggal</th>
-                <th className="py-2 pr-4 font-medium">Nomor</th>
-                <th className="py-2 pr-4 font-medium">Keterangan</th>
-                <th className="py-2 pr-4 font-medium text-right">Masuk</th>
-                <th className="py-2 pr-4 font-medium text-right">Keluar</th>
-                <th className="py-2 font-medium text-right">Saldo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.rows.map((r) => (
-                <tr key={r.entryId} className="border-t border-rule">
-                  <td className="py-2 pr-4">{r.entryDate}</td>
-                  <td className="py-2 pr-4">{r.number}</td>
-                  <td className="py-2 pr-4">{r.memo}</td>
-                  <td className="py-2 pr-4 text-right">
-                    {r.debitMinor > 0n ? Money.formatIdr(r.debitMinor) : "—"}
-                  </td>
-                  <td className="py-2 pr-4 text-right">
-                    {r.creditMinor > 0n ? Money.formatIdr(r.creditMinor) : "—"}
-                  </td>
-                  <td className="py-2 text-right">
-                    {Money.formatIdr(r.balanceMinor)}
-                  </td>
-                </tr>
-              ))}
-              {history.rows.length === 0 && (
-                <tr className="border-t border-rule">
-                  <td colSpan={6} className="py-6 text-center text-ink-soft">
-                    Tidak ada mutasi pada rentang ini.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </>
+        <p className="text-sm text-ink-soft">
+          {history.account.code} {history.account.name} · Saldo awal{" "}
+          {Money.formatIdr(history.openingMinor)}
+        </p>
       )}
+      {history && <HistoryTable rows={history.rows} />}
     </div>
   );
 }
