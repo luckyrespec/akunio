@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AccountSelect } from "@/components/account-select";
+import { PageHeader } from "@/components/page-header";
 import { PageActionButton, PageActions } from "@/components/page-actions";
 
 export interface ReviewDraftLine {
@@ -254,7 +255,35 @@ export function ReviewClient({
   }
 
   return (
-    <div className="mt-6 grid gap-8 md:grid-cols-2">
+    <>
+      <PageHeader
+        title="Review Draft Asisten"
+        eyebrow={`Draf AI · keyakinan ${Math.round(draft.overallConfidence * 100)}%`}
+        actions={
+          <PageActions>
+            {confirmTolak && (
+              <span className="w-full text-xs text-ink-soft sm:w-auto">
+                Ditolak permanen. Klik Tolak sekali lagi.
+              </span>
+            )}
+            <PageActionButton
+              variant="secondary"
+              disabled={pending}
+              onClick={() => {
+                tolak();
+                window.setTimeout(() => setConfirmTolak(false), 6000);
+              }}
+              className={confirmTolak ? "border-destructive/50 text-destructive hover:text-destructive" : ""}
+            >
+              {confirmTolak ? "Klik lagi untuk menolak" : "Tolak"}
+            </PageActionButton>
+            <PageActionButton variant="primary" loading={pending} disabled={!canPost} onClick={posting}>
+              {pending ? "Memposting..." : "Posting"}
+            </PageActionButton>
+          </PageActions>
+        }
+      />
+      <div className="grid gap-8 md:grid-cols-2">
       {/* Kiri: apa yang dibaca asisten */}
       <div className="space-y-4">
         <div className="rounded-lg border border-rule bg-paper p-4">
@@ -322,15 +351,15 @@ export function ReviewClient({
 
       {/* Kanan: draft editable */}
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 rounded-2xl border border-rule bg-paper p-4 sm:grid-cols-3 sm:p-5 shadow-xs">
           <div className="space-y-1.5">
             <Label htmlFor="tanggal-review" className="text-xs font-medium text-ink-soft">Tanggal</Label>
             <Input id="tanggal-review" type="date" value={dateISO}
-                   onChange={(e) => setDateISO(e.target.value)} />
+                   onChange={(e) => setDateISO(e.target.value)} className="bg-canvas" />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="memo-review" className="text-xs font-medium text-ink-soft">Keterangan</Label>
-            <Input id="memo-review" value={memo} onChange={(e) => setMemo(e.target.value)} />
+            <Input id="memo-review" value={memo} onChange={(e) => setMemo(e.target.value)} className="bg-canvas" />
           </div>
         </div>
 
@@ -508,31 +537,8 @@ export function ReviewClient({
         )}
 
         {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-
-        <div className="flex flex-col items-stretch justify-end gap-2 sm:items-end">
-          {confirmTolak && (
-            <p className="text-xs text-ink-soft">
-              Draft yang ditolak tidak bisa dikembalikan. Klik Tolak sekali lagi untuk lanjut.
-            </p>
-          )}
-          <PageActions className="justify-end">
-            <PageActionButton
-              variant="secondary"
-              disabled={pending}
-              onClick={() => {
-                tolak();
-                window.setTimeout(() => setConfirmTolak(false), 6000);
-              }}
-              className={confirmTolak ? "border-destructive/50 text-destructive hover:text-destructive" : ""}
-            >
-              {confirmTolak ? "Klik lagi untuk menolak" : "Tolak"}
-            </PageActionButton>
-            <PageActionButton variant="primary" loading={pending} disabled={!canPost} onClick={posting}>
-              {pending ? "Memposting..." : "Posting"}
-            </PageActionButton>
-          </PageActions>
-        </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

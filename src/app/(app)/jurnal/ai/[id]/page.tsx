@@ -7,7 +7,6 @@ import { accounts as accountsTable } from "@/server/db/schema/org";
 import { eq } from "drizzle-orm";
 import { getDraft, effectiveStatus } from "@/server/db/repos/drafts.repo";
 import { getDocumentRow } from "@/server/db/repos/documents.repo";
-import { PageHeader } from "@/components/page-header";
 import { ReviewClient } from "./review-client";
 
 export default async function ReviewPage({
@@ -31,9 +30,9 @@ export default async function ReviewPage({
           <ArrowLeft className="size-3" />
           Jurnal Umum
         </Link>
-        <div className="mt-2">
-          <PageHeader title="Draft sudah diproses" eyebrow="Jurnal AI" />
-        </div>
+        <h1 className="mt-2 font-display text-2xl sm:text-3xl font-semibold tracking-tight text-ink">
+          Draft sudah diproses
+        </h1>
         <p className="mt-2 text-sm text-ink-soft">
           Status draft ini: {status === "ACCEPTED" ? "diterima & diposting" : "ditolak"}.
         </p>
@@ -45,7 +44,6 @@ export default async function ReviewPage({
   const doc = data.draft.documentId
     ? await getDocumentRow(db, ctx.orgId, data.draft.documentId)
     : null;
-
   // Merge account mapping (stored separately) into each line for the review UI.
   const raw = data.draft.draft as {
     dateISO: string;
@@ -62,16 +60,34 @@ export default async function ReviewPage({
     };
   };
   const mappedLines = raw.mapping?.lines ?? [];
-  const mergedLines = raw.lines.map((l, i) => ({
-    ...l,
-    accountId: mappedLines[i]?.accountId ?? null,
-    matchedName: mappedLines[i]?.matchedName ?? null,
-    unresolved: mappedLines[i]?.unresolved ?? true,
-  }));
+  // Sembuhkan draf lama: hitung ulang mapping ke COA saat ini agar draf yang
+  // tersimpan sebelum perbaikan (tanpa mapping) ikut ter-resolve. Kode valid
+  // seperti 5100 langsung terpilih; kode fiktif (1180) tetap unresolved jujur.
+  const { resolveDraftAccounts } = await import("@/core/ai/map-accounts");
+  const fresh = resolveDraftAccounts(
+    { lines: raw.lines.map((l) => ({ accountCode: l.accountCode })) },
+    leaves.map((a) => ({ id: a.id, code: a.code, name: a.name })),
+  );
+  const mergedLines = raw.lines.map((l, i) => {
+    const m = fresh.lines[i] ?? mappedLines[i];
+    const unresolved = m?.unresolved ?? true;
+    const confidence = unresolved ? Math.min(l.confidence ?? 0, 0.45) : (l.confidence ?? 0);
+    const reason = unresolved && !/tidak ada di COA|tidak ada akun yang cocok/i.test(l.reason ?? "")
+      ? `${l.reason} (kode ${l.accountCode} tidak ada di COA — pilih akun pengganti)`
+      : l.reason;
+    return {
+      ...l,
+      accountId: m?.accountId ?? null,
+      matchedName: m?.matchedName ?? null,
+      unresolved,
+      confidence,
+      reason,
+    };
+  });
   const reviewDraft = {
     dateISO: raw.dateISO, memo: raw.memo,
     lines: mergedLines, overallConfidence: raw.overallConfidence,
-    explanation: raw.explanation, mapping: raw.mapping,
+    explanation: raw.explanation, mapping: { warnings: fresh.warnings },
   };
 
   return (
@@ -81,22 +97,18 @@ export default async function ReviewPage({
         Jurnal Umum
       </Link>
       <div className="mt-2">
-        <PageHeader
-          title="Review Draft Asisten"
-          eyebrow={`Draf AI · keyakinan ${Math.round(reviewDraft.overallConfidence * 100)}%`}
+        <ReviewClient
+          draftId={data.draft.id}
+          draft={reviewDraft}
+          accounts={leaves.map((a) => ({
+            id: a.id,
+            code: a.code,
+            name: a.name,
+            label: `${a.code} · ${a.name}`,
+          }))}
+          documentMeta={doc ? { mime: doc.mime, storageKey: doc.storageKey } : null}
         />
       </div>
-      <ReviewClient
-        draftId={data.draft.id}
-        draft={reviewDraft}
-        accounts={leaves.map((a) => ({
-          id: a.id,
-          code: a.code,
-          name: a.name,
-          label: `${a.code} · ${a.name}`,
-        }))}
-        documentMeta={doc ? { mime: doc.mime, storageKey: doc.storageKey } : null}
-      />
     </section>
   );
 }
