@@ -106,7 +106,7 @@ export default async function ReviewPage({
             name: a.name,
             label: `${a.code} · ${a.name}`,
           }))}
-          documentMeta={doc ? { mime: doc.mime, storageKey: doc.storageKey } : null}
+          documentMeta={doc ? { mime: doc.mime, storageKey: doc.storageKey, fileName: (doc as { fileName?: string | null }).fileName ?? null } : null}
         />
       </div>
     </section>

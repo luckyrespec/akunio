@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Check, ChevronsUpDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -44,6 +45,14 @@ export interface AccountSelectProps {
   limit?: number;
   /** Debounce delay in ms for search typing (defaults to global DEFAULT_SEARCH_DEBOUNCE_MS = 500ms) */
   debounceMs?: number;
+  /** Account IDs to pin as suggestions above results (e.g. AI-mapped candidates) */
+  pinnedIds?: string[];
+  /** Label for the pinned suggestions section */
+  pinnedLabel?: string;
+  /** id of an element describing this field (e.g. AI reason text) */
+  describedBy?: string;
+  /** Show a "create account" escape hatch linking to settings */
+  showCreateLink?: boolean;
   /** Optional form field name for native form integration */
   name?: string;
   /** Size variant */
@@ -62,6 +71,10 @@ export function AccountSelect({
   className,
   limit = DEFAULT_SEARCH_VIEW_LIMIT,
   debounceMs = DEFAULT_SEARCH_DEBOUNCE_MS,
+  pinnedIds = [],
+  pinnedLabel,
+  describedBy,
+  showCreateLink = false,
   name,
   size = "default",
   id,
@@ -90,6 +103,20 @@ export function AccountSelect({
   }, [normalizedAccounts, debouncedSearch, limit]);
 
   const isFiltering = search !== debouncedSearch;
+
+  // Pinned AI suggestions (excluded from the regular list to avoid duplicates)
+  const pinnedItems = React.useMemo(() => {
+    if (pinnedIds.length === 0) return [];
+    const byId = new Map(normalizedAccounts.map((a) => [a.id, a]));
+    return pinnedIds
+      .map((id) => byId.get(id))
+      .filter((a): a is NormalizedAccount => !!a);
+  }, [pinnedIds, normalizedAccounts]);
+  const pinnedIdSet = React.useMemo(() => new Set(pinnedItems.map((a) => a.id)), [pinnedItems]);
+  const unpinnedItems = React.useMemo(
+    () => filteredItems.filter((a) => !pinnedIdSet.has(a.id)),
+    [filteredItems, pinnedIdSet],
+  );
 
   // Focus input automatically when popover opens
   React.useEffect(() => {
@@ -123,6 +150,7 @@ export function AccountSelect({
             role="combobox"
             aria-expanded={open}
             aria-disabled={disabled}
+            aria-describedby={describedBy}
             className={cn(
               "flex w-full items-center justify-between gap-2 rounded-lg border border-border/80 bg-paper px-3 text-left shadow-2xs transition-colors select-none",
               "hover:border-ring/60 focus:border-ring focus:ring-2 focus:ring-ring/30 focus:outline-none",
@@ -165,6 +193,7 @@ export function AccountSelect({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={searchPlaceholder}
+              aria-label="Cari kode atau nama akun"
               className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
             {search && (
@@ -181,7 +210,44 @@ export function AccountSelect({
 
           {/* Results List (max 5 items) */}
           <div className="space-y-0.5 max-h-60 overflow-y-auto">
-            {filteredItems.length === 0 ? (
+            {pinnedItems.length > 0 && (
+              <div className="pb-1.5">
+                {pinnedLabel && (
+                  <p className="px-2.5 pt-1 pb-1 text-[11px] font-semibold text-terra">
+                    {pinnedLabel}
+                  </p>
+                )}
+                {pinnedItems.map((account) => {
+                  const isSelected = account.id === value;
+                  return (
+                    <button
+                      key={`pin-${account.id}`}
+                      type="button"
+                      onClick={() => handleSelect(account.id)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 rounded-lg border border-terra/25 bg-terra/[0.06] px-2.5 py-2 text-left text-xs transition-colors focus-ring",
+                        isSelected
+                          ? "font-semibold text-terra"
+                          : "text-foreground hover:bg-terra/10"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 overflow-hidden truncate">
+                        {account.code && (
+                          <span className="font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded border border-terra/30 bg-terra/10 text-terra shrink-0">
+                            {account.code}
+                          </span>
+                        )}
+                        <span className="truncate">{account.name || account.label}</span>
+                      </div>
+                      {isSelected && (
+                        <Check className="size-3.5 shrink-0 text-terra" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {filteredItems.length === 0 && pinnedItems.length === 0 ? (
               <div className="py-6 text-center text-xs text-muted-foreground">
                 {search ? (
                   <p>Tidak ditemukan akun dengan kata kunci &ldquo;{debouncedSearch}&rdquo;</p>
@@ -190,7 +256,7 @@ export function AccountSelect({
                 )}
               </div>
             ) : (
-              filteredItems.map((account) => {
+              unpinnedItems.map((account) => {
                 const isSelected = account.id === value;
                 return (
                   <button
@@ -231,7 +297,7 @@ export function AccountSelect({
           {/* Summary Footer showing view limit status */}
           {(totalMatches > limit || isFiltering) && (
             <div className="mt-2 space-y-0.5 border-t border-rule/60 px-1 pt-2 pb-0.5 text-[11px] text-muted-foreground">
-              <p>
+              <p role="status">
                 {isFiltering ? (
                   <span>Menyaring…</span>
                 ) : (
@@ -242,6 +308,14 @@ export function AccountSelect({
               </p>
               <p className="text-ink-soft">Ketik untuk menyaring</p>
             </div>
+          )}
+          {showCreateLink && (
+            <Link
+              href="/pengaturan"
+              className="mt-1.5 flex items-center justify-center gap-1 rounded-lg border border-dashed border-rule px-2.5 py-2 text-[11px] font-medium text-ink-soft transition-colors hover:border-terra/40 hover:text-terra"
+            >
+              Akun belum ada? Buat di Pengaturan
+            </Link>
           )}
         </PopoverContent>
       </Popover>

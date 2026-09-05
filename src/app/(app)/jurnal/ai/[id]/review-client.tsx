@@ -4,9 +4,18 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { acceptDraftAction, rejectDraftAction } from "@/server/actions/ai.actions";
+import { similarity } from "@/core/ai/map-accounts";
 import { Money } from "@/core/money/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AccountSelect } from "@/components/account-select";
@@ -45,6 +54,39 @@ function safeMinor(text: string): bigint | null {
   try { return Money.parseIdr(text).minor; } catch { return null; }
 }
 
+const STORAGE_PREFIX = "review-draft:";
+
+type StoredEdit = { dateISO: string; memo: string; rows: Row[] };
+
+function readStoredEdit(draftId: string): StoredEdit | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_PREFIX + draftId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredEdit>;
+    if (
+      typeof parsed.dateISO !== "string" ||
+      typeof parsed.memo !== "string" ||
+      !Array.isArray(parsed.rows) ||
+      !parsed.rows.every(
+        (r) =>
+          typeof r === "object" && r !== null &&
+          typeof (r as Row).accountId === "string" &&
+          typeof (r as Row).debitText === "string" &&
+          typeof (r as Row).creditText === "string",
+      )
+    ) {
+      return null;
+    }
+    return {
+      dateISO: parsed.dateISO,
+      memo: parsed.memo,
+      rows: (parsed.rows as Row[]).map((r, i) => ({ ...r, key: i + 1 })),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function ReadinessRow({ ok, label }: { ok: boolean; label: string }) {
   return (
     <li className="flex items-start gap-2">
@@ -64,24 +106,54 @@ export function ReviewClient({
   draftId: string;
   draft: ReviewDraft;
   accounts: Array<{ id: string; code?: string; name?: string; label?: string }>;
-  documentMeta: { mime: string; storageKey: string } | null;
+  documentMeta: { mime: string; storageKey: string; fileName?: string | null } | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [postedNumber, setPostedNumber] = useState<string | null>(null);
   const [confirmTolak, setConfirmTolak] = useState(false);
+  const [confirmPosting, setConfirmPosting] = useState(false);
+  const [restored, setRestored] = useState(false);
 
-  const [dateISO, setDateISO] = useState(draft.dateISO);
-  const [memo, setMemo] = useState(draft.memo);
-  const [rows, setRows] = useState<Row[]>(() =>
-    draft.lines.map((l, i) => ({
-      key: i + 1,
-      accountId: l.accountId ?? "",
-      debitText: l.debitText,
-      creditText: l.creditText,
-    })),
+  const initialRows: Row[] = useMemo(
+    () =>
+      draft.lines.map((l, i) => ({
+        key: i + 1,
+        accountId: l.accountId ?? "",
+        debitText: l.debitText,
+        creditText: l.creditText,
+      })),
+    [draft],
   );
+
+  const [dateISO, setDateISO] = useState(() => readStoredEdit(draftId)?.dateISO ?? draft.dateISO);
+  const [memo, setMemo] = useState(() => readStoredEdit(draftId)?.memo ?? draft.memo);
+  const [rows, setRows] = useState<Row[]>(() => readStoredEdit(draftId)?.rows ?? initialRows);
+
+  // Pulihkan penanda banner sekali (bukan tiap render) + simpan otomatis tiap edit.
+  useEffect(() => {
+    if (readStoredEdit(draftId)) setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_PREFIX + draftId, JSON.stringify({ dateISO, memo, rows }));
+    } catch {
+      /* penyimpanan penuh / privat — abaikan, alur tetap jalan */
+    }
+  }, [draftId, dateISO, memo, rows]);
+
+  function resetToAi() {
+    try {
+      window.localStorage.removeItem(STORAGE_PREFIX + draftId);
+    } catch { /* abaikan */ }
+    setDateISO(draft.dateISO);
+    setMemo(draft.memo);
+    setRows(initialRows);
+    setRestored(false);
+    setError(null);
+  }
 
   const totals = useMemo(() => {
     let d = 0n, c = 0n, invalid = false;
@@ -133,6 +205,23 @@ export function ReviewClient({
   const codeById = useMemo(
     () => new Map(accounts.map((a) => [a.id, a.code ?? ""])),
     [accounts],
+  );
+
+  // Saran pengganti per baris yang akunnya kosong: 3 COA termirip (skor >= 0.35).
+  const suggestionsByRow = useMemo(
+    () =>
+      rows.map((r, i) => {
+        const line = draft.lines[i];
+        if (r.accountId || !line) return [] as string[];
+        return accounts
+          .filter((a) => a.id && a.code && a.name)
+          .map((a) => ({ id: a.id, score: similarity(line.accountCode, a.name ?? "") }))
+          .filter((s) => s.score >= 0.35)
+          .sort((x, y) => y.score - x.score)
+          .slice(0, 3)
+          .map((s) => s.id);
+      }),
+    [rows, draft.lines, accounts],
   );
 
   // Diff jujur sejajar indeks: baris edited membawa accountId (uuid),
@@ -197,12 +286,14 @@ export function ReviewClient({
     setConfirmTolak(false);
     startTransition(async () => {
       await rejectDraftAction(draftId);
+      try { window.localStorage.removeItem(STORAGE_PREFIX + draftId); } catch { /* abaikan */ }
       router.push("/jurnal");
     });
   }
 
   function posting() {
     setError(null);
+    setConfirmPosting(false);
     startTransition(async () => {
       const res = await acceptDraftAction(draftId, {
         dateISO, memo,
@@ -211,11 +302,19 @@ export function ReviewClient({
         })),
       });
       if (!res.ok) { setError(res.error ?? "Gagal memposting."); return; }
+      try { window.localStorage.removeItem(STORAGE_PREFIX + draftId); } catch { /* abaikan */ }
       setPostedNumber(res.number ?? "");
     });
   }
 
   const canPost = !pending && totals.balanced && allHaveAccounts;
+
+  const eyebrowStatus =
+    diff.needsAccount > 0
+      ? `${diff.needsAccount} perlu dilengkapi`
+      : !totals.balanced
+        ? "belum seimbang"
+        : "siap posting";
 
   if (postedNumber) {
     return (
@@ -258,11 +357,11 @@ export function ReviewClient({
     <>
       <PageHeader
         title="Review Draft Asisten"
-        eyebrow={`Draf AI · keyakinan ${Math.round(draft.overallConfidence * 100)}%`}
+        eyebrow={`Draf AI · ${eyebrowStatus}`}
         actions={
           <PageActions>
             {confirmTolak && (
-              <span className="w-full text-xs text-ink-soft sm:w-auto">
+              <span role="status" className="w-full text-xs text-ink-soft sm:w-auto">
                 Ditolak permanen. Klik Tolak sekali lagi.
               </span>
             )}
@@ -277,12 +376,24 @@ export function ReviewClient({
             >
               {confirmTolak ? "Klik lagi untuk menolak" : "Tolak"}
             </PageActionButton>
-            <PageActionButton variant="primary" loading={pending} disabled={!canPost} onClick={posting}>
+            <PageActionButton variant="primary" loading={pending} disabled={!canPost} onClick={() => setConfirmPosting(true)}>
               {pending ? "Memposting..." : "Posting"}
             </PageActionButton>
           </PageActions>
         }
       />
+      {restored && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rule bg-canvas/60 px-4 py-2.5 text-xs text-ink-soft">
+          <span>Perubahan lokal Anda dipulihkan otomatis.</span>
+          <button
+            type="button"
+            onClick={resetToAi}
+            className="font-medium text-terra underline underline-offset-4 hover:opacity-80"
+          >
+            Mulai ulang dari draf AI
+          </button>
+        </div>
+      )}
       <div className="grid gap-8 md:grid-cols-2">
       {/* Kiri: apa yang dibaca asisten */}
       <div className="space-y-4">
@@ -294,7 +405,9 @@ export function ReviewClient({
               Keyakinan {Math.round(draft.overallConfidence * 100)}%
             </Badge>
             {documentMeta && (
-              <Badge variant="outline">Dokumen: {documentMeta.mime}</Badge>
+              <Badge variant="outline">
+                {documentMeta.fileName ? `Dokumen: ${documentMeta.fileName}` : `Dokumen: ${documentMeta.mime}`}
+              </Badge>
             )}
           </div>
         </div>
@@ -318,7 +431,7 @@ export function ReviewClient({
           <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-soft">
             Kesiapan Posting
           </p>
-          <ul className="mt-2.5 space-y-2 text-xs">
+          <ul aria-live="polite" className="mt-2.5 space-y-2 text-xs">
             <ReadinessRow
               ok={rows.every((r) => r.accountId !== "")}
               label={
@@ -368,6 +481,7 @@ export function ReviewClient({
           {rows.map((r, i) => {
             const line = draft.lines[i];
             const blocked = !r.accountId || line?.unresolved === true;
+            const noCode = line?.unresolved === true;
             const needsCheck = blocked || (line != null && line.confidence < 0.7);
             return (
               <div
@@ -381,9 +495,11 @@ export function ReviewClient({
                   {needsCheck && (
                     <div className="flex items-center gap-1.5">
                       <Badge variant="outline" className={`text-[11px] ${blocked ? "border-terra/30 text-terra bg-terra/5" : "border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/5"}`}>
-                        {blocked ? "pilih akun" : "perlu cek"}
+                        {blocked ? (noCode ? "tak ada di COA" : "pilih akun") : "periksa"}
                       </Badge>
-                      <span className={`text-xs font-semibold ${blocked ? "text-terra" : "text-amber-700 dark:text-amber-400"}`}>{Math.round((line?.confidence ?? 0) * 100)}%</span>
+                      {!noCode && (
+                        <span className={`text-xs font-semibold ${blocked ? "text-terra" : "text-amber-700 dark:text-amber-400"}`}>{Math.round((line?.confidence ?? 0) * 100)}%</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -396,9 +512,13 @@ export function ReviewClient({
                     onValueChange={(v) => update(r.key, { accountId: v })}
                     placeholder="Pilih akun..."
                     debounceMs={300}
+                    pinnedIds={suggestionsByRow[i]}
+                    pinnedLabel={line ? `Saran untuk ${line.accountCode}` : undefined}
+                    describedBy={line?.reason ? `reason-${r.key}` : undefined}
+                    showCreateLink={blocked}
                   />
                   {needsCheck && line?.reason && (
-                    <p className="text-[11px] text-ink-soft mt-1">{line.reason}</p>
+                    <p id={`reason-${r.key}`} className="text-[11px] text-ink-soft mt-1">{line.reason}</p>
                   )}
                 </div>
 
@@ -432,7 +552,7 @@ export function ReviewClient({
         </div>
 
         {/* Desktop & Tablet Table (>= sm) */}
-        <div className="hidden sm:block overflow-hidden rounded-xl border border-rule bg-paper shadow-xs">
+        <div className="hidden sm:block overflow-hidden rounded-xl border border-rule bg-paper shadow-sm">
           <table className="w-full table-fixed tnum text-sm">
             <thead>
               <tr className="border-b border-rule bg-canvas/70 text-left text-xs font-semibold uppercase tracking-wider text-ink-soft">
@@ -445,6 +565,7 @@ export function ReviewClient({
               {rows.map((r, i) => {
                 const line = draft.lines[i];
                 const blocked = !r.accountId || line?.unresolved === true;
+                const noCode = line?.unresolved === true;
                 const needsCheck = blocked || (line && line.confidence < 0.7);
                 return (
                   <tr key={r.key}
@@ -456,15 +577,21 @@ export function ReviewClient({
                         onValueChange={(v) => update(r.key, { accountId: v })}
                         placeholder="Pilih akun..."
                         debounceMs={300}
+                        pinnedIds={suggestionsByRow[i]}
+                        pinnedLabel={line ? `Saran untuk ${line.accountCode}` : undefined}
+                        describedBy={line?.reason ? `reason-${r.key}` : undefined}
+                        showCreateLink={blocked}
                       />
                       {needsCheck && (
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <Badge variant="outline" className={`text-[11px] ${blocked ? "border-terra/30 text-terra bg-terra/5" : "border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/5"}`}>
-                            {blocked ? "pilih akun" : "periksa"}
+                            {blocked ? (noCode ? "tak ada di COA" : "pilih akun") : "periksa"}
                           </Badge>
-                          <span className={`text-xs font-medium ${blocked ? "text-terra" : "text-amber-700 dark:text-amber-400"}`}>{Math.round((line?.confidence ?? 0) * 100)}%</span>
+                          {!noCode && (
+                            <span className={`text-xs font-medium ${blocked ? "text-terra" : "text-amber-700 dark:text-amber-400"}`}>{Math.round((line?.confidence ?? 0) * 100)}%</span>
+                          )}
                           {line?.reason && (
-                            <span className="text-xs leading-relaxed text-ink-soft">{line.reason}</span>
+                            <span id={`reason-${r.key}`} className="text-xs leading-relaxed text-ink-soft">{line.reason}</span>
                           )}
                         </div>
                       )}
@@ -519,9 +646,18 @@ export function ReviewClient({
 
         {hasDiff && (
           <div className="rounded-xl border border-rule bg-paper p-4 text-sm shadow-xs">
-            <p className="font-medium text-ink">
-              Perubahan Anda vs draft AI ({diffSummary})
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-medium text-ink">
+                Perubahan Anda vs draft AI ({diffSummary})
+              </p>
+              <button
+                type="button"
+                onClick={resetToAi}
+                className="shrink-0 text-xs font-medium text-ink-soft underline underline-offset-4 hover:text-terra transition-colors"
+              >
+                Kembalikan ke draf AI
+              </button>
+            </div>
             <ul className="mt-2 space-y-1 text-xs text-ink-soft">
               {diff.rows.filter((r) => r.state !== "SAME").map((r, i) => (
                 <li key={i} className="flex items-center gap-2">
@@ -539,6 +675,85 @@ export function ReviewClient({
         {error && <p className="text-sm font-medium text-destructive">{error}</p>}
       </div>
       </div>
+
+      {/* Bilah aksi lengket: total + status + tombol selalu dalam jangkauan */}
+      <div className="sticky bottom-4 z-20 mt-6 flex flex-col gap-2 rounded-2xl border border-rule bg-paper/95 p-3 shadow-md backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-xs tnum">
+          <span className="text-ink-soft">Total <strong className="text-ink">{Money.fromMinor(totals.d).formatIdr()}</strong></span>
+          <span className="text-ink-soft">·</span>
+          {totals.balanced ? (
+            <span className="font-semibold text-debit">Seimbang</span>
+          ) : (
+            <span className="font-medium text-ink-soft">
+              {diff.needsAccount > 0
+                ? `${diff.needsAccount} akun belum dipilih`
+                : totals.invalid
+                  ? "Nominal belum valid"
+                  : "Debit dan kredit belum sama"}
+            </span>
+          )}
+        </div>
+        <PageActions>
+          <PageActionButton
+            variant="ghost"
+            disabled={pending}
+            onClick={() => {
+              tolak();
+              window.setTimeout(() => setConfirmTolak(false), 6000);
+            }}
+          >
+            {confirmTolak ? "Klik lagi untuk menolak" : "Tolak"}
+          </PageActionButton>
+          <PageActionButton
+            variant="primary"
+            loading={pending}
+            disabled={!canPost}
+            onClick={() => setConfirmPosting(true)}
+          >
+            {pending ? "Memposting..." : "Posting"}
+          </PageActionButton>
+        </PageActions>
+      </div>
+
+      {/* Konfirmasi posting: ringkasan terkunci sebelum jurnal dikunci permanen */}
+      <Dialog open={confirmPosting} onOpenChange={setConfirmPosting}>
+        <DialogContent className="max-w-md border-rule bg-paper">
+          <DialogHeader className="text-left">
+            <DialogTitle className="font-display text-lg font-bold text-ink">
+              Posting jurnal ini?
+            </DialogTitle>
+            <DialogDescription className="text-xs text-ink-soft leading-relaxed">
+              Jurnal yang diposting terkunci permanen — koreksi hanya bisa lewat jurnal pembalik.
+            </DialogDescription>
+          </DialogHeader>
+          <dl className="space-y-1.5 rounded-xl border border-rule bg-canvas/60 p-4 text-xs">
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-soft">Tanggal</dt>
+              <dd className="tnum font-medium text-ink">{dateISO || "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-soft">Keterangan</dt>
+              <dd className="text-right font-medium text-ink break-words">{memo || "(tanpa keterangan)"}</dd>
+            </div>
+            <div className="flex justify-between gap-4 border-t border-rule/60 pt-1.5">
+              <dt className="text-ink-soft">Total seimbang</dt>
+              <dd className="tnum font-bold text-ink">{Money.fromMinor(totals.d).formatIdr()}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-soft">Baris jurnal</dt>
+              <dd className="tnum font-medium text-ink">{rows.length} baris</dd>
+            </div>
+          </dl>
+          <DialogFooter className="gap-2">
+            <PageActionButton variant="secondary" disabled={pending} onClick={() => setConfirmPosting(false)}>
+              Batal
+            </PageActionButton>
+            <PageActionButton variant="primary" loading={pending} onClick={posting}>
+              {pending ? "Memposting..." : "Posting Terkunci"}
+            </PageActionButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
