@@ -73,15 +73,15 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-lg font-semibold text-ink">Pengaturan Pajak Entitas</h2>
-        <p className="text-xs text-ink-soft mt-1">
+        <h2 className="font-display text-lg sm:text-xl font-bold text-ink">Pengaturan Pajak Entitas</h2>
+        <p className="text-xs sm:text-sm text-ink-soft mt-1">
           Konfigurasi status perpajakan UMKM berpedoman pada PP No. 55 Tahun 2022 dan standar SAK EMKM Bab 15.
         </p>
       </div>
 
       {statusMsg && (
         <div
-          className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+          className={`p-3.5 rounded-2xl border text-xs flex items-center gap-2.5 font-medium ${
             statusMsg.type === "success"
               ? "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
               : "bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300"
@@ -97,35 +97,35 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
       )}
 
       {/* 1. Jenis Wajib Pajak */}
-      <div className="rounded-2xl border-2 border-rule bg-paper p-5 space-y-4 shadow-xs">
+      <div className="rounded-3xl border-2 border-rule/90 bg-paper p-6 space-y-4 shadow-xs">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-ink">Jenis Wajib Pajak Usaha</h3>
+            <h3 className="font-display text-sm font-bold text-ink">Jenis Wajib Pajak Usaha</h3>
             <p className="text-xs text-ink-soft mt-0.5">
               Menentukan hak fasilitas bebas pajak peredaran bruto Rp 500 juta per tahun kalender.
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <button
             type="button"
             disabled={!canEdit}
             onClick={() => setTaxpayerType("INDIVIDUAL")}
-            className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+            className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer ${
               taxpayerType === "INDIVIDUAL"
-                ? "border-terra bg-terra/5 ring-2 ring-terra/20"
-                : "border-rule bg-canvas/40 hover:border-rule/80"
+                ? "border-terra bg-terra/5 ring-2 ring-terra/20 shadow-xs"
+                : "border-rule bg-canvas/40 hover:border-rule/90"
             }`}
           >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <User className="size-4 text-terra" />
-                <span className="font-semibold text-xs text-ink">Orang Pribadi (UMKM)</span>
+                <span className="font-bold text-xs text-ink">Orang Pribadi (UMKM)</span>
               </div>
-              <Badge variant="default" className="bg-emerald-600 text-white text-[10px]">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
                 Fasilitas Rp 500 Juta
-              </Badge>
+              </span>
             </div>
             <p className="text-[11px] text-ink-soft mt-2 leading-relaxed">
               Peredaran bruto s.d. Rp 500 juta setahun bebas dari pengenaan PPh Final. Pajak 0,5% hanya dihitung atas omzet di atas Rp 500 juta.
@@ -159,8 +159,8 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
       </div>
 
       {/* 2. NPWP / NITKU */}
-      <div className="rounded-2xl border-2 border-rule bg-paper p-5 space-y-3 shadow-xs">
-        <label htmlFor="npwp-input" className="block text-xs font-semibold text-ink">
+      <div className="rounded-3xl border-2 border-rule/90 bg-paper p-6 space-y-3 shadow-xs">
+        <label htmlFor="npwp-input" className="block font-display text-sm font-bold text-ink">
           Nomor Pokok Wajib Pajak (NPWP / NITKU 16 Digit)
         </label>
         <p className="text-xs text-ink-soft">
@@ -173,23 +173,25 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
           disabled={!canEdit}
           onChange={(e) => setNpwp(e.target.value)}
           placeholder="Contoh: 01.234.567.8-901.000 atau 16 digit NIK"
-          className="w-full sm:max-w-md h-9 px-3 text-xs font-mono rounded-xl border-2 border-rule bg-canvas text-ink focus:border-terra focus:outline-none"
+          className="w-full sm:max-w-md h-10 px-3.5 text-xs font-mono font-bold tracking-wider rounded-xl border-2 border-rule bg-canvas text-ink focus:border-terra focus:outline-none"
         />
       </div>
 
       {/* 3. Otomasi & Fitur Pajak */}
-      <div className="rounded-2xl border-2 border-rule bg-paper p-5 space-y-4 shadow-xs">
-        <h3 className="text-sm font-semibold text-ink">Opsi Otomasi &amp; Penjurnalan Pajak</h3>
+      <div className="rounded-3xl border-2 border-rule/90 bg-paper p-6 space-y-4 shadow-xs">
+        <h3 className="font-display text-sm font-bold text-ink">Opsi Otomasi &amp; Penjurnalan Pajak</h3>
 
         <div className="divide-y divide-rule/60 text-xs">
           {/* Toggle PPh Final */}
-          <div className="py-3 flex items-center justify-between gap-4">
+          <div className="py-3.5 flex items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-1.5 font-medium text-ink">
+              <div className="flex items-center gap-1.5 font-bold text-ink">
                 <span>Perhitungan PPh Final UMKM 0,5% (PP 55/2022)</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <HelpCircle className="size-3 text-ink-soft cursor-pointer" />
+                    <button type="button" className="text-ink-soft/70 hover:text-terra focus:outline-none">
+                      <HelpCircle className="size-3.5 cursor-pointer" />
+                    </button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs">
                     Secara berkala menghitung peredaran bruto dari pendapatan usaha dan menentukan beban pajak terutang.
@@ -210,11 +212,13 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
           </div>
 
           {/* Toggle Jadwal Akrual Otomatis */}
-          <div className="py-3 flex items-center justify-between gap-4">
+          <div className="py-3.5 flex items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-1.5 font-medium text-ink">
+              <div className="flex items-center gap-2 font-bold text-ink">
                 <span>Siapkan Draf Jurnal Akrual Tiap Akhir Bulan</span>
-                <Badge variant="outline" className="text-[10px] bg-canvas">Review Gate</Badge>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-canvas border border-rule text-ink-soft">
+                  Review Gate
+                </span>
               </div>
               <p className="text-[11px] text-ink-soft mt-0.5">
                 Sistem otomatis membuat entri draf akrual (Beban Pajak vs Utang PPh) yang harus disetujui pengguna sebelum posting.
@@ -230,9 +234,9 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
           </div>
 
           {/* Toggle PPN */}
-          <div className="py-3 flex items-center justify-between gap-4">
+          <div className="py-3.5 flex items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-1.5 font-medium text-ink">
+              <div className="flex items-center gap-1.5 font-bold text-ink">
                 <span>Pajak Pertambahan Nilai (PPN) — Pengusaha Kena Pajak</span>
               </div>
               <p className="text-[11px] text-ink-soft mt-0.5">
@@ -245,7 +249,7 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
                   value={ppnRatePercent}
                   disabled={!canEdit}
                   onChange={(e) => setPpnRatePercent(Number(e.target.value))}
-                  className="h-8 px-2 text-xs rounded-lg border border-rule bg-canvas text-ink"
+                  className="h-8 px-2.5 text-xs font-bold rounded-lg border border-rule bg-canvas text-ink focus:border-terra focus:outline-none"
                 >
                   <option value={11}>Tarif 11%</option>
                   <option value={12}>Tarif 12%</option>
@@ -262,9 +266,9 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
           </div>
 
           {/* Toggle Withholding Tax */}
-          <div className="py-3 flex items-center justify-between gap-4">
+          <div className="py-3.5 flex items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-1.5 font-medium text-ink">
+              <div className="flex items-center gap-1.5 font-bold text-ink">
                 <span>PPh Pemotongan / Pemungutan (PPh 21, 23, 4 ayat 2)</span>
               </div>
               <p className="text-[11px] text-ink-soft mt-0.5">
