@@ -12,6 +12,7 @@ import { createDraft, getDraft } from "@/server/db/repos/drafts.repo";
 import {
   saveTaxSettings,
   upsertMonthlyTaxSummary,
+  getTaxSummaryByMonth,
   settleTaxPayment,
 } from "@/server/db/repos/tax.repo";
 import type { TaxSettings } from "@/core/tax/pph-final";
@@ -342,3 +343,65 @@ export async function recordTaxPaymentAction(input: {
     return fail(e);
   }
 }
+
+export async function rejectTaxAccrualDraftAction(input: {
+  periodMonth: string;
+}): Promise<ActionResult> {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const { periodMonth } = input;
+
+    if (!PERIOD_MONTH_RE.test(periodMonth)) {
+      return { ok: false, error: "Format periode bulan tidak valid." };
+    }
+
+    return await withOrg(ctx.orgId, async (tx) => {
+      const summary = await getTaxSummaryByMonth(tx, ctx.orgId, periodMonth);
+      if (!summary) {
+        return { ok: false, error: "Rekapitulasi pajak tidak ditemukan." };
+      }
+
+      if (summary.status === "PAID") {
+        return { ok: false, error: "Periode ini sudah lunas. Koreksi dilakukan lewat jurnal pembalik." };
+      }
+      if (summary.accrualJournalEntryId) {
+        return { ok: false, error: "Akrual sudah diposting ke Buku Besar. Koreksi dilakukan lewat jurnal pembalik." };
+      }
+
+      // Jika ada draf di aiDrafts, tandai REJECTED
+      if (summary.accrualDraftId) {
+        const { setDraftStatus } = await import("@/server/db/repos/drafts.repo");
+        await setDraftStatus(tx, ctx.orgId, summary.accrualDraftId, "REJECTED");
+      }
+
+      // Kembalikan status tax_summaries ke UNPROCESSED dan lepas accrualDraftId
+      await tx
+        .update(taxSummaries)
+        .set({
+          accrualDraftId: null,
+          status: "UNPROCESSED",
+          updatedAt: new Date(),
+        })
+        .where(and(eq(taxSummaries.orgId, ctx.orgId), eq(taxSummaries.periodMonth, periodMonth)));
+
+      await appendAudit(tx, {
+        orgId: ctx.orgId,
+        actor: ctx.userEmail,
+        action: "TAX_ACCRUAL_DRAFT_REJECT",
+        subjectType: "tax_summary",
+        subjectId: summary.id,
+        data: {
+          periodMonth,
+          cancelledDraftId: summary.accrualDraftId,
+        },
+      });
+
+      safeRevalidate("/pajak");
+      safeRevalidate("/jurnal");
+      return { ok: true, message: "Draf akrual pajak berhasil dibatalkan." };
+    });
+  } catch (e) {
+    return fail(e);
+  }
+}
+

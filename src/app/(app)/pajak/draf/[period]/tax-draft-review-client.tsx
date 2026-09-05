@@ -26,8 +26,11 @@ import { Money } from "@/core/money/money";
 import type { TaxSettings } from "@/core/tax/pph-final";
 import { ANNUAL_INDIVIDUAL_THRESHOLD_MINOR } from "@/core/tax/pph-final";
 import type { TaxSummaryView } from "@/server/db/repos/tax.repo";
-import { acceptDraftAction, rejectDraftAction } from "@/server/actions/ai.actions";
-import { recordTaxPaymentAction } from "@/server/actions/tax.actions";
+import { acceptDraftAction } from "@/server/actions/ai.actions";
+import {
+  recordTaxPaymentAction,
+  rejectTaxAccrualDraftAction,
+} from "@/server/actions/tax.actions";
 import { uploadDocumentAction } from "@/server/actions/upload.actions";
 
 export interface BankAccountOption {
@@ -187,12 +190,11 @@ export function TaxDraftReviewClient({
   };
 
   const handleRejectDraft = () => {
-    if (!draftData?.id) return;
-    if (!confirm("Batalkan draf akrual pajak ini? Data draf akan ditolak.")) return;
+    if (!confirm(`Batalkan draf akrual pajak masa ${periodMonth}? Draf akan dibatalkan.`)) return;
 
     setErrorMsg(null);
     startTransition(async () => {
-      const res = await rejectDraftAction(draftData.id);
+      const res = await rejectTaxAccrualDraftAction({ periodMonth });
       if (res.ok) {
         router.push("/pajak");
       } else {
@@ -238,7 +240,7 @@ export function TaxDraftReviewClient({
             type="button"
             variant="outline"
             onClick={handleRejectDraft}
-            disabled={isPending || summary.status === "PAID" || !draftData}
+            disabled={isPending || !canEdit || summary.status === "PAID" || summary.status === "ACCRUED"}
             className="text-xs h-9 px-3.5 rounded-xl border-rule hover:bg-canvas font-bold text-ink"
           >
             Tolak Draf
@@ -246,7 +248,7 @@ export function TaxDraftReviewClient({
           <Button
             type="button"
             onClick={handleAcceptAccrual}
-            disabled={isPending || !canEdit || summary.status === "PAID" || (!draftData && summary.taxDueMinor > 0n)}
+            disabled={isPending || !canEdit || summary.status === "PAID" || summary.status === "ACCRUED" || (!draftData && summary.taxDueMinor > 0n)}
             className="text-xs h-9 px-4 rounded-xl bg-terra text-white hover:bg-terra/90 font-bold shadow-2xs"
           >
             {isPending ? (
