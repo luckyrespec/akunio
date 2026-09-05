@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { acceptDraftAction, rejectDraftAction } from "@/server/actions/ai.actions";
 import { Money } from "@/core/money/money";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +42,19 @@ interface Row {
 function safeMinor(text: string): bigint | null {
   if (!text.trim()) return 0n;
   try { return Money.parseIdr(text).minor; } catch { return null; }
+}
+
+function ReadinessRow({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <li className="flex items-start gap-2">
+      {ok ? (
+        <CheckCircle2 className="size-3.5 mt-0.5 shrink-0 text-debit" aria-label="Terpenuhi" />
+      ) : (
+        <AlertTriangle className="size-3.5 mt-0.5 shrink-0 text-terra" aria-label="Belum terpenuhi" />
+      )}
+      <span className={ok ? "text-ink-soft" : "font-medium text-ink"}>{label}</span>
+    </li>
+  );
 }
 
 export function ReviewClient({
@@ -270,6 +283,41 @@ export function ReviewClient({
             keyakinan di bawah 70% — periksa sebelum posting.
           </p>
         )}
+
+        {/* Kartu kesiapan posting: tiga syarat terkunci dalam satu pandang */}
+        <div className="rounded-xl border border-rule bg-paper p-4 shadow-xs">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-soft">
+            Kesiapan Posting
+          </p>
+          <ul className="mt-2.5 space-y-2 text-xs">
+            <ReadinessRow
+              ok={rows.every((r) => r.accountId !== "")}
+              label={
+                rows.every((r) => r.accountId !== "")
+                  ? `Semua ${rows.length} baris sudah punya akun`
+                  : `${rows.filter((r) => r.accountId === "").length} dari ${rows.length} baris belum punya akun`
+              }
+            />
+            <ReadinessRow
+              ok={totals.balanced}
+              label={
+                totals.invalid
+                  ? "Nominal belum valid — perbaiki penulisannya"
+                  : totals.balanced
+                    ? `Seimbang ${Money.fromMinor(totals.d).formatIdr()}`
+                    : "Debit dan kredit belum sama"
+              }
+            />
+            <ReadinessRow
+              ok={draft.lines.every((l) => l.confidence >= 0.7)}
+              label={
+                draft.lines.every((l) => l.confidence >= 0.7)
+                  ? "Keyakinan AI di atas 70% semua baris"
+                  : "Ada baris keyakinan rendah — baca alasannya"
+              }
+            />
+          </ul>
+        </div>
       </div>
 
       {/* Kanan: draft editable */}
@@ -318,6 +366,7 @@ export function ReviewClient({
                     value={r.accountId}
                     onValueChange={(v) => update(r.key, { accountId: v })}
                     placeholder="Pilih akun..."
+                    debounceMs={300}
                   />
                   {needsCheck && line?.reason && (
                     <p className="text-[11px] text-ink-soft mt-1">{line.reason}</p>
@@ -377,6 +426,7 @@ export function ReviewClient({
                         value={r.accountId}
                         onValueChange={(v) => update(r.key, { accountId: v })}
                         placeholder="Pilih akun..."
+                        debounceMs={300}
                       />
                       {needsCheck && (
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

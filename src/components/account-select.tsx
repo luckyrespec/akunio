@@ -89,6 +89,8 @@ export function AccountSelect({
     return filterAccountOptions(normalizedAccounts, debouncedSearch, limit);
   }, [normalizedAccounts, debouncedSearch, limit]);
 
+  const isFiltering = search !== debouncedSearch;
+
   // Focus input automatically when popover opens
   React.useEffect(() => {
     if (open) {
@@ -169,7 +171,7 @@ export function AccountSelect({
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="p-1 text-muted-foreground hover:text-foreground rounded-md"
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-md focus-ring"
                 aria-label="Hapus pencarian"
               >
                 <X className="size-3" />
@@ -196,7 +198,7 @@ export function AccountSelect({
                     type="button"
                     onClick={() => handleSelect(account.id)}
                     className={cn(
-                      "flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors",
+                      "flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors focus-ring",
                       isSelected
                         ? "bg-terra/10 font-semibold text-terra"
                         : "text-foreground hover:bg-canvas"
@@ -227,10 +229,18 @@ export function AccountSelect({
           </div>
 
           {/* Summary Footer showing view limit status */}
-          {totalMatches > limit && (
-            <div className="mt-2 border-t border-rule/60 pt-1.5 px-1 flex items-center justify-between text-[11px] text-muted-foreground">
-              <span>Menampilkan {filteredItems.length} dari {totalMatches} akun</span>
-              <span className="text-[10px] text-ink-soft">Ketik untuk menyaring</span>
+          {(totalMatches > limit || isFiltering) && (
+            <div className="mt-2 space-y-0.5 border-t border-rule/60 px-1 pt-2 pb-0.5 text-[11px] text-muted-foreground">
+              <p>
+                {isFiltering ? (
+                  <span>Menyaring…</span>
+                ) : (
+                  <span>
+                    Menampilkan {filteredItems.length} dari {totalMatches} akun
+                  </span>
+                )}
+              </p>
+              <p className="text-ink-soft">Ketik untuk menyaring</p>
             </div>
           )}
         </PopoverContent>

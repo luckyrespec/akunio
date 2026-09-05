@@ -239,13 +239,55 @@ export async function proposeCorrectionAction(findingId: string) {
       explanation,
     };
 
+    // Selesaikan kode akun usulan ke COA aktual org. Tanpa ini semua baris
+    // tersimpan unresolved (termasuk kode valid seperti 5100) dan pengguna
+    // tak bisa menemukan kode fiktif seperti 1180 di COA mereka.
+    // Kode yang memang ada di COA kustom org tetap ter-resolve otomatis.
+    const { resolveDraftAccounts } = await import("@/core/ai/map-accounts");
+    const { accounts: accountsTable } = await import("@/server/db/schema/org");
+    const { eq: eqAcc } = await import("drizzle-orm");
+    const mapping = await db.transaction(async (tx) => {
+      const accRows = await tx
+        .select()
+        .from(accountsTable)
+        .where(eqAcc(accountsTable.orgId, ctx.orgId));
+      const leaves = accRows.filter(
+        (a) => !accRows.some((c) => c.parentCode === a.code),
+      );
+      return resolveDraftAccounts(
+        { lines: lines.map((l) => ({ accountCode: l.accountCode })) },
+        leaves.map((a) => ({ id: a.id, code: a.code, name: a.name })),
+      );
+    });
+    // Jujurkan keyakinan baris yang tak terpetakan: bukan 85%, dan beri alasan
+    // yang menyebut kode yang hilang agar pengguna tahu harus memilih pengganti.
+    const honestLines = lines.map((l, i) => {
+      const m = mapping.lines[i];
+      if (m && !m.unresolved) return l;
+      return {
+        ...l,
+        confidence: Math.min(l.confidence, 0.45),
+        reason: `${l.reason} (kode ${l.accountCode} tidak ada di COA — pilih akun pengganti)`,
+      };
+    });
+
     const result = await db.transaction(async (tx) => {
       const proposal = await createProposal(tx, ctx.orgId, findingId, draft, ifrsCitation);
       const aiDraft = await createDraft(tx, {
         orgId: ctx.orgId,
         kind: "TEXT",
         inputText: `Koreksi temuan ${finding.type} (#${findingId.slice(0, 8)})`,
-        draft: { ...draft, findingId, proposalId: proposal.id, ifrsCitation },
+        draft: {
+          ...draft,
+          lines: honestLines,
+          findingId,
+          proposalId: proposal.id,
+          ifrsCitation,
+          mapping: {
+            lines: mapping.lines,
+            warnings: mapping.warnings,
+          },
+        },
         model: "doctor",
       });
       await appendAudit(tx, {
