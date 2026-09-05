@@ -12,16 +12,19 @@ BEGIN
                             'tenant_chunks','chat_threads','onboarding_messages','org_profiles','ai_findings','ai_proposals',
                            'contacts','invoices','bank_reconciliations',
                            'fixed_assets','asset_depreciation_lines','asset_disposals',
-                           'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames']
+                           'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames',
+                           'tax_summaries']
   LOOP
-    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
-    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = t AND policyname = format('tenant_isolation_%s', t)) THEN
-      EXECUTE format($p$
-        CREATE POLICY tenant_isolation_%s ON %I
-        USING (org_id = current_setting('app.current_org', true)::uuid)
-        WITH CHECK (org_id = current_setting('app.current_org')::uuid)
-      $p$, t, t);
+    IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
+      EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+      EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = t AND policyname = format('tenant_isolation_%s', t)) THEN
+        EXECUTE format($p$
+          CREATE POLICY tenant_isolation_%s ON %I
+          USING (org_id = current_setting('app.current_org', true)::uuid)
+          WITH CHECK (org_id = current_setting('app.current_org')::uuid)
+        $p$, t, t);
+      END IF;
     END IF;
   END LOOP;
 END $$;

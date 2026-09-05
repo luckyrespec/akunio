@@ -76,8 +76,9 @@ const adminDb = ADMIN_URL.replace(/\/[^/?]+(\?|$)/, "/postgres$1");
 // 2. Apply drizzle migrations against the test DB.
 console.log("applying migrations to test db ...");
 const { execSync } = await import("node:child_process");
-execSync("npx drizzle-kit migrate", {
+execSync("bunx drizzle-kit migrate", {
   stdio: "inherit",
+  shell: true,
   env: { ...process.env, DATABASE_URL: testUrl },
 });
 

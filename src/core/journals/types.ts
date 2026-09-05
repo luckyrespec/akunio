@@ -1,5 +1,5 @@
 export type PeriodStatus = "OPEN" | "CLOSED" | "LOCKED";
-export type JournalSource = "MANUAL" | "AI" | "DOCUMENT" | "IMPORT" | "STOCK_OPNAME";
+export type JournalSource = "MANUAL" | "AI" | "DOCUMENT" | "IMPORT" | "STOCK_OPNAME" | "TAX";
 
 export interface JournalLineInput {
   accountId: string;
