@@ -253,6 +253,20 @@ export async function settleTaxPayment(
     throw new Error("TIDAK_ADA_PAJAK_TERUTANG_UNTUK_DIBAYAR");
   }
 
+  // Idempoten: periode yang sudah lunas mengembalikan bukti yang sama,
+  // tidak pernah memposting jurnal ganda (jurnal POSTED itu imutabel).
+  if (summary.status === "PAID") {
+    if (!summary.paymentJournalEntryId) {
+      throw new Error("SUDAH_LUNAS_TANPA_BUKTI_JURNAL");
+    }
+    const [row] = await q
+      .select({ number: journalEntries.number })
+      .from(journalEntries)
+      .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.id, summary.paymentJournalEntryId)))
+      .limit(1);
+    return { paymentEntryId: summary.paymentJournalEntryId, number: row?.number ?? "" };
+  }
+
   // Cari akun Utang PPh (2300)
   const [pphAccount] = await q
     .select({ id: accounts.id })

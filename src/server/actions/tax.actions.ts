@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray } from "drizzle-orm";
-import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
@@ -14,7 +13,6 @@ import {
   saveTaxSettings,
   upsertMonthlyTaxSummary,
   settleTaxPayment,
-  getTaxSummaryByMonth,
 } from "@/server/db/repos/tax.repo";
 import type { TaxSettings } from "@/core/tax/pph-final";
 import { Money } from "@/core/money/money";
@@ -55,11 +53,55 @@ function getLastDayOfMonthISO(periodMonth: string): string {
   return `${periodMonth}-${String(lastDay).padStart(2, "0")}`;
 }
 
+const PERIOD_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function validateTaxSettingsPatch(settings: Partial<TaxSettings>): string | null {
+  if (
+    settings.taxpayerType !== undefined &&
+    settings.taxpayerType !== "INDIVIDUAL" &&
+    settings.taxpayerType !== "CORPORATE"
+  ) {
+    return "Jenis wajib pajak tidak valid (harus INDIVIDUAL atau CORPORATE).";
+  }
+  if (
+    settings.ppnRatePercent !== undefined &&
+    (!Number.isFinite(settings.ppnRatePercent) ||
+      settings.ppnRatePercent < 0 ||
+      settings.ppnRatePercent > 100)
+  ) {
+    return "Tarif PPN harus berupa angka 0–100.";
+  }
+  if (
+    settings.taxPeriodYear !== undefined &&
+    (!Number.isInteger(settings.taxPeriodYear) ||
+      settings.taxPeriodYear < 2000 ||
+      settings.taxPeriodYear > 2100)
+  ) {
+    return "Tahun pajak tidak valid.";
+  }
+  const booleanFlags = ["pphFinalEnabled", "autoMonthlyAccrual", "ppnEnabled", "withholdingTaxEnabled"] as const;
+  for (const key of booleanFlags) {
+    if (settings[key] !== undefined && typeof settings[key] !== "boolean") {
+      return `Flag ${key} harus boolean.`;
+    }
+  }
+  if (
+    settings.npwp !== undefined &&
+    (typeof settings.npwp !== "string" || settings.npwp.trim().length > 30)
+  ) {
+    return "NPWP tidak valid.";
+  }
+  return null;
+}
+
 export async function updateTaxSettingsAction(
   settings: Partial<TaxSettings>
 ): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+
+    const settingsError = validateTaxSettingsPatch(settings);
+    if (settingsError) return { ok: false, error: settingsError };
 
     await withOrg(ctx.orgId, async (tx) => {
       await saveTaxSettings(tx, ctx.orgId, settings);
@@ -88,7 +130,7 @@ export async function generateTaxAccrualDraftAction(input: {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const { periodMonth } = input;
 
-    if (!/^\d{4}-\d{2}$/.test(periodMonth)) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodMonth)) {
       return { ok: false, error: "Format periode bulan tidak valid (harus YYYY-MM)." };
     }
 
@@ -116,6 +158,19 @@ export async function generateTaxAccrualDraftAction(input: {
         if (existingDraft && existingDraft.status === "PENDING") {
           return { ok: true, draftId: existingDraft.id };
         }
+        // Draf lama sudah diterima/ditolak: jangan yatimkan tautannya dengan
+        // draf baru bila akrual sudah diposting atau periode sudah lunas.
+        if (summary.status === "PAID") {
+          return { ok: false, error: "Periode ini sudah lunas. Koreksi dilakukan lewat jurnal pembalik." };
+        }
+        if (summary.accrualJournalEntryId) {
+          return { ok: false, error: "Akrual periode ini sudah diposting. Koreksi dilakukan lewat jurnal pembalik." };
+        }
+        if (existingDraft && existingDraft.status === "ACCEPTED") {
+          return { ok: false, error: "Draf akrual periode ini sudah diterima dan diposting. Koreksi dilakukan lewat jurnal pembalik." };
+        }
+      } else if (summary.status === "PAID") {
+        return { ok: false, error: "Periode ini sudah lunas. Koreksi dilakukan lewat jurnal pembalik." };
       }
 
       // 3. Cari akun 5700 (Beban Pajak) dan 2300 (Utang PPh)
@@ -217,11 +272,22 @@ export async function recordTaxPaymentAction(input: {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
 
-    if (!input.ntpn || !input.ntpn.trim()) {
-      return { ok: false, error: "Nomor Transaksi Penerimaan Negara (NTPN) wajib diisi." };
+    if (!PERIOD_MONTH_RE.test(input.periodMonth)) {
+      return { ok: false, error: "Format periode bulan tidak valid (harus YYYY-MM)." };
+    }
+    const ntpn = input.ntpn ? input.ntpn.trim() : "";
+    if (!/^[A-Za-z0-9]{8,30}$/.test(ntpn)) {
+      return { ok: false, error: "NTPN tidak valid (8–30 karakter alfanumerik tanpa spasi)." };
     }
     if (!input.paidAtISO) {
       return { ok: false, error: "Tanggal penyetoran wajib diisi." };
+    }
+    const paidTime = Date.parse(input.paidAtISO);
+    if (Number.isNaN(paidTime)) {
+      return { ok: false, error: "Tanggal penyetoran tidak valid." };
+    }
+    if (paidTime > Date.now()) {
+      return { ok: false, error: "Tanggal penyetoran tidak boleh di masa depan." };
     }
     if (!input.bankAccountId) {
       return { ok: false, error: "Rekening asal penyetoran (Kas/Bank) wajib dipilih." };

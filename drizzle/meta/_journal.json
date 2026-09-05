@@ -85,6 +85,13 @@
       "when": 1788578224994,
       "tag": "0011_minor_tag",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788619192070,
+      "tag": "0012_tax_summaries",
+      "breakpoints": true
     }
   ]
 }

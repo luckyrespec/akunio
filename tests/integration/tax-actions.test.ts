@@ -130,4 +130,58 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("tax.actions integration test
     expect(sum?.status).toBe("PAID");
     expect(sum?.ntpn).toBe("NTPN1234567890ABCDEF");
   });
+
+  it("links accrual entry on accept and settles idempotently", async () => {
+    // C1(ii): accept draf akrual menandai ACCRUED + menyimpan id jurnalnya
+    const sum = await getTaxSummaryByMonth(db, orgId, "2026-01");
+    expect(sum?.status).toBe("PAID");
+    expect(sum?.accrualJournalEntryId).toBeDefined();
+
+    // C1(i): bayar ulang periode lunas → kembalikan bukti yang sama, tanpa jurnal baru
+    const bankId = await getAccountId("1120");
+    const before = await admin.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM journal_entries WHERE org_id=$1`,
+      [orgId]
+    );
+    const again = await recordTaxPaymentAction({
+      periodMonth: "2026-01",
+      ntpn: "NTPN1234567890ABCDEF",
+      paidAtISO: "2026-02-10",
+      bankAccountId: bankId,
+    });
+    expect(again.ok).toBe(true);
+    expect(again.paymentEntryId).toBe(sum?.paymentJournalEntryId);
+    const after = await admin.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM journal_entries WHERE org_id=$1`,
+      [orgId]
+    );
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+  });
+
+  it("refuses to regenerate accrual draft after accept/settle", async () => {
+    const res = await generateTaxAccrualDraftAction({ periodMonth: "2026-01" });
+    expect(res.ok).toBe(false);
+  });
+
+  it("rejects invalid payment and settings input server-side", async () => {
+    const bankId = await getAccountId("1120");
+    const badNtpn = await recordTaxPaymentAction({
+      periodMonth: "2026-01", ntpn: "pendek", paidAtISO: "2026-02-10", bankAccountId: bankId,
+    });
+    expect(badNtpn.ok).toBe(false);
+    const badMonth = await recordTaxPaymentAction({
+      periodMonth: "2026-13", ntpn: "NTPN1234567890ABCDEF", paidAtISO: "2026-02-10", bankAccountId: bankId,
+    });
+    expect(badMonth.ok).toBe(false);
+    const badDate = await recordTaxPaymentAction({
+      periodMonth: "2026-01", ntpn: "NTPN1234567890ABCDEF", paidAtISO: "bukan-tanggal", bankAccountId: bankId,
+    });
+    expect(badDate.ok).toBe(false);
+    const futureDate = await recordTaxPaymentAction({
+      periodMonth: "2026-01", ntpn: "NTPN1234567890ABCDEF", paidAtISO: "2099-01-01", bankAccountId: bankId,
+    });
+    expect(futureDate.ok).toBe(false);
+    expect((await updateTaxSettingsAction({ taxpayerType: "X" as never })).ok).toBe(false);
+    expect((await updateTaxSettingsAction({ ppnRatePercent: 150 })).ok).toBe(false);
+  });
 });

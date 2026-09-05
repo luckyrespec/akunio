@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import type { AccountProposal } from "@/server/doctor/builders";
@@ -242,6 +242,17 @@ export async function acceptDraftAction(
       };
       const posted = await postJournalEntry(tx, ctx.orgId, ctx.userEmail, entry);
       await linkPostedEntry(tx, ctx.orgId, draftId, posted.id);
+
+      // Tautkan akrual pajak: draf rule pp-55-2022 yang diterima menandai
+      // tax_summaries ACCRUED + menyimpan id jurnalnya, sehingga status
+      // ACCRUED selalu reachable dan pelunasan tertaut ke akrual.
+      if (draft.model === "rule:pp-55-2022") {
+        const { taxSummaries } = await import("@/server/db/schema/tax");
+        await tx
+          .update(taxSummaries)
+          .set({ accrualJournalEntryId: posted.id, status: "ACCRUED", updatedAt: new Date() })
+          .where(and(eq(taxSummaries.orgId, ctx.orgId), eq(taxSummaries.accrualDraftId, draftId)));
+      }
       await appendAudit(tx, {
         orgId: ctx.orgId, actor: ctx.userEmail, action: "AI_DRAFT_ACCEPT",
         subjectType: "ai_draft", subjectId: draftId,
