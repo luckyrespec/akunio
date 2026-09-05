@@ -18,6 +18,7 @@ import {
   ReportSectionHeader,
 } from "@/components/statement-parts";
 import { CalkActions } from "@/components/calk/calk-actions";
+import { cn } from "@/lib/utils";
 
 export default async function CalkPage({
   searchParams,
@@ -174,116 +175,154 @@ export default async function CalkPage({
         </section>
 
         {/* BAB 4: RINCIAN AKUN SIGNIFIKAN */}
-        <section className="space-y-5">
+        <section className="space-y-6">
           <ReportSectionHeader title="4. RINCIAN AKUN SIGNIFIKAN" />
 
           {/* Rincian Kas & Bank */}
-          <div className="space-y-2.5">
-            <div className="flex items-baseline justify-between">
+          <div className="space-y-3">
+            <div className="flex items-baseline justify-between border-b border-rule/70 pb-1.5">
               <h3 className="font-bold text-ink text-xs sm:text-sm">4.1 Kas dan Setara Kas</h3>
               <span className="text-[11px] font-medium text-ink-soft">Likuiditas Lancar</span>
             </div>
             <p className="text-xs text-ink-soft leading-relaxed">
               {data.narrative.accountNotes.cashAndBank}
             </p>
-            <div className="rounded-2xl border border-rule overflow-hidden bg-paper shadow-2xs">
-              {cashAccounts.length === 0 ? (
-                <p className="p-4 text-xs italic text-ink-soft">Tidak ada saldo kas dan bank.</p>
-              ) : (
-                cashAccounts.map((r) => (
-                  <ReportRowView
-                    key={r.code}
-                    indent={1}
-                    code={r.code}
-                    label={r.name}
-                    minor={r.movementMinor}
-                  />
-                ))
-              )}
-              <ReportRowView
-                bold
-                isTotal
-                label="Total Kas dan Setara Kas"
-                minor={cashAccounts.reduce((s, r) => s + r.movementMinor, 0n)}
-                variant="subtotal"
-              />
+
+            <div className="rounded-xl border border-rule overflow-hidden bg-paper shadow-2xs">
+              <div className="flex items-center justify-between px-3.5 py-2 border-b border-rule bg-canvas/40 text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+                <span>Rincian Akun Kas &amp; Bank</span>
+                <span className="text-right">Saldo (Rupiah)</span>
+              </div>
+              <div className="divide-y divide-rule/40">
+                {cashAccounts.length === 0 ? (
+                  <p className="p-3.5 text-xs italic text-ink-soft">Tidak ada saldo kas dan setara kas tercatat pada tanggal ini.</p>
+                ) : (
+                  cashAccounts.map((r) => (
+                    <div key={r.code} className="flex items-center justify-between px-3.5 py-2 text-xs hover:bg-canvas/30 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] text-ink-soft">{r.code}</span>
+                        <span className="text-ink font-medium">{r.name}</span>
+                      </div>
+                      <span className={cn(
+                        "font-mono tabular-nums text-right font-medium tnum",
+                        r.movementMinor < 0n ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-ink"
+                      )}>
+                        {Money.fromMinor(r.movementMinor).formatIdr()}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="flex items-center justify-between px-3.5 py-2.5 border-t-2 border-ink/40 bg-canvas/30 text-xs font-bold text-ink">
+                <span>Total Kas dan Setara Kas</span>
+                <span className="font-mono tabular-nums text-right tnum">
+                  {Money.fromMinor(cashAccounts.reduce((s, r) => s + r.movementMinor, 0n)).formatIdr()}
+                </span>
+              </div>
             </div>
           </div>
 
           {/* Rincian Aset Tetap */}
-          <div className="space-y-2.5 pt-2">
-            <div className="flex items-baseline justify-between">
+          <div className="space-y-3 pt-2">
+            <div className="flex items-baseline justify-between border-b border-rule/70 pb-1.5">
               <h3 className="font-bold text-ink text-xs sm:text-sm">4.2 Aset Tetap dan Akumulasi Penyusutan</h3>
               <span className="text-[11px] font-medium text-ink-soft">Biaya Perolehan Historis</span>
             </div>
             <p className="text-xs text-ink-soft leading-relaxed">
               {data.narrative.accountNotes.fixedAssets}
             </p>
-            <div className="rounded-2xl border border-rule overflow-hidden bg-paper shadow-2xs">
-              {bs.fixedAssetRows.length === 0 ? (
-                <p className="p-4 text-xs italic text-ink-soft">Tidak ada aset tetap tercatat.</p>
-              ) : (
-                bs.fixedAssetRows.map((r) => (
-                  <ReportRowView
-                    key={r.code}
-                    indent={1}
-                    code={r.code}
-                    label={r.name}
-                    minor={r.movementMinor}
-                  />
-                ))
-              )}
-              <ReportRowView
-                bold
-                isTotal
-                label="Nilai Buku Aset Tetap Neto"
-                minor={bs.totalFixedAssetsMinor}
-                variant="subtotal"
-              />
+
+            <div className="rounded-xl border border-rule overflow-hidden bg-paper shadow-2xs">
+              <div className="flex items-center justify-between px-3.5 py-2 border-b border-rule bg-canvas/40 text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+                <span>Rincian Akun Aset Tetap</span>
+                <span className="text-right">Nilai Buku (Rupiah)</span>
+              </div>
+              <div className="divide-y divide-rule/40">
+                {bs.fixedAssetRows.length === 0 ? (
+                  <p className="p-3.5 text-xs italic text-ink-soft">Tidak ada aset tetap tercatat.</p>
+                ) : (
+                  bs.fixedAssetRows.map((r) => (
+                    <div key={r.code} className="flex items-center justify-between px-3.5 py-2 text-xs hover:bg-canvas/30 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] text-ink-soft">{r.code}</span>
+                        <span className="text-ink font-medium">{r.name}</span>
+                      </div>
+                      <span className={cn(
+                        "font-mono tabular-nums text-right font-medium tnum",
+                        r.movementMinor < 0n ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-ink"
+                      )}>
+                        {Money.fromMinor(r.movementMinor).formatIdr()}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="flex items-center justify-between px-3.5 py-2.5 border-t-2 border-ink/40 bg-canvas/30 text-xs font-bold text-ink">
+                <span>Nilai Buku Aset Tetap Neto</span>
+                <span className="font-mono tabular-nums text-right tnum">
+                  {Money.fromMinor(bs.totalFixedAssetsMinor).formatIdr()}
+                </span>
+              </div>
             </div>
           </div>
 
           {/* Rincian Liabilitas */}
-          <div className="space-y-2.5 pt-2">
-            <div className="flex items-baseline justify-between">
+          <div className="space-y-3 pt-2">
+            <div className="flex items-baseline justify-between border-b border-rule/70 pb-1.5">
               <h3 className="font-bold text-ink text-xs sm:text-sm">4.3 Liabilitas (Kewajiban)</h3>
               <span className="text-[11px] font-medium text-ink-soft">Kewajiban Berjalan &amp; Panjang</span>
             </div>
             <p className="text-xs text-ink-soft leading-relaxed">
               {data.narrative.accountNotes.liabilities}
             </p>
-            <div className="rounded-2xl border border-rule overflow-hidden bg-paper shadow-2xs">
-              {bs.shortTermLiabilityRows.length === 0 && bs.longTermLiabilityRows.length === 0 ? (
-                <p className="p-4 text-xs italic text-ink-soft">Entitas tidak memiliki saldo kewajiban pada tanggal ini.</p>
-              ) : (
-                <>
-                  {bs.shortTermLiabilityRows.map((r) => (
-                    <ReportRowView
-                      key={r.code}
-                      indent={1}
-                      code={r.code}
-                      label={r.name}
-                      minor={r.movementMinor}
-                    />
-                  ))}
-                  {bs.longTermLiabilityRows.map((r) => (
-                    <ReportRowView
-                      key={r.code}
-                      indent={1}
-                      code={r.code}
-                      label={r.name}
-                      minor={r.movementMinor}
-                    />
-                  ))}
-                </>
-              )}
-              <ReportRowView
-                bold
-                isTotal
-                label="Total Liabilitas"
-                minor={bs.totalLiabilitiesMinor}
-                variant="subtotal"
-              />
+
+            <div className="rounded-xl border border-rule overflow-hidden bg-paper shadow-2xs">
+              <div className="flex items-center justify-between px-3.5 py-2 border-b border-rule bg-canvas/40 text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+                <span>Rincian Akun Liabilitas</span>
+                <span className="text-right">Saldo (Rupiah)</span>
+              </div>
+              <div className="divide-y divide-rule/40">
+                {bs.shortTermLiabilityRows.length === 0 && bs.longTermLiabilityRows.length === 0 ? (
+                  <p className="p-3.5 text-xs italic text-ink-soft">Entitas tidak memiliki saldo kewajiban pada tanggal ini.</p>
+                ) : (
+                  <>
+                    {bs.shortTermLiabilityRows.map((r) => (
+                      <div key={r.code} className="flex items-center justify-between px-3.5 py-2 text-xs hover:bg-canvas/30 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] text-ink-soft">{r.code}</span>
+                          <span className="text-ink font-medium">{r.name}</span>
+                        </div>
+                        <span className={cn(
+                          "font-mono tabular-nums text-right font-medium tnum",
+                          r.movementMinor < 0n ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-ink"
+                        )}>
+                          {Money.fromMinor(r.movementMinor).formatIdr()}
+                        </span>
+                      </div>
+                    ))}
+                    {bs.longTermLiabilityRows.map((r) => (
+                      <div key={r.code} className="flex items-center justify-between px-3.5 py-2 text-xs hover:bg-canvas/30 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] text-ink-soft">{r.code}</span>
+                          <span className="text-ink font-medium">{r.name}</span>
+                        </div>
+                        <span className={cn(
+                          "font-mono tabular-nums text-right font-medium tnum",
+                          r.movementMinor < 0n ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-ink"
+                        )}>
+                          {Money.fromMinor(r.movementMinor).formatIdr()}
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+              <div className="flex items-center justify-between px-3.5 py-2.5 border-t-2 border-ink/40 bg-canvas/30 text-xs font-bold text-ink">
+                <span>Total Liabilitas</span>
+                <span className="font-mono tabular-nums text-right tnum">
+                  {Money.fromMinor(bs.totalLiabilitiesMinor).formatIdr()}
+                </span>
+              </div>
             </div>
           </div>
         </section>
