@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { getTaxSettings, getTaxSummariesByYear } from "@/server/db/repos/tax.repo";
@@ -31,10 +32,26 @@ export default async function PajakPage({ searchParams }: PageProps) {
   });
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="Pajak & SPT Masa UMKM"
         eyebrow="Kepatuhan perpajakan otomatis berbasis PP No. 55 Tahun 2022 jo. UU HPP dan SAK EMKM Bab 15."
+        actions={
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/laporan/calk?year=${selectedYear}`}
+              className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-xl border border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-2xs"
+            >
+              <span>Lampiran CALK</span>
+            </Link>
+            <Link
+              href="/pengaturan?tab=pajak"
+              className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-xl bg-terra text-white hover:bg-terra/90 transition-colors shadow-2xs"
+            >
+              <span>Pengaturan Pajak</span>
+            </Link>
+          </div>
+        }
       />
 
       <TaxDashboard

@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconTax } from "@/components/icons";
 import type { TaxSettings, TaxpayerType } from "@/core/tax/pph-final";
 import { updateTaxSettingsAction } from "@/server/actions/tax.actions";
 
@@ -72,25 +73,55 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-display text-lg sm:text-xl font-bold text-ink">Pengaturan Pajak Entitas</h2>
-        <p className="text-xs sm:text-sm text-ink-soft mt-1">
-          Konfigurasi status perpajakan UMKM berpedoman pada PP No. 55 Tahun 2022 dan standar SAK EMKM Bab 15.
-        </p>
+      {/* Header Bar Konsisten dengan Bagan Akun, Periode & Persediaan */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-base font-bold text-ink flex items-center gap-2">
+            <IconTax className="size-5 text-terra" />
+            <span>Pengaturan Pajak Entitas UMKM</span>
+          </h2>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            Konfigurasi status perpajakan UMKM berpedoman pada PP No. 55 Tahun 2022 dan standar SAK EMKM Bab 15.
+          </p>
+        </div>
+
+        {canEdit && (
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              disabled={isPending}
+              onClick={handleSave}
+              size="sm"
+              className="h-8 gap-1.5 rounded-xl bg-terra text-white text-xs px-3.5 shadow-2xs hover:bg-terra/90 transition-[transform,background-color] active:scale-[0.98] font-bold"
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Menyimpan...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="size-3.5" />
+                  <span>Simpan Perubahan</span>
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       {statusMsg && (
         <div
-          className={`p-3.5 rounded-2xl border text-xs flex items-center gap-2.5 font-medium ${
+          className={`p-3.5 rounded-2xl border text-xs flex items-center gap-2.5 font-medium shadow-2xs ${
             statusMsg.type === "success"
-              ? "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
-              : "bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300"
+              ? "bg-emerald-50 text-emerald-900 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+              : "bg-rose-50 text-rose-900 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
           }`}
         >
           {statusMsg.type === "success" ? (
-            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+            <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
           ) : (
-            <AlertCircle className="size-4 shrink-0 text-rose-600" />
+            <AlertCircle className="size-4 shrink-0 text-rose-600 dark:text-rose-400" />
           )}
           <span>{statusMsg.text}</span>
         </div>
@@ -285,20 +316,6 @@ export function TaxSettingsTab({ initialSettings, userRole }: TaxSettingsTabProp
           </div>
         </div>
       </div>
-
-      {canEdit && (
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            disabled={isPending}
-            onClick={handleSave}
-            className="h-9 px-4 text-xs font-semibold rounded-xl bg-terra text-white hover:bg-terra/90 flex items-center gap-1.5"
-          >
-            {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-            <span>Simpan Pengaturan Pajak</span>
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

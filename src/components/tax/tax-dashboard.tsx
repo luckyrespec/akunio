@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   Percent,
   TrendingUp,
@@ -56,12 +57,25 @@ export function TaxDashboard({
   currentYear,
   userRole,
 }: TaxDashboardProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isPendingYear, startYearTransition] = React.useTransition();
+
   const [activeSettlementPeriod, setActiveSettlementPeriod] = React.useState<TaxSummaryView | null>(null);
   const [loadingPeriod, setLoadingPeriod] = React.useState<string | null>(null);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [successMsg, setSuccessMsg] = React.useState<string | null>(null);
 
   const canEdit = userRole === "OWNER" || userRole === "ACCOUNTANT";
+
+  const handleYearChange = (year: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("year", String(year));
+    startYearTransition(() => {
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
 
   // Agregasi tahunan
   const totalGrossMinor = summaries.reduce((acc, s) => acc + s.grossRevenueMinor, 0n);
@@ -237,9 +251,24 @@ export function TaxDashboard({
               Penyusunan akrual pajak bulanan dan pelunasan dengan Nomor Transaksi Penerimaan Negara (NTPN).
             </p>
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-rule bg-canvas/50">
-            <span className="text-xs font-medium text-ink-soft">Tahun Pajak:</span>
-            <span className="font-mono text-xs font-bold text-ink">{currentYear}</span>
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rule bg-canvas/70 shadow-2xs">
+              <span className="text-xs font-semibold text-ink-soft">Tahun Pajak:</span>
+              <select
+                aria-label="Pilih Tahun Pajak"
+                value={currentYear}
+                disabled={isPendingYear}
+                onChange={(e) => handleYearChange(parseInt(e.target.value, 10))}
+                className="bg-transparent font-mono text-xs font-bold text-ink focus:outline-none cursor-pointer pr-1"
+              >
+                {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
+                  <option key={y} value={y} className="bg-paper text-ink">
+                    {y}
+                  </option>
+                ))}
+              </select>
+              {isPendingYear && <Loader2 className="size-3.5 animate-spin text-terra" />}
+            </div>
           </div>
         </div>
 
