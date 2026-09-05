@@ -352,8 +352,8 @@ export function TaxDashboard({
 
                     <td className="px-5 py-3.5 text-right font-sans">
                       <div className="flex items-center justify-end gap-1.5">
-                        {status === "DRAFTED" && summary?.accrualDraftId ? (
-                          <Link href={`/jurnal/ai/${summary.accrualDraftId}`}>
+                        {status === "DRAFTED" ? (
+                          <Link href={`/pajak/draf/${periodMonth}`}>
                             <Button
                               type="button"
                               size="sm"
@@ -361,7 +361,7 @@ export function TaxDashboard({
                               className="h-7 px-2.5 text-[11px] font-bold border-amber-400 text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg shadow-2xs"
                             >
                               <FileText className="size-3 mr-1" />
-                              Tinjau Draf
+                              Review Draf
                             </Button>
                           </Link>
                         ) : null}
@@ -379,20 +379,18 @@ export function TaxDashboard({
                           </Button>
                         )}
 
-                        {(status === "UNPROCESSED" || (!summary?.accrualDraftId && status !== "PAID")) && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!canEdit || isCurrentLoading}
-                            onClick={() => handleGenerateDraft(periodMonth)}
-                            className="h-7 px-2.5 text-[11px] font-semibold text-ink border-rule bg-canvas hover:bg-canvas/80 rounded-lg shadow-2xs"
-                          >
-                            {isCurrentLoading ? (
-                              <Loader2 className="size-3 animate-spin mr-1 text-terra" />
-                            ) : null}
-                            <span>Hitung &amp; Buat Draf</span>
-                          </Button>
+                        {status === "UNPROCESSED" && (
+                          <Link href={`/pajak/draf/${periodMonth}`}>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={!canEdit}
+                              className="h-7 px-2.5 text-[11px] font-bold text-ink border-rule bg-canvas hover:bg-canvas/80 rounded-lg shadow-2xs"
+                            >
+                              <span>Buat Draf</span>
+                            </Button>
+                          </Link>
                         )}
                       </div>
                     </td>

@@ -268,6 +268,7 @@ export async function recordTaxPaymentAction(input: {
   ntpn: string;
   paidAtISO: string;
   bankAccountId: string;
+  documentId?: string;
 }): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
@@ -302,6 +303,20 @@ export async function recordTaxPaymentAction(input: {
         actorEmail: ctx.userEmail,
       });
 
+      if (input.documentId) {
+        const { linkDocumentToEntry } = await import("@/server/db/repos/journals.repo");
+        try {
+          await linkDocumentToEntry(tx, {
+            orgId: ctx.orgId,
+            entryId: res.paymentEntryId,
+            documentId: input.documentId,
+            fileName: `Bukti_NTPN_${input.periodMonth}.pdf`,
+          });
+        } catch (docErr) {
+          console.error("Gagal menautkan bukti dokumen ke jurnal pelunasan:", docErr);
+        }
+      }
+
       await appendAudit(tx, {
         orgId: ctx.orgId,
         actor: ctx.userEmail,
@@ -312,6 +327,7 @@ export async function recordTaxPaymentAction(input: {
           periodMonth: input.periodMonth,
           ntpn: input.ntpn.trim(),
           paymentJournalEntryId: res.paymentEntryId,
+          documentId: input.documentId,
         },
       });
 
