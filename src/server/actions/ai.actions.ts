@@ -1,6 +1,8 @@
 "use server";
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
+import type { AccountProposal } from "@/server/doctor/builders";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
 import { appendAudit } from "@/server/db/repos/audit.repo";
@@ -142,21 +144,69 @@ export async function acceptDraftAction(
 ): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const out = await db.transaction(async (tx) => {
+    const out = await withOrg(ctx.orgId, async (tx) => {
       const draft = await getDraft(tx, ctx.orgId, draftId);
       if (!draft) throw new Error("DRAFT_TIDAK_DITEMUKAN");
       if (draft.status !== "PENDING") throw new Error("DRAFT_SUDAH_DIPROSES");
+
+      // Usulan akun COA dari Doctor SAK: validasi + buat semuanya DAHULU dalam
+      // transaksi yang sama, lalu petakan ulang baris yang accountId-nya kosong
+      // ke akun baru tersebut (posisi baris ↔ kode draf, atau kode usulan yang
+      // dikirim sebagai accountId) — baru posting. Gagal di langkah mana pun
+      // → throw, transaksi rollback, tak ada akun yatim.
+      const raw = draft.draft as {
+        lines?: Array<{ accountCode?: string }>;
+        accountProposals?: AccountProposal[];
+      } | null;
+      const proposals = Array.isArray(raw?.accountProposals) ? raw.accountProposals : [];
+      const codeToId = new Map<string, string>();
+      if (proposals.length > 0) {
+        const { validateAccountProposal } = await import("@/server/accounts/propose");
+        const { createAccount } = await import("@/server/db/repos/accounts.repo");
+        const seen = new Set<string>();
+        for (const p of proposals) {
+          const code = p.code.trim();
+          if (seen.has(code)) {
+            throw new Error(`USULAN_AKUN_TIDAK_VALID: kode akun ${code} diusulkan ganda.`);
+          }
+          seen.add(code);
+          await validateAccountProposal(tx, ctx.orgId, p);
+        }
+        for (const p of proposals) {
+          const code = p.code.trim();
+          const created = await createAccount(tx, {
+            orgId: ctx.orgId,
+            code,
+            name: p.name.trim(),
+            type: p.type,
+            normal: p.normal,
+            parentCode: p.parentCode.trim(),
+          });
+          codeToId.set(code, created.id);
+        }
+      }
 
       const entry = {
         dateISO: edited.dateISO,
         memo: edited.memo.trim() || "(tanpa keterangan)",
         source: "AI" as const,
         idempotencyKey: crypto.randomUUID(),
-        lines: edited.lines.map((l) => ({
-          accountId: l.accountId,
-          debitMinor: Money.parseIdr(l.debitText.trim() === "" ? "0" : l.debitText).minor,
-          creditMinor: Money.parseIdr(l.creditText.trim() === "" ? "0" : l.creditText).minor,
-        })),
+        lines: edited.lines.map((l, i) => {
+          let accountId = l.accountId;
+          if (!accountId) {
+            const code = raw?.lines?.[i]?.accountCode?.trim();
+            const resolved = code ? codeToId.get(code) : undefined;
+            if (resolved) accountId = resolved;
+          } else {
+            const resolved = codeToId.get(accountId.trim());
+            if (resolved) accountId = resolved;
+          }
+          return {
+            accountId,
+            debitMinor: Money.parseIdr(l.debitText.trim() === "" ? "0" : l.debitText).minor,
+            creditMinor: Money.parseIdr(l.creditText.trim() === "" ? "0" : l.creditText).minor,
+          };
+        }),
       };
       const posted = await postJournalEntry(tx, ctx.orgId, ctx.userEmail, entry);
       await linkPostedEntry(tx, ctx.orgId, draftId, posted.id);
@@ -178,6 +228,9 @@ export async function acceptDraftAction(
     }
     if (e instanceof Error && e.message === "DRAFT_SUDAH_DIPROSES") {
       return { ok: false, error: "Draft ini sudah pernah diproses." };
+    }
+    if (e instanceof Error && e.message.startsWith("USULAN_AKUN_TIDAK_VALID")) {
+      return { ok: false, error: e.message };
     }
     console.error(e);
     return { ok: false, error: "Terjadi kesalahan tak terduga." };
