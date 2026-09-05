@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PageActionButton, PageActions } from "@/components/page-actions";
+import { findingErrorMessage } from "@/app/(app)/jurnal/ai/[id]/proposal-labels";
 import {
   dismissFindingAction,
   proposeCorrectionAction,
@@ -27,7 +28,9 @@ export function TemuanDetailActions({
       try {
         const r = await fn();
         if (!r.ok) {
-          setError(r.error || "Aksi gagal. Coba lagi.");
+          // Ruling R7: kode SCREAMING_SNAKE mentah Task 7 dipetakan ke
+          // kalimat Bahasa Indonesia yang ramah.
+          setError(r.error ? findingErrorMessage(r.error) : "Aksi gagal. Coba lagi.");
           return;
         }
         if (r.draftId) {

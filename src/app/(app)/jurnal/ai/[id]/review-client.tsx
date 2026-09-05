@@ -21,6 +21,11 @@ import { Label } from "@/components/ui/label";
 import { AccountSelect } from "@/components/account-select";
 import { PageHeader } from "@/components/page-header";
 import { PageActionButton, PageActions } from "@/components/page-actions";
+import {
+  citationLabel,
+  proposalChipLabel,
+  proposalDetailLabel,
+} from "./proposal-labels";
 
 export interface ReviewDraftLine {
   accountCode: string;
@@ -33,6 +38,20 @@ export interface ReviewDraftLine {
   unresolved: boolean;
 }
 
+// Usulan akun baru + sitasi SAK dari JSON draf Task 7 — UI hanya merender
+// yang dibawa draf, tak pernah mengarang akun.
+export interface ReviewDraftProposal {
+  code: string;
+  name: string;
+  parentCode: string;
+}
+
+export interface ReviewDraftCitation {
+  docId: string;
+  bab: string;
+  paragraph: string;
+}
+
 export interface ReviewDraft {
   dateISO: string;
   memo: string;
@@ -40,6 +59,10 @@ export interface ReviewDraft {
   overallConfidence: number;
   explanation: string;
   mapping?: { warnings: string[] };
+  accountProposals?: ReviewDraftProposal[];
+  citations?: ReviewDraftCitation[];
+  sakVersion?: string;
+  sakDocId?: string;
 }
 
 interface Row {
@@ -205,6 +228,20 @@ export function ReviewClient({
   const codeById = useMemo(
     () => new Map(accounts.map((a) => [a.id, a.code ?? ""])),
     [accounts],
+  );
+
+  // Usulan akun baru per kode (dari JSON draf Task 7) + sitasi tervalidasi
+  // (medan kosong dibuang — hanya sitasi lengkap yang dirender).
+  const proposalByCode = useMemo(
+    () => new Map((draft.accountProposals ?? []).map((p) => [p.code, p])),
+    [draft.accountProposals],
+  );
+  const verifiedCitations = useMemo(
+    () =>
+      (draft.citations ?? []).filter(
+        (c) => c.docId !== "" && c.bab !== "" && c.paragraph !== "",
+      ),
+    [draft.citations],
   );
 
   // Saran pengganti per baris yang akunnya kosong: 3 COA termirip (skor >= 0.35).
@@ -419,6 +456,20 @@ export function ReviewClient({
             </ul>
           </div>
         )}
+        {verifiedCitations.length > 0 && (
+          <div className="rounded-lg border border-rule bg-paper p-4">
+            <p className="text-xs uppercase tracking-wide text-ink-soft">
+              Dasar SAK{draft.sakVersion ? ` · ${draft.sakVersion}` : ""}
+            </p>
+            <ul className="mt-2 space-y-1 text-sm text-ink">
+              {verifiedCitations.map((c, i) => (
+                <li key={`${c.docId}-${c.bab}-${c.paragraph}-${i}`}>
+                  {citationLabel(c)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {draft.lines.some((l) => l.confidence < 0.7 || l.unresolved) && (
           <p className="text-xs text-ink-soft leading-relaxed">
             Garis terracotta berarti akun belum dipilih dan wajib dilengkapi. Garis amber berarti
@@ -483,6 +534,7 @@ export function ReviewClient({
             const blocked = !r.accountId || line?.unresolved === true;
             const noCode = line?.unresolved === true;
             const needsCheck = blocked || (line != null && line.confidence < 0.7);
+            const proposal = line ? proposalByCode.get(line.accountCode) : undefined;
             return (
               <div
                 key={r.key}
@@ -503,6 +555,14 @@ export function ReviewClient({
                     </div>
                   )}
                 </div>
+                {proposal && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline" className="text-[11px] border-terra/30 text-terra bg-terra/5">
+                      {proposalChipLabel({ accountCode: line?.accountCode ?? "", proposed: true })}
+                    </Badge>
+                    <span className="text-[11px] text-ink-soft">{proposalDetailLabel(proposal)}</span>
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   <Label className="text-xs text-ink-soft">Akun</Label>
@@ -567,6 +627,7 @@ export function ReviewClient({
                 const blocked = !r.accountId || line?.unresolved === true;
                 const noCode = line?.unresolved === true;
                 const needsCheck = blocked || (line && line.confidence < 0.7);
+                const proposal = line ? proposalByCode.get(line.accountCode) : undefined;
                 return (
                   <tr key={r.key}
                       className={`transition-colors hover:bg-canvas/30 ${needsCheck ? (blocked ? "bg-terra/5 shadow-[inset_2px_0_0_var(--color-terra)]" : "bg-amber-500/5 shadow-[inset_2px_0_0_var(--color-amber-500)]") : ""}`}>
@@ -593,6 +654,14 @@ export function ReviewClient({
                           {line?.reason && (
                             <span id={`reason-${r.key}`} className="text-xs leading-relaxed text-ink-soft">{line.reason}</span>
                           )}
+                        </div>
+                      )}
+                      {proposal && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline" className="text-[11px] border-terra/30 text-terra bg-terra/5">
+                            {proposalChipLabel({ accountCode: line?.accountCode ?? "", proposed: true })}
+                          </Badge>
+                          <span className="text-[11px] text-ink-soft">{proposalDetailLabel(proposal)}</span>
                         </div>
                       )}
                     </td>

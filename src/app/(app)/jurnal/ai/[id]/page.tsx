@@ -58,6 +58,11 @@ export default async function ReviewPage({
       lines: Array<{ accountId: string | null; matchedName: string | null; unresolved: boolean }>;
       warnings: string[];
     };
+    // Doctor SAK Task 7: usulan akun + sitasi tervalidasi — diteruskan apa adanya.
+    accountProposals?: Array<{ code: string; name: string; parentCode: string }>;
+    citations?: Array<{ docId: string; bab: string; paragraph: string }>;
+    sakVersion?: string;
+    sakDocId?: string;
   };
   const mappedLines = raw.mapping?.lines ?? [];
   // Sembuhkan draf lama: hitung ulang mapping ke COA saat ini agar draf yang
@@ -88,6 +93,10 @@ export default async function ReviewPage({
     dateISO: raw.dateISO, memo: raw.memo,
     lines: mergedLines, overallConfidence: raw.overallConfidence,
     explanation: raw.explanation, mapping: { warnings: fresh.warnings },
+    accountProposals: raw.accountProposals ?? [],
+    citations: raw.citations ?? [],
+    sakVersion: raw.sakVersion,
+    sakDocId: raw.sakDocId,
   };
 
   return (
