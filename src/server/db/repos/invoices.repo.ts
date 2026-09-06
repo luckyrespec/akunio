@@ -16,6 +16,7 @@ export interface CreateInvoiceItemInput {
   unitPriceMinor: bigint;
   discountMinor?: bigint;
   taxRatePercent?: number | string;
+  catalogItemId?: string | null;
 }
 
 export interface CreateInvoiceInput {
@@ -118,6 +119,7 @@ export async function createInvoiceRepo(
         calculated.items.map((item, idx) => ({
           invoiceId: inv.id,
           description: itemsData[idx]?.description || "Item",
+          catalogItemId: itemsData[idx]?.catalogItemId ?? null,
           quantity: String(item.quantityNum),
           unitPriceMinor: itemsData[idx]?.unitPriceMinor || 0n,
           discountMinor: item.discountMinor,
