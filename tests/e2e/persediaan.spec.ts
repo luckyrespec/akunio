@@ -12,6 +12,22 @@ test("persediaan redirect dan child menu", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Persediaan/i }).first()).toBeVisible();
 });
 
+test("tambah barang dengan Generate SKU", async ({ page }) => {
+  const email = `sed${Date.now()}@test.id`;
+  await signupAndVerify(page, "Gudang", email);
+  await walkOnboardingToDashboard(page);
+  await page.goto("/persediaan/daftar/baru");
+  await page.waitForLoadState("networkidle", { timeout: 30000 });
+  await page.waitForTimeout(2000);
+  await page.getByTestId("persediaan-nama").fill("Kertas HVS A4 E2E");
+  await page.getByTestId("persediaan-generate-sku").click();
+  await expect(page.getByTestId("persediaan-code")).toHaveValue(/BRG-/, { timeout: 10000 });
+  await page.getByTestId("persediaan-simpan").click();
+  await page.waitForLoadState("networkidle", { timeout: 30000 });
+  await expect(page).toHaveURL(/\/persediaan\/daftar/, { timeout: 15000 });
+  await expect(page.getByText("Kertas HVS A4 E2E").first()).toBeVisible();
+});
+
 test("sidebar persediaan punya anak Daftar dan Opname", async ({ page }) => {
   const email = `sed${Date.now()}@test.id`;
   await signupAndVerify(page, "Gudang", email);
