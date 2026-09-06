@@ -36,6 +36,7 @@ import { createBatchItemsAction } from "@/server/actions/inventory.actions";
 interface BatchRow {
   id: string;
   code: string;
+  appBarcode: string;
   name: string;
   category: string;
   unit: string;
@@ -46,11 +47,11 @@ interface BatchRow {
 }
 
 const DEFAULT_ROWS: BatchRow[] = [
-  { id: "1", code: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
-  { id: "2", code: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
-  { id: "3", code: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
-  { id: "4", code: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
-  { id: "5", code: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "1", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "2", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "3", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "4", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "5", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
 ];
 
 export function BatchItemClient() {
@@ -74,6 +75,7 @@ export function BatchItemClient() {
       {
         id: newId,
         code: "",
+        appBarcode: "",
         name: "",
         category: "",
         unit: "Pcs",
@@ -91,6 +93,7 @@ export function BatchItemClient() {
       newRows.push({
         id: String(Date.now() + i) + Math.random().toString(36).substring(2, 5),
         code: "",
+        appBarcode: "",
         name: "",
         category: "",
         unit: "Pcs",
@@ -109,6 +112,7 @@ export function BatchItemClient() {
         {
           id: "1",
           code: "",
+          appBarcode: "",
           name: "",
           category: "",
           unit: "Pcs",
@@ -124,7 +128,7 @@ export function BatchItemClient() {
   };
 
   const validRows = useMemo(
-    () => rows.filter((r) => r.code.trim() && r.name.trim()),
+    () => rows.filter((r) => r.name.trim()),
     [rows]
   );
   const validRowsCount = validRows.length;
@@ -280,6 +284,7 @@ export function BatchItemClient() {
             importedRows.push({
               id: String(Date.now() + idx) + Math.random().toString(36).substring(2, 5),
               code,
+              appBarcode: (cols[8] || "").trim(),
               name,
               category,
               unit,
@@ -327,7 +332,7 @@ export function BatchItemClient() {
     setImportSuccessMessage(null);
 
     if (validRows.length === 0) {
-      setError("Isi minimal 1 baris barang dengan Kode SKU dan Nama Barang yang valid.");
+      setError("Isi minimal 1 baris barang dengan Nama Barang yang valid (Kode SKU boleh kosong = otomatis).");
       return;
     }
 
@@ -606,7 +611,8 @@ export function BatchItemClient() {
               <thead className="text-[11px] uppercase font-mono tracking-[0.1em] text-ink-soft bg-canvas/80 border-b border-rule">
                 <tr>
                   <th className="py-3 px-3.5 font-medium w-12 text-center">#</th>
-                  <th className="py-3 px-3 font-medium w-36">Kode SKU *</th>
+                  <th className="py-3 px-3 font-medium w-36">Kode SKU</th>
+                  <th className="py-3 px-3 font-medium w-32">App-barcode</th>
                   <th className="py-3 px-3 font-medium min-w-[220px]">Nama Barang *</th>
                   <th className="py-3 px-3 font-medium w-36">Kategori</th>
                   <th className="py-3 px-3 font-medium w-28">Satuan</th>
@@ -619,7 +625,7 @@ export function BatchItemClient() {
               </thead>
               <tbody className="divide-y divide-rule/60">
                 {rows.map((row, index) => {
-                  const isValid = row.code.trim() && row.name.trim();
+                  const isValid = row.name.trim();
                   return (
                     <tr
                       key={row.id}
@@ -637,6 +643,14 @@ export function BatchItemClient() {
                           placeholder="BRG-001"
                           value={row.code}
                           onChange={(e) => handleCellChange(row.id, "code", e.target.value.toUpperCase())}
+                          className="h-8 text-xs font-mono rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
+                        />
+                      </td>
+                      <td className="py-2 px-2">
+                        <Input
+                          placeholder="20000001"
+                          value={row.appBarcode}
+                          onChange={(e) => handleCellChange(row.id, "appBarcode", e.target.value)}
                           className="h-8 text-xs font-mono rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
