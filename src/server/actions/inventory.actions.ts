@@ -225,6 +225,7 @@ export async function postOpnameAdjustmentAction(opnameId: string) {
     revalidatePath("/persediaan/opname");
     revalidatePath(`/persediaan/opname/${opnameId}`);
     revalidatePath("/persediaan");
+    revalidatePath("/persediaan/daftar");
     revalidatePath("/jurnal");
     return { ok: true, ...res };
   } catch (err: unknown) {

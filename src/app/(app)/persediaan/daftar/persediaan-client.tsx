@@ -85,7 +85,7 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
             </Link>
             {/* Split Button: Tambah Barang Satuan & Batch Input */}
             <div className="inline-flex rounded-xl shadow-xs">
-              <Link href="/persediaan/baru">
+              <Link href="/persediaan/daftar/baru">
                 <Button className="h-9 rounded-l-xl rounded-r-none bg-terra text-white hover:bg-terra/90 active:scale-[0.98] text-xs font-medium px-3.5 shadow-none transition-all">
                   <Plus className="size-4 mr-1.5" />
                   Tambah Barang
@@ -102,7 +102,7 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56 rounded-xl border-rule bg-paper p-1.5 shadow-md">
                   <DropdownMenuItem asChild className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas">
-                    <Link href="/persediaan/baru" className="flex items-center gap-2.5 py-2">
+                    <Link href="/persediaan/daftar/baru" className="flex items-center gap-2.5 py-2">
                       <div className="flex size-6 items-center justify-center rounded-md bg-canvas border border-rule/60 text-ink">
                         <Plus className="size-3.5 text-terra" />
                       </div>
@@ -113,7 +113,7 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas">
-                    <Link href="/persediaan/baru/batch" className="flex items-center gap-2.5 py-2">
+                    <Link href="/persediaan/daftar/baru/batch" className="flex items-center gap-2.5 py-2">
                       <div className="flex size-6 items-center justify-center rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
                         <FileSpreadsheet className="size-3.5" />
                       </div>
@@ -336,7 +336,7 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
                           {Money.fromMinor(item.totalCostMinor).formatIdr()}
                         </td>
                         <td className="py-3.5 px-5 text-center">
-                          <Link href={`/persediaan/${item.id}`}>
+                          <Link href={`/persediaan/daftar/${item.id}`}>
                             <Button
                               variant="ghost"
                               size="sm"

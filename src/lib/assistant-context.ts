@@ -19,10 +19,10 @@ const PATH_LABELS: Record<string, string> = {
   "/temuan": "Diagnosa & Anomali",
   "/pengaturan": "Pengaturan Akun & Periode",
   "/aturan": "Standar SAK EMKM",
-  "/persediaan/baru/batch": "Input Cepat Persediaan (Grid / Batch)",
-  "/persediaan/baru": "Tambah Barang Persediaan",
+  "/persediaan/daftar/baru/batch": "Input Cepat Persediaan (Grid / Batch)",
+  "/persediaan/daftar/baru": "Tambah Barang Persediaan",
   "/persediaan/opname": "Sesi Stok Opname",
-  "/persediaan": "Katalog & Mutasi Persediaan",
+  "/persediaan/daftar": "Katalog & Mutasi Persediaan",
 };
 
 export function getActivePageContext(): PageContext {

@@ -71,7 +71,7 @@ export function ItemBaruClient() {
             standardSellingPriceText: "",
           });
         } else {
-          router.push("/persediaan");
+          router.push("/persediaan/daftar");
         }
       }
     });
@@ -86,7 +86,7 @@ export function ItemBaruClient() {
     <form onSubmit={handleSubmit} className="w-full space-y-6">
       <div className="mb-2">
         <Link
-          href="/persediaan"
+          href="/persediaan/daftar"
           className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft hover:text-terra transition-colors"
         >
           <ArrowLeft className="size-3.5" />
@@ -104,7 +104,7 @@ export function ItemBaruClient() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => router.push("/persediaan")}
+              onClick={() => router.push("/persediaan/daftar")}
               className="h-9 px-4 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink-soft hover:text-ink transition-colors shadow-xs"
             >
               Batal
@@ -337,7 +337,7 @@ export function ItemBaruClient() {
               <p>
                 Jika Anda memindahkan stok dari spreadsheet lama, gunakan fitur <strong>Input Cepat (Batch / Spreadsheet Grid)</strong> untuk mengisi puluhan baris sekaligus.
               </p>
-              <Link href="/persediaan/baru/batch">
+              <Link href="/persediaan/daftar/baru/batch">
                 <Button variant="outline" size="sm" className="w-full text-xs border-rule font-medium">
                   Buka Input Massal (Grid Spreadsheet)
                 </Button>

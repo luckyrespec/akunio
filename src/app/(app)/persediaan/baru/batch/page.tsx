@@ -1,10 +1,5 @@
-import { BatchItemClient } from "./batch-item-client";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Input Cepat Barang Persediaan (Batch / Grid) | Akunio",
-  description: "Input massal banyak SKU barang sekaligus seperti spreadsheet Excel.",
-};
-
-export default function BatchItemPage() {
-  return <BatchItemClient />;
+export default function BatchRedirect() {
+  redirect("/persediaan/daftar/baru/batch");
 }

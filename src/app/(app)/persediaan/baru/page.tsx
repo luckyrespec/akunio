@@ -1,10 +1,5 @@
-import { ItemBaruClient } from "./item-baru-client";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Tambah Barang Persediaan | Akunio",
-  description: "Daftarkan SKU baru dan saldo awal persediaan barang dagang.",
-};
-
-export default function ItemBaruPage() {
-  return <ItemBaruClient />;
+export default function BaruRedirect() {
+  redirect("/persediaan/daftar/baru");
 }

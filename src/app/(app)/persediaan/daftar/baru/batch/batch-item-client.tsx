@@ -342,7 +342,7 @@ export function BatchItemClient() {
         if (res.skipped && res.skipped.length > 0) {
           setImportSuccessMessage(`Tersimpan ${res.count} barang. ${res.skipped.length} baris kosong dilewati.`);
         }
-        router.push("/persediaan");
+        router.push("/persediaan/daftar");
       }
     });
   };
@@ -356,7 +356,7 @@ export function BatchItemClient() {
       {/* Back Link */}
       <div className="mb-2">
         <Link
-          href="/persediaan"
+          href="/persediaan/daftar"
           className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft hover:text-terra transition-colors"
         >
           <ArrowLeft className="size-3.5" />
@@ -443,7 +443,7 @@ export function BatchItemClient() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => router.push("/persediaan")}
+              onClick={() => router.push("/persediaan/daftar")}
               className="h-9 px-3.5 text-xs font-medium rounded-xl border-rule bg-paper text-ink-soft hover:text-ink transition-colors"
             >
               Batal

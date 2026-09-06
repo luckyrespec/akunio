@@ -57,7 +57,16 @@ const NAVIGATION_GROUPS: NavGroup[] = [
     title: "Operasional",
     items: [
       { href: "/faktur", label: "Faktur & Tagihan", icon: IconReceipt },
-      { href: "/persediaan", label: "Persediaan & Stok", icon: IconInventory, match: (p: string) => p.startsWith("/persediaan") },
+      {
+        href: "/persediaan/daftar",
+        label: "Persediaan & Stok",
+        icon: IconInventory,
+        match: (p: string) => p.startsWith("/persediaan"),
+        children: [
+          { href: "/persediaan/daftar", label: "Daftar Barang" },
+          { href: "/persediaan/opname", label: "Stok Opname" },
+        ],
+      },
       {
         href: "/kas-bank/pembayaran",
         label: "Kas & Bank",

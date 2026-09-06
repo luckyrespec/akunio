@@ -40,7 +40,7 @@ export default async function StockOpnameListPage() {
     <div className="space-y-6">
       <div className="mb-2">
         <Link
-          href="/persediaan"
+          href="/persediaan/daftar"
           className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft hover:text-terra transition-colors"
         >
           <ArrowLeft className="size-3.5" />
