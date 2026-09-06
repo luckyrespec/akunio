@@ -60,4 +60,23 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("inventory sku + image", () =
       ),
     ).rejects.toThrow(/SKU_SUDAH_DIPAKAI/);
   });
+
+  it("add_inventory_item via tool tanpa foto tetap sukses + auto SKU", async () => {
+    const { inventoryHandlers } = await import("@/server/ai/tools/inventory.tools");
+    const res = await inventoryHandlers["add_inventory_item"](orgId, "tester@test.id", {
+      name: "Barang Asisten",
+    });
+    expect(res.success).toBe(true);
+    expect((res.data as { code: string }).code).toMatch(/^BRG-/);
+  });
+
+  it("imageDocumentId tak valid menghasilkan photoWarning, barang tetap ada", async () => {
+    const { inventoryHandlers } = await import("@/server/ai/tools/inventory.tools");
+    const res = await inventoryHandlers["add_inventory_item"](orgId, "tester@test.id", {
+      name: "Barang Foto Rusak",
+      imageDocumentId: "00000000-0000-0000-0000-000000000000",
+    });
+    expect(res.success).toBe(true);
+    expect((res.data as { photoWarning?: string }).photoWarning).toBeDefined();
+  });
 });

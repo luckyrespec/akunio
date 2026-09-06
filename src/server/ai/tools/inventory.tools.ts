@@ -36,8 +36,10 @@ export const inventoryToolDefs: ToolDefinition[] = [
         initialCostText: { type: "string", description: "Harga beli / modal per unit dalam Rupiah (misal: '50000'). Default: '0'" },
         standardSellingPriceText: { type: "string", description: "Harga jual standar per unit dalam Rupiah (misal: '65000'). Default: '0'" },
         minStockAlert: { type: "string", description: "Batas minimum stok untuk peringatan restock (misal: '5'). Default: '5'" },
+        appBarcode: { type: "string", description: "Barcode app pendek untuk scan (opsional, otomatis bila kosong)" },
+        imageDocumentId: { type: "string", description: "ID dokumen foto dari lampiran chat untuk dijadikan thumbnail. Hanya isi bila user eksplisit menyetujui. Foto >500KB akan ditolak dengan pesan." },
       },
-      required: ["code", "name"],
+      required: ["name"],
     },
   },
   {
@@ -62,8 +64,9 @@ export const inventoryToolDefs: ToolDefinition[] = [
               initialCostText: { type: "string", description: "Harga modal per unit dlm Rupiah" },
               standardSellingPriceText: { type: "string", description: "Harga jual dlm Rupiah" },
               minStockAlert: { type: "string", description: "Batas minimum stok" },
+              appBarcode: { type: "string", description: "Barcode app pendek (opsional, otomatis bila kosong)" },
             },
-            required: ["code", "name"],
+            required: ["name"],
           },
         },
         sourceFileName: { type: "string", description: "Nama file spreadsheet/CSV asal jika berasal dari upload file pengguna" },
@@ -112,8 +115,8 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
     try {
       const code = String(args.code ?? "").trim().toUpperCase();
       const name = String(args.name ?? "").trim();
-      if (!code || !name) {
-        return { success: false, error: "Kode SKU dan Nama Barang wajib diisi." };
+      if (!name) {
+        return { success: false, error: "Nama Barang wajib diisi." };
       }
 
       const initialCostMinor = args.initialCostText
@@ -129,7 +132,8 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
 
       const item = await withOrg(orgId, async (tx) =>
         createInventoryItem(tx, orgId, {
-          code,
+          code: code || undefined,
+          appBarcode: args.appBarcode ? String(args.appBarcode) : undefined,
           name,
           barcode: args.barcode ? String(args.barcode) : undefined,
           category: args.category ? String(args.category) : undefined,
@@ -141,14 +145,45 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
         }),
       );
 
+      const imageDocumentId = args.imageDocumentId ? String(args.imageDocumentId) : "";
+      let photoWarning: string | undefined;
+      if (imageDocumentId) {
+        try {
+          const { getDocument, putInventoryImage } = await import("@/server/storage/storage");
+          const { documents } = await import("@/server/db/schema/ai");
+          const { db } = await import("@/server/db");
+          const { eq, and } = await import("drizzle-orm");
+          const rows = await db
+            .select()
+            .from(documents)
+            .where(and(eq(documents.id, imageDocumentId), eq(documents.orgId, orgId)))
+            .limit(1);
+          const doc = rows[0];
+          if (!doc) throw new Error("Dokumen foto tidak ditemukan.");
+          const buf = await getDocument(doc.storageKey);
+          const { storageKey } = await putInventoryImage(orgId, item.id, { buffer: buf, mime: doc.mime });
+          const { inventoryItems } = await import("@/server/db/schema/inventory");
+          await withOrg(orgId, async (tx) => {
+            await tx
+              .update(inventoryItems)
+              .set({ imageStorageKey: storageKey, imageMime: doc.mime, updatedAt: new Date() })
+              .where(eq(inventoryItems.id, item.id));
+          });
+        } catch (e) {
+          photoWarning = e instanceof Error ? e.message : "Foto gagal dipakai";
+        }
+      }
+
       return {
         success: true,
         data: {
           id: item.id,
           code: item.code,
+          appBarcode: item.appBarcode,
           name: item.name,
           unit: item.unit,
           currentQty: item.currentQty,
+          photoWarning,
           message: `Barang ${item.name} (${item.code}) berhasil didaftarkan ke master persediaan.`,
         },
       };
@@ -174,15 +209,17 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
           const raw = items[idx];
           const code = String(raw.code ?? "").trim().toUpperCase();
           const name = String(raw.name ?? "").trim();
-          if (!code || !name) {
-            skipped.push({ index: idx, reason: "Kode SKU dan Nama kosong" });
+          if (!name) {
+            skipped.push({ index: idx, reason: "Nama kosong" });
             continue;
           }
-          if (seen.has(code)) {
-            errors.push({ index: idx, code, message: `Duplikat SKU dalam batch: ${code}` });
-            continue;
+          if (code) {
+            if (seen.has(code)) {
+              errors.push({ index: idx, code, message: `Duplikat SKU dalam batch: ${code}` });
+              continue;
+            }
+            seen.add(code);
           }
-          seen.add(code);
           const initialQty = typeof raw.initialQty === "number" ? raw.initialQty : Number(raw.initialQty) || 0;
           if (!Number.isFinite(initialQty) || initialQty < 0) {
             errors.push({ index: idx, code, message: "Stok awal harus angka >= 0" });
@@ -197,7 +234,8 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
               : 0n;
 
             const item = await createInventoryItem(tx, orgId, {
-              code,
+              code: code || undefined,
+              appBarcode: raw.appBarcode ? String(raw.appBarcode) : undefined,
               name,
               barcode: raw.barcode ? String(raw.barcode) : undefined,
               category: raw.category ? String(raw.category) : undefined,

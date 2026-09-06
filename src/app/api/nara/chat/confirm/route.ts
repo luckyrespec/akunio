@@ -65,6 +65,15 @@ export async function POST(req: NextRequest) {
     } else if (toolName === "create_invoice") {
       const iData = execution.data as { invoiceNumber?: string; customerName?: string; totalFormatted?: string };
       confirmationText = `Faktur #${iData?.invoiceNumber ?? ""} untuk ${iData?.customerName ?? ""} senilai ${iData?.totalFormatted ?? ""} berhasil dibuat.`;
+    } else if (toolName === "add_inventory_item") {
+      const iData = execution.data as { code?: string; name?: string; photoWarning?: string };
+      confirmationText = `Barang ${iData?.name ?? ""} (${iData?.code ?? ""}) berhasil didaftarkan ke master persediaan.`;
+      if (iData?.photoWarning) {
+        confirmationText += ` Catatan foto: ${iData.photoWarning} — buka detail barang untuk upload versi ≤500 KB.`;
+      }
+    } else if (toolName === "batch_add_inventory_items") {
+      const bData = execution.data as { insertedCount?: number };
+      confirmationText = `Berhasil mendaftarkan ${bData?.insertedCount ?? 0} barang ke katalog persediaan.`;
     } else if (toolName === "record_invoice_payment") {
       const pData = execution.data as { invoiceNumber?: string; amountFormatted?: string };
       confirmationText = `Pelunasan faktur #${pData?.invoiceNumber ?? ""} sebesar ${pData?.amountFormatted ?? ""} berhasil dicatat.`;

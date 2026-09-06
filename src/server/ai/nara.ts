@@ -194,6 +194,27 @@ export async function askNara(
   // Save user message
   await db.transaction((tx) => addMessage(tx, threadId, "user", question, null));
 
+  // Simpan lampiran sebagai baris documents agar tool (mis. thumbnail
+  // persediaan via imageDocumentId) bisa merujuknya. Tanpa ini lampiran
+  // hanya hidup di memori turn ini.
+  let attachmentId: string | null = null;
+  let attachmentMime: string | null = null;
+  if (opts?.document) {
+    try {
+      const { putDocument } = await import("@/server/storage/storage");
+      const { createDocumentRow } = await import("@/server/db/repos/documents.repo");
+      const buffer = Buffer.from(opts.document.dataBase64, "base64");
+      const { storageKey } = await putDocument(orgId, { buffer, mime: opts.document.mime });
+      const docRow = await db.transaction((tx) =>
+        createDocumentRow(tx, { orgId, storageKey, mime: opts.document!.mime, sizeBytes: buffer.length }),
+      );
+      attachmentId = docRow.id;
+      attachmentMime = opts.document.mime;
+    } catch (e) {
+      console.warn("akunio attachment persist failed", e);
+    }
+  }
+
   // Gather context
   const queryEmbedding = await embed(question);
   const hits = await hybridSearch(orgId, queryEmbedding, question, 6);
@@ -237,6 +258,7 @@ export async function askNara(
   WAJIB ambil detail dari Riwayat di atas (mis. aset laptop Rp10.000.000 + Garis Lurus 48 bulan). Jangan minta ulang detail yang sudah ada;
   hanya tanyakan field yang benar-benar belum ada (sumber dana/tanggal) sambil menyebut kembali data yang sudah diketahui.
 - Jika user ingin mencatat transaksi, WAJIB panggil create_journal_draft. Draft akan direview user sebelum posting — jangan janji posting otomatis.
+- Jika user menambah barang persediaan sambil melampirkan foto, TAWARKAN dulu menjadikan foto sebagai thumbnail; hanya teruskan imageDocumentId bila user menjawab ya.
 - Jika user tanya laporan/saldo/riwayat, panggil tool yang sesuai (search_journals, get_report, list_accounts, list_drafts, list_journals) lalu jawab berdasarkan hasilnya.
 - Jika tidak perlu tool, jawab langsung dari konteks.`;
 
@@ -253,6 +275,7 @@ ${lastMessages}
 
 Pertanyaan user saat ini: ${question}
 ${opts?.document ? "(User melampirkan dokumen — sudah disertakan sebagai attachment, ekstrak isinya)" : ""}
+${attachmentId ? `(Lampiran tersimpan sebagai dokumen id ${attachmentId}, tipe ${attachmentMime}. Jika user minta tambah barang DAN menyetujui foto ini sebagai thumbnail, teruskan id tersebut sebagai imageDocumentId pada add_inventory_item. Tanpa persetujuan eksplisit, JANGAN isi imageDocumentId. Jika ada beberapa lampiran dalam riwayat, tanyakan dulu pakai yang mana.)` : ""}
 
 Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika pertanyaan umum.`;
 
