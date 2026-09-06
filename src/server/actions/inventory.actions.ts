@@ -15,7 +15,7 @@ import {
   postOpnameAdjustment,
 } from "@/server/db/repos/inventory.repo";
 import { Money } from "@/core/money/money";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { inventoryItems } from "@/server/db/schema/inventory";
 import {
   putInventoryImage,
@@ -160,6 +160,32 @@ export async function suggestJsaSkuAction() {
     return { ok: true as const, ...s };
   } catch (err: unknown) {
     return { ok: false as const, error: err instanceof Error ? err.message : "Gagal generate kode" };
+  }
+}
+
+export async function setServiceActiveAction(id: string, active: boolean) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const rows = await withOrg(ctx.orgId, (tx) =>
+      tx
+        .update(inventoryItems)
+        .set({ isActive: active, updatedAt: new Date() })
+        .where(
+          and(
+            eq(inventoryItems.id, id),
+            eq(inventoryItems.orgId, ctx.orgId),
+            eq(inventoryItems.itemType, "JASA"),
+          ),
+        )
+        .returning({ id: inventoryItems.id }),
+    );
+    if (rows.length === 0) return { ok: false as const, error: "Jasa tidak ditemukan" };
+    revalidatePath("/persediaan/jasa");
+    revalidatePath("/faktur/baru");
+    return { ok: true as const };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal mengubah status jasa";
+    return { ok: false as const, error: message };
   }
 }
 

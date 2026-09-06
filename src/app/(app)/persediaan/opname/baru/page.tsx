@@ -13,7 +13,8 @@ export const metadata = {
 
 export default async function NewStockOpnamePage() {
   const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-  const items = await listInventoryItems(db, ctx.orgId);
+  const allItems = await listInventoryItems(db, ctx.orgId);
+  const items = allItems.filter((i) => i.itemType !== "JASA");
 
   return (
     <section className="w-full space-y-6">

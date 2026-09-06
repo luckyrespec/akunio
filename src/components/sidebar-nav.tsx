@@ -64,6 +64,7 @@ const NAVIGATION_GROUPS: NavGroup[] = [
         match: (p: string) => p.startsWith("/persediaan"),
         children: [
           { href: "/persediaan/daftar", label: "Daftar Barang" },
+          { href: "/persediaan/jasa", label: "Jasa & Layanan" },
           { href: "/persediaan/opname", label: "Stok Opname" },
         ],
       },
