@@ -522,7 +522,7 @@ export function CashEntryForm({
             )}
           </div>
 
-          <div className="rounded-2xl border border-rule bg-paper p-4 sm:p-5 shadow-xs space-y-2">
+          <div className="rounded-2xl border border-terra/25 bg-terra/[0.06] p-4 sm:p-5 shadow-xs space-y-2">
             <div className="flex items-center gap-1.5">
               <BookOpen className="size-3.5 text-terra" />
               <span className="text-xs font-semibold text-ink">
