@@ -12,7 +12,7 @@ BEGIN
                             'tenant_chunks','chat_threads','onboarding_messages','org_profiles','ai_findings','ai_proposals',
                            'contacts','invoices','bank_reconciliations','kas_bank_entries','kas_bank_seq_counters',
                            'fixed_assets','asset_depreciation_lines','asset_disposals',
-                           'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames',
+                           'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames','inventory_sku_counters',
                            'tax_summaries']
   LOOP
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN

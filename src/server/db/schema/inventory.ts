@@ -8,6 +8,8 @@ import {
   boolean,
   timestamp,
   uniqueIndex,
+  integer,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { organizations, accounts } from "./org";
@@ -39,6 +41,17 @@ export const inventorySettings = pgTable("inventory_settings", {
   uniqueIndex("inventory_settings_org_uq").on(t.orgId),
 ]);
 
+export const inventorySkuCounters = pgTable(
+  "inventory_sku_counters",
+  {
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    lastSeq: integer("last_seq").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.orgId] })],
+);
+
 export const inventoryItems = pgTable(
   "inventory_items",
   {
@@ -49,6 +62,9 @@ export const inventoryItems = pgTable(
     code: varchar("code", { length: 64 }).notNull(),
     name: text("name").notNull(),
     barcode: varchar("barcode", { length: 64 }),
+    appBarcode: varchar("app_barcode", { length: 16 }),
+    imageStorageKey: text("image_storage_key"),
+    imageMime: varchar("image_mime", { length: 32 }),
     unit: varchar("unit", { length: 32 }).notNull().default("Pcs"),
     category: varchar("category", { length: 64 }),
     minStockAlert: numeric("min_stock_alert", { precision: 12, scale: 4 }).default("0"),
@@ -68,7 +84,10 @@ export const inventoryItems = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("inventory_items_org_code_uq").on(t.orgId, t.code)],
+  (t) => [
+    uniqueIndex("inventory_items_org_code_uq").on(t.orgId, t.code),
+    uniqueIndex("inventory_items_org_app_barcode_uq").on(t.orgId, t.appBarcode),
+  ],
 );
 
 export const inventoryLayers = pgTable("inventory_layers", {
