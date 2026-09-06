@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, History } from "lucide-react";
+import { ArrowLeft, History, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { getInventoryItem, listItemTransactions } from "@/server/db/repos/inventory.repo";
 import { Money } from "@/core/money/money";
+import { AppBarcode } from "@/components/inventory/app-barcode";
+import { PhotoFormClient } from "./photo-form-client";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -41,7 +43,36 @@ export default async function ItemDetailPage({ params }: Props) {
           </div>
           <p className="text-xs text-[var(--color-ink-muted)]">
             Kategori: {item.category || "-"} • Satuan: {item.unit}
+            {item.appBarcode ? ` • App: ${item.appBarcode}` : ""}
+            {item.barcode ? ` • Pabrik: ${item.barcode}` : ""}
           </p>
+        </div>
+      </div>
+
+      {/* Identitas visual: foto + barcode app */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-paper)] space-y-3">
+          <div className="text-xs font-mono uppercase text-[var(--color-ink-muted)]">Foto Barang</div>
+          {item.imageStorageKey ? (
+            <img
+              src={`/api/inventory/${item.id}/photo`}
+              alt={item.name}
+              className="w-full max-w-60 rounded-xl object-cover border border-[var(--color-border)]"
+            />
+          ) : (
+            <div className="w-full max-w-60 aspect-video rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-kanvas)]/50 flex items-center justify-center">
+              <Package className="size-8 text-[var(--color-ink-muted)]/40" />
+            </div>
+          )}
+          <PhotoFormClient itemId={item.id} hasPhoto={Boolean(item.imageStorageKey)} />
+        </div>
+        <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-paper)] space-y-3">
+          <div className="text-xs font-mono uppercase text-[var(--color-ink-muted)]">Barcode App</div>
+          {item.appBarcode ? (
+            <AppBarcode value={item.appBarcode} />
+          ) : (
+            <p className="text-xs text-[var(--color-ink-muted)]">Belum ada barcode app.</p>
+          )}
         </div>
       </div>
 

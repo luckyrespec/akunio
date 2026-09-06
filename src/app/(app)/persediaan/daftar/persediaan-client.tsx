@@ -48,10 +48,12 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
   ) as string[];
 
   const filteredItems = initialData.items.filter((it) => {
+    const q = searchTerm.toLowerCase();
     const matchesQuery =
-      it.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      it.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (it.category && it.category.toLowerCase().includes(searchTerm.toLowerCase()));
+      it.name.toLowerCase().includes(q) ||
+      it.code.toLowerCase().includes(q) ||
+      (it.appBarcode && it.appBarcode.toLowerCase().includes(q)) ||
+      (it.category && it.category.toLowerCase().includes(q));
     const matchesCategory =
       selectedCategory === "ALL" || it.category === selectedCategory;
     return matchesQuery && matchesCategory;
@@ -273,6 +275,7 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
             <table className="w-full text-sm text-left border-collapse data-table">
               <thead className="text-[11px] uppercase font-mono tracking-[0.1em] text-ink-soft bg-canvas/60 border-b border-rule">
                 <tr>
+                  <th className="py-3 px-4 font-medium">Foto</th>
                   <th className="py-3 px-5 font-medium">Kode SKU</th>
                   <th className="py-3 px-5 font-medium">Nama Barang</th>
                   <th className="py-3 px-4 font-medium">Kategori</th>
@@ -285,7 +288,7 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
               <tbody className="divide-y divide-rule/60">
                 {filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-16 text-center text-ink-soft">
+                    <td colSpan={8} className="py-16 text-center text-ink-soft">
                       <Package className="size-8 mx-auto text-ink-soft/40 mb-2" />
                       <p className="font-serif text-base text-ink font-medium">Belum ada barang persediaan</p>
                       <p className="text-xs mt-1">Gunakan tombol "Tambah Barang" untuk mencatatkan master barang baru.</p>
@@ -299,14 +302,34 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
                         key={item.id}
                         className="hover:bg-canvas/40 transition-colors group"
                       >
+                        <td className="py-3 px-4">
+                          {item.imageStorageKey ? (
+                            <img
+                              src={`/api/inventory/${item.id}/photo`}
+                              alt={item.name}
+                              loading="lazy"
+                              className="size-8 rounded-lg object-cover border border-rule"
+                              onError={(e) => { e.currentTarget.style.display = "none"; }}
+                            />
+                          ) : (
+                            <span className="flex size-8 items-center justify-center rounded-lg border border-rule bg-canvas">
+                              <Package className="size-4 text-ink-soft/40" />
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3.5 px-5 font-mono text-xs font-semibold text-ink">
                           {item.code}
                         </td>
                         <td className="py-3.5 px-5 font-medium text-ink">
                           {item.name}
+                          {item.appBarcode && (
+                            <span className="block text-[11px] font-mono text-ink-soft">
+                              App: {item.appBarcode}
+                            </span>
+                          )}
                           {item.barcode && (
                             <span className="block text-[11px] font-mono text-ink-soft">
-                              Barcode: {item.barcode}
+                              Pabrik: {item.barcode}
                             </span>
                           )}
                         </td>
@@ -355,7 +378,7 @@ export function PersediaanClient({ initialData }: InventoryClientProps) {
               {filteredItems.length > 0 && (
                 <tfoot className="bg-canvas/50 border-t-2 border-rule font-mono text-xs">
                   <tr>
-                    <td colSpan={3} className="py-3.5 px-5 font-semibold text-ink uppercase tracking-wider text-[11px]">
+                    <td colSpan={4} className="py-3.5 px-5 font-semibold text-ink uppercase tracking-wider text-[11px]">
                       Total Saldo Barang Terpilih
                     </td>
                     <td className="py-3.5 px-5 text-right font-semibold text-ink tnum">

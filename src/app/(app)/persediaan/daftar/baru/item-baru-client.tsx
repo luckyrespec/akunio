@@ -32,15 +32,19 @@ import {
 } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
-import { createItemAction } from "@/server/actions/inventory.actions";
+import { createItemAction, suggestSkuAction, updateItemImageAction } from "@/server/actions/inventory.actions";
+import { compressImageToLimit } from "@/lib/compress-image";
 
 export function ItemBaruClient() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [photoWarning, setPhotoWarning] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   const [formData, setFormData] = useState({
     code: "",
+    appBarcode: "",
     name: "",
     barcode: "",
     category: "",
@@ -50,26 +54,69 @@ export function ItemBaruClient() {
     initialCostText: "",
     standardSellingPriceText: "",
   });
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  const handlePhotoChange = (f: File | null) => {
+    setPhotoFile(f);
+    setPhotoPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return f ? URL.createObjectURL(f) : null;
+    });
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    const res = await suggestSkuAction();
+    setGenerating(false);
+    if (res.ok) {
+      setFormData((p) => ({
+        ...p,
+        code: p.code || res.code,
+        appBarcode: p.appBarcode || res.appBarcode,
+      }));
+    } else {
+      setError(res.error || "Gagal generate kode");
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      code: "",
+      appBarcode: "",
+      name: "",
+      barcode: "",
+      category: "",
+      unit: "Pcs",
+      minStockAlert: "5",
+      initialQty: 0,
+      initialCostText: "",
+      standardSellingPriceText: "",
+    });
+    handlePhotoChange(null);
+  };
 
   const submitWithMode = (mode: "save" | "save-new") => {
     setError(null);
+    setPhotoWarning(null);
     startTransition(async () => {
       const res = await createItemAction(formData);
       if (!res.ok) {
         setError(res.error || "Gagal menyimpan barang");
       } else {
+        if (photoFile && res.item) {
+          try {
+            const { blob, mime } = await compressImageToLimit(photoFile);
+            const fd = new FormData();
+            fd.set("file", new File([blob], photoFile.name.replace(/\.[^.]+$/, ".jpg"), { type: mime }));
+            const up = await updateItemImageAction(res.item.id, fd);
+            if (!up.ok) setPhotoWarning(`Barang tersimpan, foto gagal: ${up.error}`);
+          } catch (e) {
+            setPhotoWarning(`Barang tersimpan, foto gagal: ${e instanceof Error ? e.message : "gagal kompres"}`);
+          }
+        }
         if (mode === "save-new") {
-          setFormData({
-            code: "",
-            name: "",
-            barcode: "",
-            category: "",
-            unit: "Pcs",
-            minStockAlert: "5",
-            initialQty: 0,
-            initialCostText: "",
-            standardSellingPriceText: "",
-          });
+          resetForm();
         } else {
           router.push("/persediaan/daftar");
         }
@@ -114,6 +161,7 @@ export function ItemBaruClient() {
                 type="submit"
                 disabled={isPending}
                 size="sm"
+                data-testid="persediaan-simpan"
                 className="h-9 rounded-l-xl rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-none"
               >
                 {isPending ? (
@@ -162,6 +210,11 @@ export function ItemBaruClient() {
           {error}
         </div>
       )}
+      {photoWarning && (
+        <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+          {photoWarning}
+        </div>
+      )}
 
       {/* Two Column Layout persis Tambah Aset Tetap */}
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
@@ -176,26 +229,52 @@ export function ItemBaruClient() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="item-code">Kode SKU / Barcode Unik *</Label>
-                    <Input
-                      id="item-code"
-                      required
-                      placeholder="Contoh: BRG-001"
-                      value={formData.code}
-                      onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                      className="h-9 font-mono uppercase bg-canvas"
-                    />
+                    <Label htmlFor="item-code">Kode SKU App</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="item-code"
+                        data-testid="persediaan-code"
+                        placeholder="Contoh: BRG-0001 (kosongkan = otomatis)"
+                        value={formData.code}
+                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                        className="h-9 font-mono uppercase bg-canvas"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={generating}
+                        onClick={handleGenerate}
+                        data-testid="persediaan-generate-sku"
+                        className="h-9 shrink-0 text-xs"
+                      >
+                        {generating ? <Loader2 className="size-3.5 animate-spin" /> : "Generate"}
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-ink-soft">
+                      Kosongkan untuk nomor otomatis. Saran bisa bentrok bila dipakai bersamaan — sistem akan memberi nomor segar saat simpan.
+                    </p>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="item-barcode">Barcode Pabrik (Opsional)</Label>
+                    <Label htmlFor="item-app-barcode">Barcode App (pendek, untuk scan)</Label>
                     <Input
-                      id="item-barcode"
-                      placeholder="Contoh: 8991234567890"
-                      value={formData.barcode}
-                      onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                      id="item-app-barcode"
+                      placeholder="Contoh: 20000001 (kosongkan = otomatis)"
+                      value={formData.appBarcode}
+                      onChange={(e) => setFormData({ ...formData, appBarcode: e.target.value })}
                       className="h-9 font-mono bg-canvas"
                     />
                   </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="item-barcode">Barcode Pabrik (Opsional)</Label>
+                  <Input
+                    id="item-barcode"
+                    placeholder="Contoh: 8991234567890"
+                    value={formData.barcode}
+                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                    className="h-9 font-mono bg-canvas"
+                  />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -203,6 +282,7 @@ export function ItemBaruClient() {
                   <Input
                     id="item-name"
                     required
+                    data-testid="persediaan-nama"
                     placeholder="Contoh: Kertas HVS A4 80gsm Sinar Dunia"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -293,6 +373,40 @@ export function ItemBaruClient() {
                   <p className="text-xs text-ink-soft mt-0.5">
                     Sistem akan memunculkan lencana peringatan saat sisa kuantitas berada di bawah angka ini.
                   </p>
+                </div>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+          {/* Section 3 — Foto Barang */}
+          <StaggerItem>
+            <Card className="border-rule bg-paper shadow-xs">
+              <CardHeader>
+                <CardTitle className="font-display text-base text-ink">Foto Barang</CardTitle>
+                <CardDescription>Satu foto utama (maks 500 KB, otomatis dikompres).</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-4">
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Pratinjau foto barang" className="size-20 rounded-xl object-cover border border-rule" />
+                  ) : (
+                    <div className="size-20 rounded-xl border border-dashed border-rule bg-canvas flex items-center justify-center">
+                      <Package className="size-6 text-ink-soft/50" />
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => handlePhotoChange(e.target.files?.[0] ?? null)}
+                      className="h-9 max-w-xs text-xs"
+                      aria-label="Foto barang"
+                    />
+                    {photoFile && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => handlePhotoChange(null)} className="w-fit text-xs">
+                        Hapus foto
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

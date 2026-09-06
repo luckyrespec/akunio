@@ -85,10 +85,22 @@ export async function createItemAction(payload: {
 
     revalidatePath("/persediaan");
     revalidatePath("/persediaan/daftar");
-    return { ok: true, item };
+    return { ok: true as const, item };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menyimpan barang";
-    return { ok: false, error: message };
+    return { ok: false as const, error: message };
+  }
+}
+
+export async function suggestSkuAction() {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const { nextSkuCodes } = await import("@/server/db/repos/inventory-sku");
+    const { db } = await import("@/server/db");
+    const s = await db.transaction((tx) => nextSkuCodes(tx as never, ctx.orgId));
+    return { ok: true as const, ...s };
+  } catch (err: unknown) {
+    return { ok: false as const, error: err instanceof Error ? err.message : "Gagal generate kode" };
   }
 }
 
@@ -301,10 +313,10 @@ export async function updateItemImageAction(itemId: string, formData: FormData) 
     }
     revalidatePath("/persediaan/daftar");
     revalidatePath(`/persediaan/daftar/${itemId}`);
-    return { ok: true, item: res.updated };
+    return { ok: true as const, item: res.updated };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menyimpan foto";
-    return { ok: false, error: message };
+    return { ok: false as const, error: message };
   }
 }
 
