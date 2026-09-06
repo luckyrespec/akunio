@@ -147,8 +147,11 @@ export function CashEntryDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="text-xs">
-          <Plus className="size-3.5 mr-1.5" />
+        <Button
+          size="sm"
+          className="h-9 rounded-xl bg-terra px-3.5 text-xs font-medium text-white shadow-none transition-all hover:bg-terra/90 active:scale-[0.98]"
+        >
+          <Plus className="size-4 mr-1.5" />
           {triggerLabel}
         </Button>
       </DialogTrigger>
@@ -345,7 +348,7 @@ export function CashEntryDialog({
                 disabled={loading}
                 data-testid="kas-bank-submit-post"
                 onClick={() => doSubmit(true)}
-                className="text-xs rounded-r-none"
+                className="rounded-l-xl rounded-r-none bg-terra px-3.5 text-xs font-medium text-white shadow-none transition-all hover:bg-terra/90 active:scale-[0.98]"
               >
                 {loading && (
                   <Loader2 className="size-3.5 animate-spin mr-1.5" />
@@ -359,7 +362,7 @@ export function CashEntryDialog({
                     size="sm"
                     disabled={loading}
                     aria-label="Opsi simpan lain"
-                    className="text-xs rounded-l-none border-l border-paper/30 px-2"
+                    className="rounded-l-none rounded-r-xl border-l border-white/20 bg-terra px-2 text-xs text-white shadow-none transition-colors hover:bg-terra/90"
                   >
                     <ChevronDown className="size-3.5" />
                   </Button>
