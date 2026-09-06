@@ -28,7 +28,7 @@ import { createCashEntryAction } from "@/server/actions/cash-bank.actions";
 import { uploadDocumentAction } from "@/server/actions/upload.actions";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Money } from "@/core/money/money";
-import { terbilangRupiah } from "@/core/money/terbilang";
+import { TerbilangText } from "./terbilang-text";
 import { InsightSheet } from "./insight-sheet";
 import type { CashKind } from "@/server/db/schema/cash-bank";
 import type { DailyInsight } from "@/core/kas-bank/insights";
@@ -142,10 +142,10 @@ export function CashEntryForm({
   const head = CARD_HEAD[kind];
 
   const debouncedAmount = useDebounce(amount, 100);
-  const amountWords = React.useMemo(() => {
+  const debouncedMinor = React.useMemo(() => {
     if (!debouncedAmount.trim()) return null;
     try {
-      return terbilangRupiah(Money.parseIdr(debouncedAmount).minor);
+      return Money.parseIdr(debouncedAmount).minor;
     } catch {
       return null;
     }
@@ -396,13 +396,8 @@ export function CashEntryForm({
           <p className="text-[11px] leading-relaxed text-ink-soft">
             Tulis angka saja, tanpa titik.
           </p>
-          {amountWords && (
-            <p
-              data-testid="kas-bank-terbilang"
-              className="text-[11px] leading-relaxed text-terra font-medium"
-            >
-              {amountWords}
-            </p>
+          {debouncedMinor !== null && (
+            <TerbilangText minor={debouncedMinor} variant="caption" />
           )}
         </div>
 

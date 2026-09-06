@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Money } from "@/core/money/money";
-import { terbilangRupiah } from "@/core/money/terbilang";
+import { TerbilangText } from "./terbilang-text";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -178,9 +178,11 @@ export function CashEntryDetail({
               {Money.formatIdr(detail.amountMinor)}
             </p>
           </div>
-          <p className="text-xs text-terra font-medium -mt-1">
-            {terbilangRupiah(detail.amountMinor)}
-          </p>
+          <TerbilangText
+            minor={detail.amountMinor}
+            variant="body"
+            className="-mt-1"
+          />
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
             <div className="flex justify-between gap-4 border-b border-rule/60 py-1.5">
               <dt className="text-ink-soft">Arus dana</dt>
