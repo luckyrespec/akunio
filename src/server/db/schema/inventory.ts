@@ -60,6 +60,9 @@ export const inventoryItems = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     code: varchar("code", { length: 64 }).notNull(),
+    itemType: text("item_type", { enum: ["BARANG", "JASA"] }).notNull().default("BARANG"),
+    revenueAccountId: uuid("revenue_account_id").references(() => accounts.id),
+    expenseAccountId: uuid("expense_account_id").references(() => accounts.id),
     name: text("name").notNull(),
     barcode: varchar("barcode", { length: 64 }),
     appBarcode: varchar("app_barcode", { length: 16 }),

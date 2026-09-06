@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { organizations, accounts } from "./org";
 import { journalEntries } from "./journal";
+import { inventoryItems } from "./inventory";
 
 export const contactTypeEnum = ["CUSTOMER", "VENDOR", "BOTH"] as const;
 export type ContactType = (typeof contactTypeEnum)[number];
@@ -108,6 +109,9 @@ export const invoiceItems = pgTable(
       .notNull()
       .references(() => invoices.id, { onDelete: "cascade" }),
     description: text("description").notNull(),
+    catalogItemId: uuid("catalog_item_id").references(() => inventoryItems.id, {
+      onDelete: "restrict",
+    }),
     quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull().default("1.00"),
     unitPriceMinor: numeric("unit_price_minor", { precision: 18, scale: 0, mode: "bigint" })
       .notNull()
@@ -122,7 +126,7 @@ export const invoiceItems = pgTable(
       .notNull()
       .default(sql`0`),
   },
-  (t) => [index("invoice_items_inv_idx").on(t.invoiceId)]
+  (t) => [index("invoice_items_inv_idx").on(t.invoiceId), index("invoice_items_catalog_idx").on(t.catalogItemId)]
 );
 
 export const invoicePayments = pgTable(
