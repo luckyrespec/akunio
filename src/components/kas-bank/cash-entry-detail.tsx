@@ -14,7 +14,10 @@ import type {
 import type { EntryView } from "@/server/db/repos/journals.repo";
 import type { CashKind } from "@/server/db/schema/cash-bank";
 import {
+  ArrowDownLeft,
   ArrowLeft,
+  ArrowLeftRight,
+  ArrowUpRight,
   BookOpen,
   CheckCircle2,
   Clock,
@@ -24,12 +27,19 @@ import {
 
 const KIND_META: Record<
   CashKind,
-  { title: string; listHref: string; listLabel: string; flow: (d: CashEntryDetail) => string }
+  {
+    title: string;
+    listHref: string;
+    listLabel: string;
+    icon: typeof ArrowUpRight;
+    flow: (d: CashEntryDetail) => string;
+  }
 > = {
   BAYAR: {
     title: "Pembayaran",
     listHref: "/kas-bank/pembayaran",
     listLabel: "Pembayaran",
+    icon: ArrowUpRight,
     flow: (d) =>
       `Keluar dari ${d.cashCode} ${d.cashName} untuk ${d.counterCode} ${d.counterName}`,
   },
@@ -37,6 +47,7 @@ const KIND_META: Record<
     title: "Penerimaan",
     listHref: "/kas-bank/penerimaan",
     listLabel: "Penerimaan",
+    icon: ArrowDownLeft,
     flow: (d) =>
       `Masuk ke ${d.cashCode} ${d.cashName} dari ${d.counterCode} ${d.counterName}`,
   },
@@ -44,6 +55,7 @@ const KIND_META: Record<
     title: "Transfer",
     listHref: "/kas-bank/transfer",
     listLabel: "Transfer Bank",
+    icon: ArrowLeftRight,
     flow: (d) =>
       `Pindah dari ${d.cashCode} ${d.cashName} ke ${d.counterCode} ${d.counterName}`,
   },
@@ -62,6 +74,7 @@ export function CashEntryDetail({
   const [posting, setPosting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const meta = KIND_META[detail.kind];
+  const KindIcon = meta.icon;
 
   async function handlePost() {
     setPosting(true);
@@ -137,6 +150,12 @@ export function CashEntryDetail({
       <div className="rounded-xl border border-rule bg-paper shadow-2xs overflow-hidden">
         <div className="p-5 space-y-4">
           <div className="flex flex-wrap items-center gap-3">
+            <span
+              aria-hidden
+              className="flex size-10 items-center justify-center rounded-xl bg-terra/10 text-terra"
+            >
+              <KindIcon className="size-5" />
+            </span>
             {detail.status === "POSTED" ? (
               <Badge
                 variant="outline"
@@ -243,7 +262,7 @@ export function CashEntryDetail({
                     <td className="px-4 py-3 text-ink font-medium">
                       {l.accountCode} {l.accountName}
                     </td>
-                    <td className="px-4 py-3 text-right text-ink whitespace-nowrap">
+                    <td className="px-4 py-3 text-right text-debit font-medium whitespace-nowrap">
                       {l.debitMinor > 0n ? Money.formatIdr(l.debitMinor) : "—"}
                     </td>
                     <td className="px-4 py-3 text-right text-ink whitespace-nowrap">

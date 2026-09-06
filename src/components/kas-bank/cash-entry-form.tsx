@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { createCashEntryAction } from "@/server/actions/cash-bank.actions";
 import { uploadDocumentAction } from "@/server/actions/upload.actions";
+import { InsightSheet } from "./insight-sheet";
 import type { CashKind } from "@/server/db/schema/cash-bank";
 import type { DailyInsight } from "@/core/kas-bank/insights";
 
@@ -516,16 +517,11 @@ export function CashEntryForm({
             <p className="text-xs leading-relaxed text-ink-soft">
               {insight.body}
             </p>
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center justify-between gap-2 pt-1">
               <span className="text-[11px] text-ink-soft">
                 {insight.source}
               </span>
-              <a
-                href="/aturan"
-                className="text-[11px] font-medium text-terra hover:underline underline-offset-2"
-              >
-                Pelajari standar
-              </a>
+              <InsightSheet insight={insight} />
             </div>
           </div>
         </div>
