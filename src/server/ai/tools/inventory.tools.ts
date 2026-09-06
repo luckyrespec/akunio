@@ -10,7 +10,7 @@ export const inventoryToolDefs: ToolDefinition[] = [
   {
     type: "function",
     name: "list_inventory_items",
-    description: "Ambil daftar master barang persediaan barang dagang saat ini (kode SKU, nama, kategori, satuan, stok saat ini, harga modal rata-rata, harga jual).",
+    description: "Ambil daftar katalog barang + jasa saat ini (kode SKU, tipe BARANG/JASA, nama, kategori, satuan, stok saat ini, harga modal rata-rata, harga jual). Jasa tidak punya stok.",
     parameters: {
       type: "object",
       properties: {
@@ -38,6 +38,22 @@ export const inventoryToolDefs: ToolDefinition[] = [
         minStockAlert: { type: "string", description: "Batas minimum stok untuk peringatan restock (misal: '5'). Default: '5'" },
         appBarcode: { type: "string", description: "Barcode app pendek untuk scan (opsional, otomatis bila kosong)" },
         imageDocumentId: { type: "string", description: "ID dokumen foto dari lampiran chat untuk dijadikan thumbnail. Hanya isi bila user eksplisit menyetujui. Foto >500KB akan ditolak dengan pesan." },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    type: "function",
+    name: "add_service_item",
+    description: "Daftarkan satu jasa/layanan baru ke katalog (tanpa stok, tanpa foto). Wajib konfirmasi user sebelum eksekusi.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Kode unik jasa (misal: JSA-0001, otomatis bila kosong)" },
+        name: { type: "string", description: "Nama lengkap jasa (misal: Cuci Rambut)" },
+        category: { type: "string", description: "Kategori jasa (misal: Perawatan)" },
+        unit: { type: "string", description: "Satuan jasa (misal: Sesi, Kali, Paket, Jam). Default: Sesi" },
+        standardSellingPriceText: { type: "string", description: "Harga jual dalam Rupiah (misal: '50000'). Default: '0'" },
       },
       required: ["name"],
     },
@@ -96,11 +112,13 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
           items: filtered.slice(0, 20).map((it) => ({
             id: it.id,
             code: it.code,
+            itemType: it.itemType,
             name: it.name,
             category: it.category || "-",
             unit: it.unit,
-            currentQty: it.currentQty,
-            averageCost: Money.fromMinor(it.averageCostMinor).formatIdr(),
+            currentQty: it.itemType === "JASA" ? "-" : it.currentQty,
+            averageCost:
+              it.itemType === "JASA" ? "-" : Money.fromMinor(it.averageCostMinor).formatIdr(),
             standardSellingPrice: Money.fromMinor(it.standardSellingPriceMinor).formatIdr(),
           })),
         },
@@ -189,6 +207,44 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Gagal mendaftarkan barang persediaan";
+      return { success: false, error: message };
+    }
+  },
+
+  add_service_item: async (orgId, _actor, args) => {
+    try {
+      const name = String(args.name ?? "").trim();
+      if (!name) {
+        return { success: false, error: "Nama jasa wajib diisi." };
+      }
+      if (args.imageDocumentId) {
+        return { success: false, error: "JASA_TANPA_FOTO: jasa tidak mendukung foto." };
+      }
+      const standardSellingPriceMinor = args.standardSellingPriceText
+        ? Money.parseIdr(String(args.standardSellingPriceText)).minor
+        : 0n;
+      const item = await withOrg(orgId, async (tx) =>
+        createInventoryItem(tx, orgId, {
+          itemType: "JASA",
+          code: String(args.code ?? "").trim().toUpperCase() || undefined,
+          name,
+          category: args.category ? String(args.category) : undefined,
+          unit: args.unit ? String(args.unit) : "Sesi",
+          standardSellingPriceMinor,
+        }),
+      );
+      return {
+        success: true,
+        data: {
+          id: item.id,
+          code: item.code,
+          name: item.name,
+          unit: item.unit,
+          message: `Jasa ${item.name} (${item.code}) berhasil didaftarkan ke katalog.`,
+        },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal mendaftarkan jasa";
       return { success: false, error: message };
     }
   },

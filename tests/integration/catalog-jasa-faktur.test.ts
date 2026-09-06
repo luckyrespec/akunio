@@ -295,3 +295,30 @@ describe("actions jasa", () => {
     expect(typeof actions.getServiceOverviewAction).toBe("function");
   });
 });
+
+describe("AI jasa", () => {
+  beforeEach(async () => {
+    await truncateAll();
+  });
+
+  it("AI add_service_item tanpa foto sukses", async () => {
+    const { inventoryHandlers } = await import("@/server/ai/tools/inventory.tools");
+    const { orgId } = await makeOrg("ai-jasa");
+    const res = (await inventoryHandlers["add_service_item"](orgId, "owner@x.id", {
+      name: "Cuci Motor",
+    })) as { success: boolean; data?: { message?: string }; error?: string };
+    expect(res.success).toBe(true);
+    expect(res.data?.message).toMatch(/Cuci Motor/);
+  });
+
+  it("AI add_service_item menolak foto", async () => {
+    const { inventoryHandlers } = await import("@/server/ai/tools/inventory.tools");
+    const { orgId } = await makeOrg("ai-jasa-foto");
+    const res = (await inventoryHandlers["add_service_item"](orgId, "owner@x.id", {
+      name: "Cuci Motor",
+      imageDocumentId: "doc-123",
+    })) as { success: boolean; error?: string };
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/JASA_TANPA_FOTO/);
+  });
+});
