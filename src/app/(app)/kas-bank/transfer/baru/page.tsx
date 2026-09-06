@@ -1,5 +1,6 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { PageHeader } from "@/components/page-header";
 import { CashEntryForm } from "@/components/kas-bank/cash-entry-form";
 import { loadCashPageData } from "../../_data";
 
@@ -8,13 +9,20 @@ export default async function TransferBaruPage() {
   const { cashAccounts } = await loadCashPageData(ctx.orgId, "TRANSFER");
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Catat Transfer"
-        eyebrow="Pindah dana antar kas dan bank — tersimpan sebagai bukti bernomor."
-      />
+    <section className="w-full space-y-6">
+      <div className="mb-2">
+        <Link
+          href="/kas-bank/transfer"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft hover:text-terra transition-colors"
+        >
+          <ArrowLeft className="size-3.5" />
+          Kembali ke Transfer Bank
+        </Link>
+      </div>
+
       <CashEntryForm
         kind="TRANSFER"
+        title="Catat Transfer"
         detailBasePath="/kas-bank/transfer"
         cashAccounts={cashAccounts}
         counterAccounts={cashAccounts}
@@ -22,6 +30,6 @@ export default async function TransferBaruPage() {
         quickPicks={[]}
         transferMode
       />
-    </div>
+    </section>
   );
 }
