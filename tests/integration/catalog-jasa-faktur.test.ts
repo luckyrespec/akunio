@@ -159,8 +159,7 @@ describe("posting jual campur", () => {
   });
 });
 
-describe("posting beli + periodic + void", () => {
-  beforeEach(async () => {
+describe("posting beli + periodic + void", () => {  beforeEach(async () => {
     await truncateAll();
   });
 
@@ -285,5 +284,14 @@ describe("posting beli + periodic + void", () => {
     const [invRow] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
     expect(invRow.status).toBe("VOID");
     await expect(voidInvoiceWithReversal(db, orgId, inv.id, "owner@toko.id")).rejects.toThrow("FAKTUR_SUDAH_VOID");
+  });
+});
+
+describe("actions jasa", () => {
+  it("createServiceItemAction + suggestJsaSkuAction tersedia", async () => {
+    const actions = await import("@/server/actions/inventory.actions");
+    expect(typeof actions.createServiceItemAction).toBe("function");
+    expect(typeof actions.suggestJsaSkuAction).toBe("function");
+    expect(typeof actions.getServiceOverviewAction).toBe("function");
   });
 });

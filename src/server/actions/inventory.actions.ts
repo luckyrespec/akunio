@@ -6,6 +6,7 @@ import { withOrg } from "@/server/db/repos/with-org";
 import {
   createInventoryItem,
   listInventoryItems,
+  listServiceItems,
   getInventorySettings,
   upsertInventorySettings,
   createStockOpname,
@@ -98,6 +99,64 @@ export async function suggestSkuAction() {
     const { nextSkuCodes } = await import("@/server/db/repos/inventory-sku");
     const { db } = await import("@/server/db");
     const s = await db.transaction((tx) => nextSkuCodes(tx as never, ctx.orgId));
+    return { ok: true as const, ...s };
+  } catch (err: unknown) {
+    return { ok: false as const, error: err instanceof Error ? err.message : "Gagal generate kode" };
+  }
+}
+
+export async function getServiceOverviewAction() {
+  const ctx = await requireContext();
+  const items = await listServiceItems(db, ctx.orgId);
+  return { items, totalJasa: items.length };
+}
+
+export async function createServiceItemAction(payload: {
+  code?: string;
+  name: string;
+  unit?: string;
+  category?: string;
+  sellingPriceText?: string;
+  revenueAccountId?: string | null;
+  expenseAccountId?: string | null;
+}) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    if (!payload.name || payload.name.trim().length < 2) {
+      return { ok: false as const, error: "Nama jasa minimal 2 huruf" };
+    }
+    const standardSellingPriceMinor = payload.sellingPriceText
+      ? Money.parseIdr(payload.sellingPriceText).minor
+      : 0n;
+
+    const item = await withOrg(ctx.orgId, async (tx) =>
+      createInventoryItem(tx, ctx.orgId, {
+        itemType: "JASA",
+        code: payload.code,
+        name: payload.name,
+        unit: payload.unit ?? "Sesi",
+        category: payload.category,
+        standardSellingPriceMinor,
+        revenueAccountId: payload.revenueAccountId ?? null,
+        expenseAccountId: payload.expenseAccountId ?? null,
+      }),
+    );
+
+    revalidatePath("/persediaan/jasa");
+    revalidatePath("/faktur/baru");
+    return { ok: true as const, item };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal menyimpan jasa";
+    return { ok: false as const, error: message };
+  }
+}
+
+export async function suggestJsaSkuAction() {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const { nextSkuCodes } = await import("@/server/db/repos/inventory-sku");
+    const { db } = await import("@/server/db");
+    const s = await db.transaction((tx) => nextSkuCodes(tx as never, ctx.orgId, "JASA"));
     return { ok: true as const, ...s };
   } catch (err: unknown) {
     return { ok: false as const, error: err instanceof Error ? err.message : "Gagal generate kode" };
