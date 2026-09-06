@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
 import { CashEntryForm } from "@/components/kas-bank/cash-entry-form";
 import type { QuickPick } from "@/components/kas-bank/cash-entry-form";
+import { dailyInsight } from "@/core/kas-bank/insights";
 import { loadCashPageData } from "../../_data";
 
 const QUICK_BAYAR: Array<{ codes: string[]; label: string }> = [
@@ -43,6 +44,7 @@ export default async function PembayaranBaruPage() {
         counterAccounts={leaf}
         contacts={contacts}
         quickPicks={quickPicks}
+        insight={dailyInsight()}
       />
     </section>
   );

@@ -7,6 +7,7 @@ import {
   createCashEntryRepo,
   postCashDraftRepo,
 } from "@/server/db/repos/cash-bank.repo";
+import { linkDocumentToEntry } from "@/server/db/repos/journals.repo";
 import { Money } from "@/core/money/money";
 import type { CashKind } from "@/server/db/schema/cash-bank";
 
@@ -44,22 +45,36 @@ export async function createCashEntryAction(formData: FormData) {
       };
     }
     const post = formData.get("post") !== "0";
+    const documentId = (formData.get("documentId") as string) || null;
+    const documentFileName =
+      (formData.get("documentFileName") as string) || undefined;
     const out = await withOrg(ctx.orgId, (tx) =>
-      createCashEntryRepo(
-        tx as never,
-        ctx.orgId,
-        ctx.userEmail,
-        {
-          kind,
-          entryDate,
-          cashAccountId,
-          counterAccountId,
-          contactId,
-          amountMinor,
-          memo,
-        },
-        { post }
-      )
+      (async () => {
+        const created = await createCashEntryRepo(
+          tx as never,
+          ctx.orgId,
+          ctx.userEmail,
+          {
+            kind,
+            entryDate,
+            cashAccountId,
+            counterAccountId,
+            contactId,
+            amountMinor,
+            memo,
+          },
+          { post }
+        );
+        if (documentId) {
+          await linkDocumentToEntry(tx as never, {
+            orgId: ctx.orgId,
+            entryId: created.journalEntryId,
+            documentId,
+            fileName: documentFileName,
+          });
+        }
+        return created;
+      })()
     );
     revalidatePath(PATH_BY_KIND[kind]);
     revalidatePath("/kas-bank/histori");

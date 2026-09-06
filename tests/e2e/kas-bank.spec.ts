@@ -13,6 +13,14 @@ test("pembayaran tercatat dan mendarat di detail", async ({ page }) => {
     timeout: 15000,
   });
   await page.getByRole("button", { name: "Gaji", exact: true }).click();
+  await page.getByTestId("kas-bank-cash").getByRole("combobox").click();
+  await page
+    .getByPlaceholder("Cari kode / nama akun...")
+    .fill("bank");
+  await expect(
+    page.getByRole("button", { name: /1120 Bank/ })
+  ).toBeVisible({ timeout: 10000 });
+  await page.keyboard.press("Escape");
   await page.getByTestId("kas-bank-amount").fill("150000");
   await page.getByTestId("kas-bank-memo").fill("ATK e2e");
   await page.getByTestId("kas-bank-submit-post").click();

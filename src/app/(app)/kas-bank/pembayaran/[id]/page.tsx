@@ -1,7 +1,7 @@
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { getCashEntryDetailRepo } from "@/server/db/repos/cash-bank.repo";
-import { getEntryWithLines } from "@/server/db/repos/journals.repo";
+import { getEntryWithLines, listEntryDocuments } from "@/server/db/repos/journals.repo";
 import { CashEntryDetail } from "@/components/kas-bank/cash-entry-detail";
 import { notFound } from "next/navigation";
 
@@ -19,6 +19,9 @@ export default async function PembayaranDetailPage({
   const journal = detail.journalEntryId
     ? await getEntryWithLines(db, ctx.orgId, detail.journalEntryId)
     : null;
+  const docs = detail.journalEntryId
+    ? await listEntryDocuments(db, ctx.orgId, detail.journalEntryId)
+    : [];
 
-  return <CashEntryDetail detail={detail} journal={journal} />;
+  return <CashEntryDetail detail={detail} journal={journal} docs={docs} />;
 }

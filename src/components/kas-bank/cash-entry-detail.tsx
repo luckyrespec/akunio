@@ -18,6 +18,7 @@ import {
   BookOpen,
   CheckCircle2,
   Clock,
+  FileText,
   Loader2,
 } from "lucide-react";
 
@@ -51,9 +52,11 @@ const KIND_META: Record<
 export function CashEntryDetail({
   detail,
   journal,
+  docs,
 }: {
   detail: CashEntryDetail;
   journal: EntryView | null;
+  docs: Array<{ id: string; fileName: string | null; sizeBytes: number }>;
 }) {
   const router = useRouter();
   const [posting, setPosting] = React.useState(false);
@@ -183,6 +186,37 @@ export function CashEntryDetail({
           </dl>
         </div>
       </div>
+
+      {docs.length > 0 && (
+        <div className="rounded-xl border border-rule bg-paper shadow-2xs overflow-hidden">
+          <div className="px-5 pt-4 pb-2">
+            <h2 className="font-display text-base font-semibold text-ink">
+              Lampiran
+            </h2>
+            <p className="text-xs text-ink-soft">
+              Bukti yang diunggah saat pencatatan.
+            </p>
+          </div>
+          <ul className="divide-y divide-rule px-5 pb-4">
+            {docs.map((d) => (
+              <li
+                key={d.id}
+                className="flex items-center gap-2.5 py-2 text-xs"
+              >
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-terra/10 text-terra">
+                  <FileText className="size-3.5" />
+                </div>
+                <span className="truncate font-medium text-ink">
+                  {d.fileName ?? "Lampiran"}
+                </span>
+                <span className="ml-auto shrink-0 text-[11px] text-ink-soft tnum">
+                  {(d.sizeBytes / 1024).toFixed(1)} KB
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {journal && (
         <div className="rounded-xl border border-rule bg-paper shadow-2xs overflow-hidden">

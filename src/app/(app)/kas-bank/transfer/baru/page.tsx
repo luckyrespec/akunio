@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
 import { CashEntryForm } from "@/components/kas-bank/cash-entry-form";
+import { dailyInsight } from "@/core/kas-bank/insights";
 import { loadCashPageData } from "../../_data";
 
 export default async function TransferBaruPage() {
@@ -28,6 +29,7 @@ export default async function TransferBaruPage() {
         counterAccounts={cashAccounts}
         contacts={[]}
         quickPicks={[]}
+        insight={dailyInsight()}
         transferMode
       />
     </section>
