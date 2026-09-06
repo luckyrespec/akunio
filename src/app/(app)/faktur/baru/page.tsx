@@ -1,6 +1,7 @@
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { listContactsRepo } from "@/server/db/repos/contacts.repo";
+import { getInventorySettings, listInventoryItems } from "@/server/db/repos/inventory.repo";
 import { organizations } from "@/server/db/schema/org";
 import { FakturBaruClient } from "./faktur-baru-client";
 import type { InvoiceType } from "@/server/db/schema/invoicing";
@@ -15,9 +16,11 @@ export default async function FakturBaruPage({
   const sp = await searchParams;
   const tipe: InvoiceType = sp.tipe === "bill" ? "BILL" : "INVOICE";
 
-  const [contactsList, [org]] = await Promise.all([
+  const [contactsList, [org], catalogItems, settings] = await Promise.all([
     listContactsRepo(db, ctx.orgId),
     db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.orgId)),
+    listInventoryItems(db, ctx.orgId),
+    getInventorySettings(db, ctx.orgId),
   ]);
 
   return (
@@ -31,6 +34,17 @@ export default async function FakturBaruPage({
         }))}
         initialType={tipe}
         orgName={org?.name || "Perusahaan"}
+        catalog={catalogItems
+          .filter((i) => i.isActive)
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            itemType: i.itemType,
+            priceMinor: i.standardSellingPriceMinor.toString(),
+            qty: i.currentQty,
+            unit: i.unit,
+          }))}
+        recordingMethod={settings?.recordingMethod ?? "PERPETUAL"}
       />
     </section>
   );

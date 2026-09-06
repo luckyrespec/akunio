@@ -5,14 +5,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Loader2, Plus, Trash2, FileText, Scale, ArrowLeft, ArrowRight, ArrowUpRight, ArrowDownLeft, ChevronDown } from "lucide-react";
+import { Loader2, Plus, Trash2, FileText, Scale, ArrowLeft, ArrowRight, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { SplitButton } from "@/components/ui/split-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,9 +43,19 @@ export interface ContactOption {
   paymentTermsDays: number;
 }
 
+export interface CatalogOption {
+  id: string;
+  name: string;
+  itemType: "BARANG" | "JASA";
+  priceMinor: string;
+  qty: string;
+  unit: string;
+}
+
 interface ItemRow {
   id: string;
   description: string;
+  catalogItemId: string | null;
   quantity: string;
   unitPrice: string;
   discount: string;
@@ -73,6 +78,7 @@ function emptyRow(): ItemRow {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     description: "",
+    catalogItemId: null,
     quantity: "1",
     unitPrice: "",
     discount: "0",
@@ -88,10 +94,14 @@ export function FakturBaruClient({
   contacts,
   initialType,
   orgName,
+  catalog,
+  recordingMethod,
 }: {
   contacts: ContactOption[];
   initialType: InvoiceType;
   orgName: string;
+  catalog: CatalogOption[];
+  recordingMethod: "PERPETUAL" | "PERIODIC";
 }) {
   const router = useRouter();
 
@@ -150,6 +160,37 @@ export function FakturBaruClient({
 
   function updateItem(id: string, field: keyof ItemRow, val: string) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: val } : it)));
+  }
+
+  const catalogById = useMemo(() => new Map(catalog.map((c) => [c.id, c])), [catalog]);
+
+  /** Ketik nama persis katalog -> tautkan (auto-harga); teks bebas -> baris manual. */
+  function handleDescriptionChange(id: string, val: string) {
+    const match = catalog.find((c) => c.name.toLowerCase() === val.trim().toLowerCase()) ?? null;
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === id
+          ? {
+              ...it,
+              description: val,
+              catalogItemId: match?.id ?? null,
+              unitPrice: match ? String(Number(match.priceMinor) / 100) : it.unitPrice,
+            }
+          : it,
+      ),
+    );
+  }
+
+  function stockWarning(it: ItemRow): string | null {
+    if (!it.catalogItemId || recordingMethod !== "PERPETUAL") return null;
+    const entry = catalogById.get(it.catalogItemId);
+    if (!entry || entry.itemType !== "BARANG") return null;
+    const qty = parseFloat(it.quantity) || 0;
+    const stock = parseFloat(entry.qty) || 0;
+    if (qty > stock) {
+      return `Stok tidak cukup (sisa ${entry.qty} ${entry.unit}) — tetap bisa simpan, stok akan minus.`;
+    }
+    return null;
   }
 
   const totals = useMemo(() => {
@@ -237,6 +278,7 @@ export function FakturBaruClient({
         },
         items.map((it) => ({
           description: it.description.trim(),
+          catalogItemId: it.catalogItemId,
           quantity: it.quantity,
           unitPriceMinor: toMinorSafe(it.unitPrice),
           discountMinor: toMinorSafe(it.discount),
@@ -311,50 +353,24 @@ export function FakturBaruClient({
                 Batal
               </Button>
 
-              <div className="flex items-stretch shadow-xs rounded-xl overflow-hidden">
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={loading}
-                  className="h-9 rounded-l-xl rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-none"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                      Memproses...
-                    </>
-                  ) : (
-                    isInvoice ? "Terbitkan Faktur" : "Catat Tagihan"
-                  )}
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={loading}
-                      aria-label="Opsi penerbitan lainnya"
-                      className="h-9 rounded-l-none rounded-r-xl border-l border-l-white/25 px-2.5 bg-terra text-white hover:bg-terra/90 shadow-none disabled:transform-none"
-                    >
-                      <ChevronDown className="size-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-48 rounded-xl border-rule bg-paper shadow-md">
-                    <DropdownMenuItem
-                      onClick={() => void submitWithMode("publish")}
-                      className="text-xs font-medium cursor-pointer py-2"
-                    >
-                      {isInvoice ? "Terbitkan Faktur" : "Catat Tagihan"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => void submitWithMode("publish-new")}
-                      className="text-xs font-medium cursor-pointer py-2"
-                    >
-                      {isInvoice ? "Terbitkan & Buat Lagi" : "Catat & Buat Lagi"}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              <SplitButton
+                primaryType="submit"
+                disabled={loading}
+                loading={loading}
+                menuLabel="Opsi penerbitan lainnya"
+                items={[
+                  {
+                    label: isInvoice ? "Terbitkan Faktur" : "Catat Tagihan",
+                    onSelect: () => void submitWithMode("publish"),
+                  },
+                  {
+                    label: isInvoice ? "Terbitkan & Buat Lagi" : "Catat & Buat Lagi",
+                    onSelect: () => void submitWithMode("publish-new"),
+                  },
+                ]}
+              >
+                {loading ? "Memproses..." : isInvoice ? "Terbitkan Faktur" : "Catat Tagihan"}
+              </SplitButton>
             </div>
           </div>
         }
@@ -564,12 +580,34 @@ export function FakturBaruClient({
                         >
                           <TableCell>
                             <Input
-                              placeholder={`Item ${idx + 1} — deskripsi barang/jasa`}
+                              placeholder={`Item ${idx + 1} — ketik / pilih barang/jasa`}
                               value={it.description}
-                              onChange={(e) => updateItem(it.id, "description", e.target.value)}
+                              onChange={(e) => handleDescriptionChange(it.id, e.target.value)}
+                              list={`fk-catalog-${it.id}`}
+                              data-testid="faktur-item-picker"
                               className="h-8 bg-paper text-xs"
                               aria-label={`Deskripsi baris ${idx + 1}`}
+                              autoComplete="off"
                             />
+                            <datalist id={`fk-catalog-${it.id}`}>
+                              {catalog.map((c) => (
+                                <option key={c.id} value={c.name}>
+                                  {c.itemType === "BARANG" ? `Barang · ${c.qty} ${c.unit}` : "Jasa · tanpa stok"}
+                                </option>
+                              ))}
+                            </datalist>
+                            {it.catalogItemId && catalogById.get(it.catalogItemId) && (
+                              <p className="mt-1 text-[10px] text-ink-soft">
+                                {catalogById.get(it.catalogItemId)!.itemType === "BARANG"
+                                  ? `Barang · Stok: ${catalogById.get(it.catalogItemId)!.qty} ${catalogById.get(it.catalogItemId)!.unit}`
+                                  : "Jasa · tanpa stok"}
+                              </p>
+                            )}
+                            {stockWarning(it) && (
+                              <p data-testid="faktur-stok-warning" role="status" className="mt-1 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                                {stockWarning(it)}
+                              </p>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Input
