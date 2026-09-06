@@ -9,9 +9,10 @@ import {
 } from "@/server/db/schema/inventory";
 import { getInvoiceByIdRepo } from "@/server/db/repos/invoices.repo";
 import { getInventorySettings } from "@/server/db/repos/inventory.repo";
-import { postJournalEntry } from "@/server/db/repos/journals.repo";
+import { postJournalEntry, toMinor } from "@/server/db/repos/journals.repo";
+import { journalLines } from "@/server/db/schema/journal";
 import { calculateItemTotal } from "@/core/invoicing/calculations";
-import { consumeFifoLayers } from "@/core/inventory/valuation";
+import { calculateWeightedAverage, consumeFifoLayers } from "@/core/inventory/valuation";
 import type { FifoLayer } from "@/core/inventory/types";
 import { eq, and, asc, inArray, sql } from "drizzle-orm";
 
@@ -124,6 +125,65 @@ async function applyInvoiceStockOut(
   return consumedCostMinor;
 }
 
+/** Mutasi IN satu item barang untuk faktur pembelian. Layer FIFO selalu ditulis
+ *  (agar pindah metode valuasi tetap valid), average dihitung via WAC. */
+async function applyInvoiceStockIn(
+  tx: Queryable,
+  orgId: string,
+  master: CatalogMaster,
+  qty: number,
+  unitCostMinor: bigint,
+  dateISO: string,
+  sourceId: string,
+  memo: string,
+): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`inv-item:${master.id}`}))`);
+  const [fresh] = await tx
+    .select()
+    .from(inventoryItems)
+    .where(and(eq(inventoryItems.id, master.id), eq(inventoryItems.orgId, orgId)))
+    .limit(1);
+  if (!fresh) throw new Error(`ITEM_TIDAK_DITEMUKAN: ${master.code}`);
+  if (fresh.itemType !== "BARANG") return;
+
+  const r = calculateWeightedAverage(Number(fresh.currentQty), fresh.totalCostMinor, qty, unitCostMinor);
+  await tx
+    .update(inventoryItems)
+    .set({
+      currentQty: qtyToDb(r.newQty),
+      totalCostMinor: r.newTotalCostMinor,
+      averageCostMinor: r.newAverageCostMinor,
+      updatedAt: new Date(),
+    })
+    .where(eq(inventoryItems.id, fresh.id));
+
+  await tx.insert(inventoryLayers).values({
+    orgId,
+    itemId: fresh.id,
+    date: dateISO,
+    initialQty: qtyToDb(qty),
+    remainingQty: qtyToDb(qty),
+    unitCostMinor,
+    referenceType: "PURCHASE",
+    referenceId: sourceId,
+  });
+
+  await tx.insert(inventoryTransactions).values({
+    orgId,
+    itemId: fresh.id,
+    date: dateISO,
+    type: "IN",
+    qty: qtyToDb(qty),
+    unitCostMinor,
+    totalCostMinor: costForQty(unitCostMinor, qty),
+    resultingQty: qtyToDb(r.newQty),
+    resultingTotalCostMinor: r.newTotalCostMinor,
+    sourceType: "INVOICE",
+    sourceId,
+    memo,
+  });
+}
+
 async function getAccountByCode(q: Queryable, orgId: string, code: string) {
   const [row] = await q
     .select()
@@ -153,26 +213,39 @@ export async function postInvoiceToLedger(
   return db.transaction(async (tx) => {
     const lines: Array<{ accountId: string; debitMinor: bigint; creditMinor: bigint; memo?: string }> = [];
 
+    // Katalog ter-link (barang vs jasa) + kebijakan persediaan — dipakai cabang jual maupun beli.
+    const linkedIds = [
+      ...new Set(inv.items.map((i) => i.catalogItemId).filter((v): v is string => !!v)),
+    ];
+    const masters =
+      linkedIds.length > 0
+        ? await tx
+            .select()
+            .from(inventoryItems)
+            .where(and(eq(inventoryItems.orgId, orgId), inArray(inventoryItems.id, linkedIds)))
+        : [];
+    const masterById = new Map(masters.map((m) => [m.id, m]));
+    const masterOf = (catalogItemId: string | null) => {
+      if (!catalogItemId) return null;
+      const m = masterById.get(catalogItemId) ?? null;
+      if (!m) throw new Error(`ITEM_TIDAK_DITEMUKAN: ${catalogItemId}`);
+      return m;
+    };
+
+    const settings = await getInventorySettings(tx, orgId);
+    const recording = settings?.recordingMethod ?? "PERPETUAL";
+    const valuation = settings?.valuationMethod ?? "WEIGHTED_AVERAGE";
+
+    const parseQty = (raw: string | number, label: string): number => {
+      const qty = typeof raw === "string" ? parseFloat(raw) || 0 : raw;
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error(`QTY_FAKTUR_TIDAK_VALID: ${label}`);
+      return qty;
+    };
+
     if (inv.type === "INVOICE") {
       // Penjualan (Piutang) — pendapatan dipecah per akun (barang vs jasa vs manual),
       // barang (PERPETUAL) mutasi OUT + HPP, jasa tanpa mutasi.
       const arAccount = await getAccountByCode(tx, orgId, "1200"); // Piutang Usaha
-
-      const linkedIds = [
-        ...new Set(inv.items.map((i) => i.catalogItemId).filter((v): v is string => !!v)),
-      ];
-      const masters =
-        linkedIds.length > 0
-          ? await tx
-              .select()
-              .from(inventoryItems)
-              .where(and(eq(inventoryItems.orgId, orgId), inArray(inventoryItems.id, linkedIds)))
-          : [];
-      const masterById = new Map(masters.map((m) => [m.id, m]));
-
-      const settings = await getInventorySettings(tx, orgId);
-      const recording = settings?.recordingMethod ?? "PERPETUAL";
-      const valuation = settings?.valuationMethod ?? "WEIGHTED_AVERAGE";
 
       const revenueGroups = new Map<string, bigint>();
       const barangMutations: Array<{ master: CatalogMaster; qty: number }> = [];
@@ -184,8 +257,7 @@ export async function postInvoiceToLedger(
           line.discountMinor,
           line.taxRatePercent,
         );
-        const master = line.catalogItemId ? (masterById.get(line.catalogItemId) ?? null) : null;
-        if (line.catalogItemId && !master) throw new Error(`ITEM_TIDAK_DITEMUKAN: ${line.catalogItemId}`);
+        const master = masterOf(line.catalogItemId);
         if (master?.itemType === "JASA") {
           const accId =
             master.revenueAccountId ??
@@ -199,11 +271,7 @@ export async function postInvoiceToLedger(
             (await getAccountByCode(tx, orgId, "4100")).id;
           revenueGroups.set(accId, (revenueGroups.get(accId) ?? 0n) + calc.netSubtotalMinor);
           if (recording === "PERPETUAL") {
-            const qty = typeof line.quantity === "string" ? parseFloat(line.quantity) || 0 : line.quantity;
-            if (!Number.isFinite(qty) || qty <= 0) {
-              throw new Error(`QTY_FAKTUR_TIDAK_VALID: ${line.description}`);
-            }
-            barangMutations.push({ master, qty });
+            barangMutations.push({ master, qty: parseQty(line.quantity, line.description) });
           }
         } else {
           const revAccount = await getAccountByCode(tx, orgId, "4100"); // Pendapatan Usaha
@@ -283,17 +351,69 @@ export async function postInvoiceToLedger(
         }
       }
     } else {
-      // Pembelian (Utang)
+      // Pembelian (Utang) — barang PERPETUAL: IN + Dr Persediaan; jasa: Dr Beban;
+      // barang PERIODIC: Dr Pembelian tanpa mutasi.
       const apAccount = await getAccountByCode(tx, orgId, "2100"); // Utang Usaha
-      const expAccount = await getAccountByCode(tx, orgId, "5100"); // Beban Pokok Penjualan
 
-      const netSubtotal = inv.subtotalMinor - inv.discountMinor;
-      lines.push({
-        accountId: expAccount.id,
-        debitMinor: netSubtotal,
-        creditMinor: 0n,
-        memo: `Beban/Pembelian ${inv.invoiceNumber}`,
-      });
+      const debitGroups = new Map<string, bigint>();
+      const addDebit = (accountId: string, netto: bigint) => {
+        debitGroups.set(accountId, (debitGroups.get(accountId) ?? 0n) + netto);
+      };
+      const barangIns: Array<{ master: CatalogMaster; qty: number; unitCostMinor: bigint }> = [];
+      let purchaseAccountId: string | null = null;
+
+      const resolveInventoryAccountId = async (): Promise<string> => {
+        const id =
+          settings?.inventoryAccountId ??
+          (await getAccountByCodeOrNull(tx, orgId, "1310"))?.id ??
+          (await getAccountByCodeOrNull(tx, orgId, "1300"))?.id;
+        if (!id) {
+          throw new Error(
+            "AKUN_PERSEDIAAN_BELUM_DIPETAKAN: pilih Akun Persediaan di Pengaturan > Persediaan sebelum memposting faktur barang",
+          );
+        }
+        return id;
+      };
+
+      for (const line of inv.items) {
+        const calc = calculateItemTotal(
+          line.quantity,
+          line.unitPriceMinor,
+          line.discountMinor,
+          line.taxRatePercent,
+        );
+        const master = masterOf(line.catalogItemId);
+        if (master?.itemType === "JASA") {
+          const accId =
+            master.expenseAccountId ?? (await getAccountByCode(tx, orgId, "5100")).id;
+          addDebit(accId, calc.netSubtotalMinor);
+        } else if (master) {
+          if (recording === "PERPETUAL") {
+            const qty = parseQty(line.quantity, line.description);
+            const unitCostMinor =
+              qty > 0 ? (calc.netSubtotalMinor * 100n) / BigInt(Math.round(qty * 100)) : 0n;
+            addDebit(await resolveInventoryAccountId(), calc.netSubtotalMinor);
+            barangIns.push({ master, qty, unitCostMinor });
+          } else {
+            purchaseAccountId ??=
+              settings?.cogsAccountId ?? (await getAccountByCode(tx, orgId, "5100")).id;
+            addDebit(purchaseAccountId, calc.netSubtotalMinor);
+          }
+        } else {
+          const expAccount = await getAccountByCode(tx, orgId, "5100"); // Beban/Pembelian
+          addDebit(expAccount.id, calc.netSubtotalMinor);
+        }
+      }
+
+      for (const [accountId, netto] of debitGroups) {
+        if (netto === 0n) continue;
+        lines.push({
+          accountId,
+          debitMinor: netto,
+          creditMinor: 0n,
+          memo: `Beban/Pembelian ${inv.invoiceNumber}`,
+        });
+      }
 
       if (inv.taxMinor > 0n) {
         const taxAccount = await getAccountByCode(tx, orgId, "1400"); // PPN Masukan
@@ -311,6 +431,19 @@ export async function postInvoiceToLedger(
         creditMinor: inv.totalMinor,
         memo: `Utang ${inv.invoiceNumber}`,
       });
+
+      for (const m of barangIns) {
+        await applyInvoiceStockIn(
+          tx,
+          orgId,
+          m.master,
+          m.qty,
+          m.unitCostMinor,
+          inv.issueDate,
+          inv.id,
+          `Beli ${inv.invoiceNumber} (${m.master.code})`,
+        );
+      }
     }
 
     const memo =
@@ -339,6 +472,112 @@ export async function postInvoiceToLedger(
       .where(eq(invoices.id, inv.id));
 
     return entry.id;
+  });
+}
+
+/** Void faktur: jurnal pembalik tertaut reversal_of_id + kembalikan stok yang
+ *  pernah digerakkan faktur ini. Menolak bila sudah VOID atau sudah ada bayar.
+ *  Mengembalikan id jurnal pembalik, atau null bila faktur belum terposting. */
+export async function voidInvoiceWithReversal(
+  db: Db,
+  orgId: string,
+  invoiceId: string,
+  actorEmail: string,
+): Promise<string | null> {
+  const inv = await getInvoiceByIdRepo(db, orgId, invoiceId);
+  if (!inv) throw new Error(`Faktur dengan ID ${invoiceId} tidak ditemukan.`);
+  if (inv.status === "VOID") throw new Error("FAKTUR_SUDAH_VOID: faktur ini sudah dibatalkan");
+  if (inv.amountPaidMinor > 0n) {
+    throw new Error("FAKTUR_SUDAH_DIBAYAR: batalkan pembayaran terlebih dahulu sebelum void");
+  }
+
+  if (!inv.journalEntryId) {
+    await db
+      .update(invoices)
+      .set({ status: "VOID", updatedAt: new Date() })
+      .where(eq(invoices.id, inv.id));
+    return null;
+  }
+
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`inv-void:${invoiceId}`}))`);
+    const [fresh] = await tx
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.id, inv.id), eq(invoices.orgId, orgId)))
+      .limit(1);
+    if (!fresh || fresh.status === "VOID") throw new Error("FAKTUR_SUDAH_VOID: faktur ini sudah dibatalkan");
+    if (!fresh.journalEntryId) throw new Error("JURNAL_TIDAK_DITEMUKAN: faktur belum terposting");
+
+    const origLines = await tx
+      .select()
+      .from(journalLines)
+      .where(eq(journalLines.entryId, fresh.journalEntryId));
+    if (origLines.length === 0) throw new Error("JURNAL_TIDAK_DITEMUKAN: baris jurnal asal kosong");
+
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const reversal = await postJournalEntry(
+      tx,
+      orgId,
+      actorEmail,
+      {
+        dateISO: todayISO,
+        memo: `Pembalik ${inv.invoiceNumber} - ${inv.contact.name}`,
+        source: "DOCUMENT",
+        lines: origLines.map((l) => ({
+          accountId: l.accountId,
+          debitMinor: toMinor(l.credit),
+          creditMinor: toMinor(l.debit),
+          memo: `Pembalik ${inv.invoiceNumber}`,
+        })),
+      },
+      { reversalOfId: fresh.journalEntryId },
+    );
+
+    // Kembalikan setiap gerakan stok faktur ini (OUT->IN, IN->OUT).
+    const settings = await getInventorySettings(tx, orgId);
+    const valuation = settings?.valuationMethod ?? "WEIGHTED_AVERAGE";
+    const moves = await tx
+      .select()
+      .from(inventoryTransactions)
+      .where(
+        and(
+          eq(inventoryTransactions.orgId, orgId),
+          eq(inventoryTransactions.sourceType, "INVOICE"),
+          eq(inventoryTransactions.sourceId, inv.id),
+        ),
+      );
+    if (moves.length > 0) {
+      const ids = [...new Set(moves.map((m) => m.itemId))];
+      const masters = await tx
+        .select()
+        .from(inventoryItems)
+        .where(and(eq(inventoryItems.orgId, orgId), inArray(inventoryItems.id, ids)));
+      const masterById = new Map(masters.map((m) => [m.id, m]));
+      for (const m of moves) {
+        const master = masterById.get(m.itemId);
+        if (!master) continue;
+        const qty = Number(m.qty);
+        if (m.type === "OUT") {
+          await applyInvoiceStockIn(
+            tx, orgId, master, qty, m.unitCostMinor, todayISO, reversal.id,
+            `Reversal ${inv.invoiceNumber} (${master.code})`,
+          );
+        } else {
+          await applyInvoiceStockOut(
+            tx, orgId, master, qty, valuation, todayISO, reversal.id,
+            `Reversal ${inv.invoiceNumber} (${master.code})`,
+          );
+        }
+      }
+    }
+
+    await tx
+      .update(invoices)
+      .set({ status: "VOID", updatedAt: new Date() })
+      .where(eq(invoices.id, inv.id));
+
+    return reversal.id;
   });
 }
 

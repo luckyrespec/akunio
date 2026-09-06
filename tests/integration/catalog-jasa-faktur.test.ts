@@ -158,3 +158,132 @@ describe("posting jual campur", () => {
     expect(outs2.filter((t) => t.type === "OUT" && t.sourceType === "INVOICE").length).toBe(1);
   });
 });
+
+describe("posting beli + periodic + void", () => {
+  beforeEach(async () => {
+    await truncateAll();
+  });
+
+  async function setupOrg(name: string, recording: "PERPETUAL" | "PERIODIC") {
+    const { seedOrgData } = await import("@/server/bootstrap/seed-org");
+    const { upsertInventorySettings } = await import("@/server/db/repos/inventory.repo");
+    const { accounts } = await import("@/server/db/schema/org");
+    const { eq } = await import("drizzle-orm");
+    const { orgId } = await makeOrg(name);
+    await seedOrgData(orgId);
+    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const byCode = (c: string) => accRows.find((a) => a.code === c)!;
+    await withOrg(orgId, (tx) =>
+      upsertInventorySettings(tx, orgId, {
+        valuationMethod: "WEIGHTED_AVERAGE",
+        recordingMethod: recording,
+        inventoryAccountId: byCode("1300").id,
+        cogsAccountId: byCode("5100").id,
+      }),
+    );
+    const contact = await createContactRepo(db, orgId, { name: "Supplier", type: "VENDOR" });
+    return { orgId, contact, byCode };
+  }
+
+  it("BILL perpetual: barang IN + average update + Dr Persediaan", async () => {
+    const { postInvoiceToLedger } = await import("@/server/invoicing/posting");
+    const { getInventoryItem } = await import("@/server/db/repos/inventory.repo");
+    const { journalLines } = await import("@/server/db/schema/journal");
+    const { inventoryLayers } = await import("@/server/db/schema/inventory");
+    const { eq, and } = await import("drizzle-orm");
+
+    const { orgId, contact } = await setupOrg("beli-masuk", "PERPETUAL");
+    const barang = await withOrg(orgId, (tx) =>
+      createInventoryItem(tx, orgId, { name: "Kopi", initialQty: 5, initialCostMinor: 10000n }),
+    );
+    const inv = await createInvoiceRepo(
+      db, orgId,
+      { type: "BILL", contactId: contact.id, issueDate: "2026-09-06", dueDate: "2026-09-20" },
+      [{ description: "Kopi", quantity: 10, unitPriceMinor: 12000n, catalogItemId: barang.id }],
+    );
+    await postInvoiceToLedger(db, orgId, inv.id, "owner@toko.id");
+
+    const after = await withOrg(orgId, (tx) => getInventoryItem(tx, orgId, barang.id));
+    expect(Number(after!.currentQty)).toBe(15);
+    expect(after!.totalCostMinor).toBe(170000n);
+    expect(after!.averageCostMinor).toBe(11333n);
+    const layers = await withOrg(orgId, (tx) =>
+      tx.select().from(inventoryLayers).where(and(eq(inventoryLayers.orgId, orgId), eq(inventoryLayers.itemId, barang.id))),
+    );
+    expect(layers.some((l) => l.referenceType === "PURCHASE")).toBe(true);
+
+    const lines = await db.select().from(journalLines).where(eq(journalLines.entryId,
+      (await getInvoiceByIdRepo(db, orgId, inv.id))!.journalEntryId!));
+    const sums = new Map<string, bigint>();
+    const accRows = await db.select().from((await import("@/server/db/schema/org")).accounts).where(eq((await import("@/server/db/schema/org")).accounts.orgId, orgId));
+    for (const l of lines) {
+      const code = accRows.find((a) => a.id === l.accountId)!.code;
+      sums.set(`${code}:D`, (sums.get(`${code}:D`) ?? 0n) + BigInt(l.debit as string));
+      sums.set(`${code}:C`, (sums.get(`${code}:C`) ?? 0n) + BigInt(l.credit as string));
+    }
+    expect(sums.get("1300:D")).toBe(120000n);
+    expect(sums.get("2100:C")).toBe(120000n);
+  });
+
+  it("PERIODIC: jual maupun beli tanpa mutasi dan tanpa HPP", async () => {
+    const { postInvoiceToLedger } = await import("@/server/invoicing/posting");
+    const { getInventoryItem, listItemTransactions } = await import("@/server/db/repos/inventory.repo");
+    const { journalLines } = await import("@/server/db/schema/journal");
+    const { eq } = await import("drizzle-orm");
+
+    const { orgId, contact } = await setupOrg("periodik", "PERIODIC");
+    const barang = await withOrg(orgId, (tx) =>
+      createInventoryItem(tx, orgId, { name: "Teh", initialQty: 5, initialCostMinor: 8000n, standardSellingPriceMinor: 12000n }),
+    );
+    const jual = await createInvoiceRepo(
+      db, orgId,
+      { type: "INVOICE", contactId: contact.id, issueDate: "2026-09-06", dueDate: "2026-09-20" },
+      [{ description: "Teh", quantity: 2, unitPriceMinor: 12000n, catalogItemId: barang.id }],
+    );
+    const entryJual = await postInvoiceToLedger(db, orgId, jual.id, "owner@toko.id");
+    const afterJual = await withOrg(orgId, (tx) => getInventoryItem(tx, orgId, barang.id));
+    expect(Number(afterJual!.currentQty)).toBe(5);
+    const linesJual = await db.select().from(journalLines).where(eq(journalLines.entryId, entryJual));
+    expect(linesJual.length).toBe(2); // Dr Piutang + Cr Pendapatan saja
+
+    const beli = await createInvoiceRepo(
+      db, orgId,
+      { type: "BILL", contactId: contact.id, issueDate: "2026-09-06", dueDate: "2026-09-20" },
+      [{ description: "Teh", quantity: 3, unitPriceMinor: 8000n, catalogItemId: barang.id }],
+    );
+    await postInvoiceToLedger(db, orgId, beli.id, "owner@toko.id");
+    const afterBeli = await withOrg(orgId, (tx) => getInventoryItem(tx, orgId, barang.id));
+    expect(Number(afterBeli!.currentQty)).toBe(5);
+    const txs = await withOrg(orgId, (tx) => listItemTransactions(tx, orgId, barang.id));
+    expect(txs.filter((t) => t.sourceType === "INVOICE").length).toBe(0);
+  });
+
+  it("VOID kembalikan stok + jurnal pembalik tertaut", async () => {
+    const { postInvoiceToLedger, voidInvoiceWithReversal } = await import("@/server/invoicing/posting");
+    const { getInventoryItem } = await import("@/server/db/repos/inventory.repo");
+    const { journalEntries } = await import("@/server/db/schema/journal");
+    const { invoices } = await import("@/server/db/schema/invoicing");
+    const { eq } = await import("drizzle-orm");
+
+    const { orgId, contact } = await setupOrg("void-kembali", "PERPETUAL");
+    const barang = await withOrg(orgId, (tx) =>
+      createInventoryItem(tx, orgId, { name: "Gula", initialQty: 10, initialCostMinor: 15000n, standardSellingPriceMinor: 20000n }),
+    );
+    const inv = await createInvoiceRepo(
+      db, orgId,
+      { type: "INVOICE", contactId: contact.id, issueDate: "2026-09-06", dueDate: "2026-09-20" },
+      [{ description: "Gula", quantity: 2, unitPriceMinor: 20000n, catalogItemId: barang.id }],
+    );
+    const entryId = await postInvoiceToLedger(db, orgId, inv.id, "owner@toko.id");
+    const reversalId = await voidInvoiceWithReversal(db, orgId, inv.id, "owner@toko.id");
+    expect(reversalId).toBeTruthy();
+
+    const after = await withOrg(orgId, (tx) => getInventoryItem(tx, orgId, barang.id));
+    expect(Number(after!.currentQty)).toBe(10);
+    const [rev] = await db.select().from(journalEntries).where(eq(journalEntries.id, reversalId!));
+    expect(rev.reversalOfId).toBe(entryId);
+    const [invRow] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
+    expect(invRow.status).toBe("VOID");
+    await expect(voidInvoiceWithReversal(db, orgId, inv.id, "owner@toko.id")).rejects.toThrow("FAKTUR_SUDAH_VOID");
+  });
+});
