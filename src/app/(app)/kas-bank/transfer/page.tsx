@@ -20,7 +20,7 @@ export default async function TransferPage() {
     <div className="space-y-6">
       <PageHeader
         title="Transfer Bank"
-        eyebrow="Pindahkan dana antar kas dan bank — langsung menjadi jurnal seimbang."
+        eyebrow="Pindahkan dana antar kas dan bank, langsung menjadi jurnal seimbang."
         actions={
           <Link href="/kas-bank/transfer/baru">
             <Button

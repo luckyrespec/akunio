@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Money } from "@/core/money/money";
+import { terbilangRupiah } from "@/core/money/terbilang";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -170,13 +171,16 @@ export function CashEntryDetail({
                 className="border-amber-500/30 text-amber-700 bg-amber-50/50 text-[11px]"
               >
                 <Clock className="size-3 mr-1" />
-                Draft — belum masuk buku besar
+                Draft, belum masuk buku besar
               </Badge>
             )}
             <p className="font-display text-2xl font-semibold text-ink tnum">
               {Money.formatIdr(detail.amountMinor)}
             </p>
           </div>
+          <p className="text-xs text-terra font-medium -mt-1">
+            {terbilangRupiah(detail.amountMinor)}
+          </p>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
             <div className="flex justify-between gap-4 border-b border-rule/60 py-1.5">
               <dt className="text-ink-soft">Arus dana</dt>
@@ -244,7 +248,7 @@ export function CashEntryDetail({
               Jurnal {journal.number}
             </h2>
             <p className="text-xs text-ink-soft">
-              Seimbang otomatis — total debit sama dengan total kredit.
+              Seimbang otomatis. Total debit sama dengan total kredit.
             </p>
           </div>
           <div className="overflow-x-auto">

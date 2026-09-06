@@ -25,19 +25,19 @@ const KIND_COPY: Record<
   BAYAR: {
     emptyTitle: "Belum ada pengeluaran bulan ini",
     emptyHint:
-      "Klik Tambah Pembayaran di atas — mis. bayar listrik Rp500.000 dari Kas.",
+      "Klik Tambah Pembayaran di atas. Contoh: bayar listrik Rp500.000 dari Kas.",
     icon: ArrowUpRight,
   },
   TERIMA: {
     emptyTitle: "Belum ada pemasukan bulan ini",
     emptyHint:
-      "Klik Tambah Penerimaan di atas — mis. terima jasa Rp2.000.000 ke Bank.",
+      "Klik Tambah Penerimaan di atas. Contoh: terima jasa Rp2.000.000 ke Bank.",
     icon: ArrowDownLeft,
   },
   TRANSFER: {
     emptyTitle: "Belum ada perpindahan dana",
     emptyHint:
-      "Klik Tambah Transfer di atas — mis. setorkan Rp1.000.000 dari Kas ke Bank.",
+      "Klik Tambah Transfer di atas. Contoh: setorkan Rp1.000.000 dari Kas ke Bank.",
     icon: ArrowLeftRight,
   },
 };

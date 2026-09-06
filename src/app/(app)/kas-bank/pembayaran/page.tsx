@@ -20,7 +20,7 @@ export default async function PembayaranPage() {
     <div className="space-y-6">
       <PageHeader
         title="Pembayaran"
-        eyebrow="Catat pengeluaran kas dan bank — langsung menjadi jurnal seimbang."
+        eyebrow="Catat pengeluaran kas dan bank, langsung menjadi jurnal seimbang."
         actions={
           <Link href="/kas-bank/pembayaran/baru">
             <Button

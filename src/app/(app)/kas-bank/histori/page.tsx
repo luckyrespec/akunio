@@ -39,7 +39,7 @@ export default async function HistoriPage({
     <div className="space-y-6">
       <PageHeader
         title="Histori Bank"
-        eyebrow="Mutasi kas dan bank versi pembukuan — bandingkan dengan rekening koran saat rekonsiliasi."
+        eyebrow="Mutasi kas dan bank versi pembukuan. Bandingkan dengan rekening koran saat rekonsiliasi."
       />
 
       <form

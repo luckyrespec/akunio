@@ -20,7 +20,9 @@ export default async function PenerimaanBaruPage() {
     "TERIMA"
   );
   const quickPicks: QuickPick[] = QUICK_TERIMA.flatMap((q) => {
-    const hit = leaf.find((a) => q.codes.includes(a.code));
+    const hit = q.codes
+      .map((code) => leaf.find((a) => a.code === code))
+      .find((a): a is (typeof leaf)[number] => !!a);
     return hit ? [{ accountId: hit.id, label: q.label }] : [];
   });
 

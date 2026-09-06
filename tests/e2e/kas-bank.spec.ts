@@ -13,6 +13,9 @@ test("pembayaran tercatat dan mendarat di detail", async ({ page }) => {
     timeout: 15000,
   });
   await page.getByRole("button", { name: "Gaji", exact: true }).click();
+  await expect(
+    page.getByTestId("kas-bank-counter").getByText("5200")
+  ).toBeVisible({ timeout: 5000 });
   await page.getByTestId("kas-bank-cash").getByRole("combobox").click();
   await page
     .getByPlaceholder("Cari kode / nama akun...")

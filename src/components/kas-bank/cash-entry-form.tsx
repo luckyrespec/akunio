@@ -26,6 +26,9 @@ import {
 } from "lucide-react";
 import { createCashEntryAction } from "@/server/actions/cash-bank.actions";
 import { uploadDocumentAction } from "@/server/actions/upload.actions";
+import { useDebounce } from "@/hooks/use-debounce";
+import { Money } from "@/core/money/money";
+import { terbilangRupiah } from "@/core/money/terbilang";
 import { InsightSheet } from "./insight-sheet";
 import type { CashKind } from "@/server/db/schema/cash-bank";
 import type { DailyInsight } from "@/core/kas-bank/insights";
@@ -55,17 +58,17 @@ interface CashEntryFormProps {
 
 const EYEBROW: Record<CashKind, string> = {
   BAYAR:
-    "Pengeluaran kas dan bank — posting mengunci jurnal, draft bisa dicek dulu.",
+    "Pengeluaran kas dan bank. Posting mengunci jurnal, draft bisa dicek dulu.",
   TERIMA:
-    "Pemasukan kas dan bank — posting mengunci jurnal, draft bisa dicek dulu.",
+    "Pemasukan kas dan bank. Posting mengunci jurnal, draft bisa dicek dulu.",
   TRANSFER:
-    "Pindah dana antar kas dan bank — posting mengunci jurnal, draft bisa dicek dulu.",
+    "Pindah dana antar kas dan bank. Posting mengunci jurnal, draft bisa dicek dulu.",
 };
 
 const COUNTER_HINT: Record<CashKind, string> = {
-  BAYAR: "Beban atau tujuan pengeluaran — mis. Beban Gaji.",
-  TERIMA: "Sumber pemasukan — mis. Pendapatan Usaha.",
-  TRANSFER: "Rekening tujuan — harus berbeda dari rekening asal.",
+  BAYAR: "Beban atau tujuan pengeluaran. Mis. Beban Gaji.",
+  TERIMA: "Sumber pemasukan. Mis. Pendapatan Usaha.",
+  TRANSFER: "Rekening tujuan. Harus berbeda dari rekening asal.",
 };
 
 const CARD_HEAD: Record<CashKind, { title: string; desc: string }> = {
@@ -92,18 +95,18 @@ const CASH_PLACEHOLDER: Record<CashKind, string> = {
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 const FRIENDLY_ERROR: Record<string, string> = {
-  AKUN_SAMA: "Akun asal dan tujuan sama — pilih dua akun yang berbeda.",
+  AKUN_SAMA: "Akun asal dan tujuan sama. Pilih dua akun yang berbeda.",
   BUKAN_AKUN_KAS: "Akun pertama harus Kas atau Bank.",
   TRANSFER_HARUS_ANTAR_KAS:
-    "Transfer hanya antar Kas/Bank — pilih dua rekening kas.",
+    "Transfer hanya antar Kas/Bank. Pilih dua rekening kas.",
   NOMINAL_HARUS_POSITIF: "Nominal harus lebih dari Rp0.",
-  TANGGAL_TIDAK_VALID: "Tanggal tidak valid — gunakan format kalender.",
-  AKUN_TIDAK_DITEMUKAN: "Akun tidak ditemukan — muat ulang halaman.",
-  AKUN_DIARSIPKAN: "Akun sudah diarsipkan — pilih akun aktif lain.",
+  TANGGAL_TIDAK_VALID: "Tanggal tidak valid. Gunakan format kalender.",
+  AKUN_TIDAK_DITEMUKAN: "Akun tidak ditemukan. Muat ulang halaman.",
+  AKUN_DIARSIPKAN: "Akun sudah diarsipkan. Pilih akun aktif lain.",
   PERIODE_TUTUP:
-    "Periode tanggal itu sudah ditutup — pilih tanggal di periode berjalan.",
+    "Periode tanggal itu sudah ditutup. Pilih tanggal di periode berjalan.",
   PERIODE_TIDAK_DITEMUKAN:
-    "Tidak ada periode untuk tanggal itu — periksa Pengaturan.",
+    "Tidak ada periode untuk tanggal itu. Periksa Pengaturan.",
 };
 
 function friendlyError(raw: string): string {
@@ -137,6 +140,16 @@ export function CashEntryForm({
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const head = CARD_HEAD[kind];
+
+  const debouncedAmount = useDebounce(amount, 100);
+  const amountWords = React.useMemo(() => {
+    if (!debouncedAmount.trim()) return null;
+    try {
+      return terbilangRupiah(Money.parseIdr(debouncedAmount).minor);
+    } catch {
+      return null;
+    }
+  }, [debouncedAmount]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
@@ -178,7 +191,7 @@ export function CashEntryForm({
       return;
     }
     if (!amount.trim()) {
-      setError("Nominal wajib diisi — tulis angka saja, mis. 1500000.");
+      setError("Nominal wajib diisi. Tulis angka saja, mis. 1500000.");
       return;
     }
     setLoading(true);
@@ -383,6 +396,14 @@ export function CashEntryForm({
           <p className="text-[11px] leading-relaxed text-ink-soft">
             Tulis angka saja, tanpa titik.
           </p>
+          {amountWords && (
+            <p
+              data-testid="kas-bank-terbilang"
+              className="text-[11px] leading-relaxed text-terra font-medium"
+            >
+              {amountWords}
+            </p>
+          )}
         </div>
 
         {!transferMode && contacts.length > 0 && (
@@ -399,7 +420,7 @@ export function CashEntryForm({
               onChange={(e) => setContactId(e.target.value)}
               className="w-full rounded-md border border-rule bg-canvas px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-terra"
             >
-              <option value="">— Tanpa kontak —</option>
+              <option value="">Tanpa kontak</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}

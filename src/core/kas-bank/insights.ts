@@ -47,7 +47,7 @@ const INSIGHTS: DailyInsight[] = [
   },
   {
     title: "Setorkan tunai ke bank secara rutin",
-    body: "Kas tunai yang mengendap di laci berisiko hilang dan sulit diawasi. Jadwalkan setoran — mis. setiap ada kelipatan Rp1.000.000.",
+    body: "Kas tunai yang mengendap di laci berisiko hilang dan sulit diawasi. Jadwalkan setoran, mis. setiap kas terkumpul Rp1.000.000.",
     source: "SAK EMKM · Bab 8 Aset dan Liabilitas Keuangan",
     bab: 8,
   },

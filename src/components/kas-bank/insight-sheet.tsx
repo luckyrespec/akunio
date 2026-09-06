@@ -9,7 +9,7 @@ import { getSakChapterForSheetAction } from "@/server/actions/sak.actions";
 import type { SakChapter } from "@/server/db/repos/sak-docs.repo";
 import type { DailyInsight } from "@/core/kas-bank/insights";
 
-/** Tombol "Pelajari standar" — membuka isi Bab SAK EMKM dalam sheet. */
+/** Tombol Pelajari standar. Membuka isi Bab SAK EMKM dalam sheet. */
 export function InsightSheet({ insight }: { insight: DailyInsight }) {
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -57,7 +57,7 @@ export function InsightSheet({ insight }: { insight: DailyInsight }) {
       <SakRuleSheet
         open={open}
         onOpenChange={setOpen}
-        heading={`Bab ${insight.bab} — ${chapter?.title ?? "Standar SAK EMKM"}`}
+        heading={`Bab ${insight.bab}: ${chapter?.title ?? "Standar SAK EMKM"}`}
         description={
           chapter?.description ?? "Ringkasan aturan terkait insight harian ini."
         }
