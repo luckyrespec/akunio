@@ -14,6 +14,14 @@ import {
   postOpnameAdjustment,
 } from "@/server/db/repos/inventory.repo";
 import { Money } from "@/core/money/money";
+import { eq } from "drizzle-orm";
+import { inventoryItems } from "@/server/db/schema/inventory";
+import {
+  putInventoryImage,
+  deleteDocument,
+  validateInventoryImage,
+  MAX_INVENTORY_IMAGE_BYTES,
+} from "@/server/storage/storage";
 
 export async function getInventoryOverviewAction() {
   const ctx = await requireContext();
@@ -247,9 +255,83 @@ export async function updateInventorySettingsAction(payload: {
     );
     revalidatePath("/pengaturan");
     revalidatePath("/persediaan");
+    revalidatePath("/persediaan/daftar");
     return { ok: true, settings: updated };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memperbarui pengaturan persediaan";
+    return { ok: false, error: message };
+  }
+}
+
+export async function updateItemImageAction(itemId: string, formData: FormData) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "File foto wajib diisi" };
+    }
+    if (file.size > MAX_INVENTORY_IMAGE_BYTES) {
+      return { ok: false, error: "Ukuran foto maksimal 500 KB (kompres dulu di form)" };
+    }
+    const buffer = Buffer.from(await file.arrayBuffer());
+    try {
+      validateInventoryImage(buffer, file.type);
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Foto tidak valid" };
+    }
+    const res = await withOrg(ctx.orgId, async (tx) => {
+      const items = await tx
+        .select()
+        .from(inventoryItems)
+        .where(eq(inventoryItems.id, itemId))
+        .limit(1);
+      const current = items[0];
+      if (!current || current.orgId !== ctx.orgId) throw new Error("ITEM_TIDAK_DITEMUKAN");
+      const { storageKey } = await putInventoryImage(ctx.orgId, itemId, { buffer, mime: file.type });
+      const [updated] = await tx
+        .update(inventoryItems)
+        .set({ imageStorageKey: storageKey, imageMime: file.type, updatedAt: new Date() })
+        .where(eq(inventoryItems.id, itemId))
+        .returning();
+      return { updated, oldKey: current.imageStorageKey };
+    });
+    if (res.oldKey) {
+      try { await deleteDocument(res.oldKey); } catch { /* best-effort */ }
+    }
+    revalidatePath("/persediaan/daftar");
+    revalidatePath(`/persediaan/daftar/${itemId}`);
+    return { ok: true, item: res.updated };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal menyimpan foto";
+    return { ok: false, error: message };
+  }
+}
+
+export async function deleteItemImageAction(itemId: string) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const oldKey = await withOrg(ctx.orgId, async (tx) => {
+      const items = await tx
+        .select()
+        .from(inventoryItems)
+        .where(eq(inventoryItems.id, itemId))
+        .limit(1);
+      const current = items[0];
+      if (!current || current.orgId !== ctx.orgId) throw new Error("ITEM_TIDAK_DITEMUKAN");
+      await tx
+        .update(inventoryItems)
+        .set({ imageStorageKey: null, imageMime: null, updatedAt: new Date() })
+        .where(eq(inventoryItems.id, itemId));
+      return current.imageStorageKey;
+    });
+    if (oldKey) {
+      try { await deleteDocument(oldKey); } catch { /* best-effort */ }
+    }
+    revalidatePath("/persediaan/daftar");
+    revalidatePath(`/persediaan/daftar/${itemId}`);
+    return { ok: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal menghapus foto";
     return { ok: false, error: message };
   }
 }
