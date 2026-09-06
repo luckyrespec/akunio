@@ -39,8 +39,11 @@ test("batch bisa sembunyikan kolom opsional", async ({ page }) => {
   await expect(page.getByRole("columnheader", { name: /Barcode Pabrik/ })).toBeVisible();
   await page.getByTestId("batch-kolom-toggle").click();
   await page.getByRole("menuitemcheckbox", { name: "Kategori" }).click();
+  // Dropdown harus tetap terbuka untuk toggle kedua (tidak tertutup ulang).
+  await page.getByRole("menuitemcheckbox", { name: "Min. Stok" }).click();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("columnheader", { name: /Kategori/ })).toBeHidden();
+  await expect(page.getByRole("columnheader", { name: /Min\. Stok/ })).toBeHidden();
   await expect(page.getByRole("columnheader", { name: /Barcode Pabrik/ })).toBeVisible();
 });
 

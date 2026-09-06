@@ -563,6 +563,7 @@ function OptionalBadge() {
                       key={col.key}
                       checked={!hiddenCols[col.key]}
                       onCheckedChange={(v) => setHiddenCols((p) => ({ ...p, [col.key]: !v }))}
+                      onSelect={(e) => e.preventDefault()}
                       className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas"
                     >
                       {col.label}
