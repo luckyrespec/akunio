@@ -170,4 +170,64 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("kas-bank repo", () => {
     );
     expect(missing).toBeNull();
   });
+
+  it("lampiran dan keterangan tersinkron ke jurnal", async () => {
+    const { withOrg } = await import("@/server/db/repos/with-org");
+    const { createCashEntryRepo } = await import(
+      "@/server/db/repos/cash-bank.repo"
+    );
+    const { createDocumentRow } = await import(
+      "@/server/db/repos/documents.repo"
+    );
+    const { linkDocumentToEntry, listEntryDocuments } = await import(
+      "@/server/db/repos/journals.repo"
+    );
+    const memo = "Bayar listrik + lampiran";
+    const { out, docId } = await withOrg(orgId, (tx) =>
+      (async () => {
+        const created = await createCashEntryRepo(
+          tx as never,
+          orgId,
+          "t@t.id",
+          {
+            kind: "BAYAR",
+            entryDate: `${year}-04-01`,
+            cashAccountId: kas,
+            counterAccountId: beban,
+            amountMinor: 250_000n,
+            memo,
+          },
+          { post: true }
+        );
+        const doc = await createDocumentRow(tx as never, {
+          orgId,
+          storageKey: "test/nota.pdf",
+          mime: "application/pdf",
+          sizeBytes: 1234,
+        });
+        await linkDocumentToEntry(tx as never, {
+          orgId,
+          entryId: created.journalEntryId,
+          documentId: doc.id,
+          fileName: "nota.pdf",
+        });
+        return { out: created, docId: doc.id };
+      })()
+    );
+    // Keterangan menjadi memo jurnal
+    const { getEntryWithLines } = await import(
+      "@/server/db/repos/journals.repo"
+    );
+    const { db } = await import("@/server/db");
+    const je = await db.transaction((tx) =>
+      getEntryWithLines(tx as never, orgId, out.journalEntryId)
+    );
+    expect(je!.memo).toBe(memo);
+    // Lampiran terbaca dari sisi jurnal
+    const docs = await db.transaction((tx) =>
+      listEntryDocuments(tx as never, orgId, out.journalEntryId)
+    );
+    expect(docs.map((d) => d.id)).toContain(docId);
+    expect(docs[0].fileName).toBe("nota.pdf");
+  });
 });

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { Upload, FileText } from "lucide-react";
+import { Upload, FileText, BookOpen } from "lucide-react";
 import {
   IconArrowRight,
   IconCircleCheck,
@@ -15,6 +15,7 @@ import {
 import { Money } from "@/core/money/money";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SakRuleSheet } from "@/components/sak/sak-rule-sheet";
 import { Reveal } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import {
@@ -26,6 +27,7 @@ import {
   type FindingView,
 } from "../finding-meta";
 import { getFindingRelatedAction, uploadFindingReceiptAction } from "../actions";
+import { getSakCitationDetailAction } from "@/server/actions/ai.actions";
 
 type RelatedItem = Record<string, unknown>;
 
@@ -494,6 +496,18 @@ export function TemuanDetailClient({ finding }: { finding: FindingView }) {
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [relatedLoading, setRelatedLoading] = useState(true);
 
+  // Drawer Sheet Rincian Aturan SAK
+  const [citationSheetOpen, setCitationSheetOpen] = useState(false);
+  const [citationLoading, setCitationLoading] = useState(false);
+  const [citationData, setCitationData] = useState<{
+    bab: number;
+    babTitle: string;
+    description: string;
+    sectionTitle: string;
+    paragraphRange: string;
+    content: string;
+  } | null>(null);
+
   const meta = typeMetadata(finding.type);
   const sev = severityMeta(finding.severity);
   const st = statusBadge(finding.status);
@@ -520,6 +534,37 @@ export function TemuanDetailClient({ finding }: { finding: FindingView }) {
   useEffect(() => {
     void loadRelated();
   }, [loadRelated]);
+
+  async function handleOpenCitation() {
+    setCitationLoading(true);
+    setCitationSheetOpen(true);
+    try {
+      const res = await getSakCitationDetailAction(String(meta.bab), meta.paragraph || "");
+      if (res.ok && res.data) {
+        setCitationData(res.data);
+      } else {
+        setCitationData({
+          bab: meta.bab,
+          babTitle: meta.babTitle,
+          description: "Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah",
+          sectionTitle: `Bab ${meta.bab}${meta.paragraph ? ` Paragraf ${meta.paragraph}` : ""}`,
+          paragraphRange: meta.paragraph || "",
+          content: res.error || "Rincian standar tidak dapat dimuat.",
+        });
+      }
+    } catch {
+      setCitationData({
+        bab: meta.bab,
+        babTitle: meta.babTitle,
+        description: "Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah",
+        sectionTitle: `Bab ${meta.bab}`,
+        paragraphRange: meta.paragraph || "",
+        content: "Terjadi kesalahan jaringan saat mengambil rincian aturan SAK.",
+      });
+    } finally {
+      setCitationLoading(false);
+    }
+  }
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[5fr_7fr]">
@@ -556,14 +601,15 @@ export function TemuanDetailClient({ finding }: { finding: FindingView }) {
                 <span className="font-semibold text-ink uppercase tracking-wider text-[10px]">
                   Rincian Bukti & Parameter
                 </span>
-                <Link
-                  href={`/aturan?bab=${meta.bab}`}
-                  title={`Buka SAK EMKM ${meta.babTitle} di Aturan Akunio`}
-                  className="text-[10px] text-terra hover:underline font-medium inline-flex items-center gap-1"
+                <button
+                  type="button"
+                  onClick={handleOpenCitation}
+                  title={`Buka rincian SAK EMKM ${meta.babTitle}`}
+                  className="text-[10px] text-terra hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
                 >
                   <span>Ref: {meta.standard}</span>
-                  <span>↗</span>
-                </Link>
+                  <BookOpen className="size-3 text-terra" />
+                </button>
               </div>
               <div className="space-y-1.5 pt-1">
                 {Object.entries(ev).length === 0 && (
@@ -701,6 +747,28 @@ export function TemuanDetailClient({ finding }: { finding: FindingView }) {
           </div>
         )}
       </div>
+
+      <SakRuleSheet
+        open={citationSheetOpen}
+        onOpenChange={setCitationSheetOpen}
+        heading={`Bab ${citationData?.bab ?? meta.bab}: ${citationData?.babTitle ?? meta.babTitle}`}
+        description={
+          citationData?.description ||
+          'Standar Akuntansi Keuangan Entitas Mikro, Kecil, dan Menengah'
+        }
+        loading={citationLoading}
+        blocks={
+          citationData
+            ? [
+                {
+                  title: citationData.sectionTitle || `Bab ${citationData.bab}`,
+                  paragraphRange: citationData.paragraphRange,
+                  content: citationData.content,
+                },
+              ]
+            : []
+        }
+      />
     </div>
   );
 }
