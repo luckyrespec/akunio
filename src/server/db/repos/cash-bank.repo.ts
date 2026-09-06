@@ -228,6 +228,47 @@ export async function listCashEntriesRepo(
   }));
 }
 
+export interface CashSummary {
+  postedTotalMinor: bigint;
+  draftCount: number;
+}
+
+/** Total POSTED + hitungan DRAFT untuk satu kind dalam rentang tanggal. */
+export async function getCashSummaryRepo(
+  q: Queryable,
+  orgId: string,
+  kind: CashKind,
+  fromISO: string,
+  toISO: string
+): Promise<CashSummary> {
+  const [posted] = await q
+    .select({ total: sql<string>`COALESCE(SUM(${kasBankEntries.amountMinor}), 0)` })
+    .from(kasBankEntries)
+    .where(
+      and(
+        eq(kasBankEntries.orgId, orgId),
+        eq(kasBankEntries.kind, kind),
+        eq(kasBankEntries.status, "POSTED"),
+        gte(kasBankEntries.entryDate, fromISO),
+        lte(kasBankEntries.entryDate, toISO)
+      )
+    );
+  const [draft] = await q
+    .select({ n: sql<number>`count(*)::int` })
+    .from(kasBankEntries)
+    .where(
+      and(
+        eq(kasBankEntries.orgId, orgId),
+        eq(kasBankEntries.kind, kind),
+        eq(kasBankEntries.status, "DRAFT")
+      )
+    );
+  return {
+    postedTotalMinor: BigInt(posted?.total ?? 0),
+    draftCount: draft?.n ?? 0,
+  };
+}
+
 export interface CashHistoryRow {
   entryId: string;
   entryDate: string;

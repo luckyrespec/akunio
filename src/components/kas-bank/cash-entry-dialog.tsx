@@ -46,6 +46,28 @@ interface CashEntryDialogProps {
   transferMode?: boolean;
 }
 
+const COUNTER_HINT: Record<CashKind, string> = {
+  BAYAR: "Beban atau tujuan pengeluaran — mis. Beban Gaji.",
+  TERIMA: "Sumber pemasukan — mis. Pendapatan Usaha.",
+  TRANSFER: "Rekening tujuan — harus berbeda dari rekening asal.",
+};
+
+const FRIENDLY_ERROR: Record<string, string> = {
+  AKUN_SAMA: "Akun asal dan tujuan sama — pilih dua akun yang berbeda.",
+  BUKAN_AKUN_KAS: "Akun pertama harus Kas atau Bank.",
+  TRANSFER_HARUS_ANTAR_KAS: "Transfer hanya antar Kas/Bank — pilih dua rekening kas.",
+  NOMINAL_HARUS_POSITIF: "Nominal harus lebih dari Rp0.",
+  TANGGAL_TIDAK_VALID: "Tanggal tidak valid — gunakan format kalender.",
+  AKUN_TIDAK_DITEMUKAN: "Akun tidak ditemukan — muat ulang halaman.",
+  AKUN_DIARSIPKAN: "Akun sudah diarsipkan — pilih akun aktif lain.",
+  PERIODE_TUTUP: "Periode tanggal itu sudah ditutup — pilih tanggal di periode berjalan.",
+  PERIODE_TIDAK_DITEMUKAN: "Tidak ada periode untuk tanggal itu — periksa Pengaturan.",
+};
+
+function friendlyError(raw: string): string {
+  return FRIENDLY_ERROR[raw] ?? raw;
+}
+
 export function CashEntryDialog({
   kind,
   title,
@@ -87,11 +109,11 @@ export function CashEntryDialog({
       return;
     }
     if (transferMode && cashId === counterId) {
-      setError("Akun asal dan tujuan harus berbeda.");
+      setError(friendlyError("AKUN_SAMA"));
       return;
     }
     if (!amount.trim()) {
-      setError("Nominal wajib diisi. Contoh: 1500000.");
+      setError("Nominal wajib diisi — tulis angka saja, mis. 1500000.");
       return;
     }
     setLoading(true);
@@ -107,11 +129,13 @@ export function CashEntryDialog({
       fd.set("memo", memo.trim());
       fd.set("post", post ? "1" : "0");
       const res = await createCashEntryAction(fd);
-      if (!res.ok) throw new Error(res.error);
+      if (!res.ok) throw new Error(friendlyError(res.error));
       setOpen(false);
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal menyimpan.");
+      setError(
+        e instanceof Error ? friendlyError(e.message) : "Gagal menyimpan."
+      );
     } finally {
       setLoading(false);
     }
@@ -133,11 +157,18 @@ export function CashEntryDialog({
           <DialogTitle className="font-display text-base font-semibold">
             {title}
           </DialogTitle>
+          <p className="text-xs text-ink-soft">
+            Otomatis menjadi jurnal seimbang — Anda tidak perlu menghafal
+            debit-kredit.
+          </p>
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
           {error && (
-            <div className="rounded-lg bg-destructive/10 p-2.5 text-xs text-destructive">
+            <div
+              role="alert"
+              className="rounded-lg bg-destructive/10 p-2.5 text-xs text-destructive"
+            >
               {error}
             </div>
           )}
@@ -161,7 +192,10 @@ export function CashEntryDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="kas-bank-cash" className="text-xs font-medium text-ink">
+              <Label
+                htmlFor="kas-bank-cash"
+                className="text-xs font-medium text-ink"
+              >
                 {cashLabel} *
               </Label>
               <select
@@ -179,7 +213,10 @@ export function CashEntryDialog({
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="kas-bank-counter" className="text-xs font-medium text-ink">
+              <Label
+                htmlFor="kas-bank-counter"
+                className="text-xs font-medium text-ink"
+              >
                 {counterLabel} *
               </Label>
               <select
@@ -196,12 +233,18 @@ export function CashEntryDialog({
                   </option>
                 ))}
               </select>
+              <p className="text-[11px] leading-relaxed text-ink-soft">
+                {COUNTER_HINT[kind]}
+              </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="kas-bank-date" className="text-xs font-medium text-ink">
+              <Label
+                htmlFor="kas-bank-date"
+                className="text-xs font-medium text-ink"
+              >
                 Tanggal *
               </Label>
               <Input
@@ -215,7 +258,10 @@ export function CashEntryDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="kas-bank-amount" className="text-xs font-medium text-ink">
+              <Label
+                htmlFor="kas-bank-amount"
+                className="text-xs font-medium text-ink"
+              >
                 Nominal (Rp) *
               </Label>
               <Input
@@ -224,16 +270,22 @@ export function CashEntryDialog({
                 inputMode="numeric"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="Contoh: 1500000"
-                className="text-xs bg-canvas"
+                placeholder="1500000"
+                className="text-xs bg-canvas tnum"
                 required
               />
+              <p className="text-[11px] leading-relaxed text-ink-soft">
+                Tulis angka saja, tanpa titik.
+              </p>
             </div>
           </div>
 
           {!transferMode && contacts.length > 0 && (
             <div className="space-y-1.5">
-              <Label htmlFor="kas-bank-contact" className="text-xs font-medium text-ink">
+              <Label
+                htmlFor="kas-bank-contact"
+                className="text-xs font-medium text-ink"
+              >
                 Kontak (opsional)
               </Label>
               <select
@@ -253,7 +305,10 @@ export function CashEntryDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="kas-bank-memo" className="text-xs font-medium text-ink">
+            <Label
+              htmlFor="kas-bank-memo"
+              className="text-xs font-medium text-ink"
+            >
               Keterangan
             </Label>
             <Textarea
@@ -267,7 +322,12 @@ export function CashEntryDialog({
             />
           </div>
 
-          <DialogFooter className="pt-2">
+          <p className="text-[11px] leading-relaxed text-ink-soft">
+            Posting langsung mengunci jurnal; Draft bisa dicek dulu sebelum
+            dicatat.
+          </p>
+
+          <DialogFooter className="pt-1">
             <Button
               type="button"
               variant="outline"
@@ -287,7 +347,9 @@ export function CashEntryDialog({
                 onClick={() => doSubmit(true)}
                 className="text-xs rounded-r-none"
               >
-                {loading && <Loader2 className="size-3.5 animate-spin mr-1.5" />}
+                {loading && (
+                  <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                )}
                 Simpan & Posting
               </Button>
               <DropdownMenu>

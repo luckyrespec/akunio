@@ -1,14 +1,12 @@
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
-import { listCashEntriesRepo } from "@/server/db/repos/cash-bank.repo";
-import { listContactsRepo } from "@/server/db/repos/contacts.repo";
-import { accounts } from "@/server/db/schema/org";
+import { PageHeader } from "@/components/page-header";
 import { CashEntriesTable } from "@/components/kas-bank/cash-entries-table";
 import {
   CashEntryDialog,
   type QuickPick,
 } from "@/components/kas-bank/cash-entry-dialog";
-import { eq } from "drizzle-orm";
+import { Money } from "@/core/money/money";
+import { loadCashPageData } from "../_data";
 
 const QUICK_TERIMA: Array<{ code: string; label: string }> = [
   { code: "4100", label: "Usaha" },
@@ -19,53 +17,40 @@ const QUICK_TERIMA: Array<{ code: string; label: string }> = [
 
 export default async function PenerimaanPage() {
   const ctx = await requireContext();
-  const [entries, allAccounts, contacts] = await Promise.all([
-    listCashEntriesRepo(db, ctx.orgId, "TERIMA"),
-    db
-      .select({
-        id: accounts.id,
-        code: accounts.code,
-        name: accounts.name,
-        parentCode: accounts.parentCode,
-        isCash: accounts.isCash,
-      })
-      .from(accounts)
-      .where(eq(accounts.orgId, ctx.orgId)),
-    listContactsRepo(db, ctx.orgId),
-  ]);
-
-  const parentCodes = new Set(
-    allAccounts.map((a) => a.parentCode).filter((c): c is string => !!c)
-  );
-  const leaf = allAccounts.filter((a) => !parentCodes.has(a.code));
-  const cashAccounts = leaf.filter((a) => a.isCash);
+  const { entries, leaf, cashAccounts, contacts, summary, monthLabel } =
+    await loadCashPageData(ctx.orgId, "TERIMA");
   const quickPicks: QuickPick[] = QUICK_TERIMA.flatMap((q) => {
     const hit = leaf.find((a) => a.code === q.code);
     return hit ? [{ accountId: hit.id, label: q.label }] : [];
   });
+  const showSummary =
+    summary.postedTotalMinor > 0n || summary.draftCount > 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-xl font-semibold text-ink">
-            Penerimaan
-          </h1>
-          <p className="text-sm text-ink-soft">
-            Catat pemasukan kas/bank — otomatis menjadi jurnal.
-          </p>
-        </div>
-        <CashEntryDialog
-          kind="TERIMA"
-          title="Catat Penerimaan"
-          triggerLabel="Tambah Penerimaan"
-          cashAccounts={cashAccounts}
-          counterAccounts={leaf}
-          contacts={contacts.map((c) => ({ id: c.id, name: c.name }))}
-          quickPicks={quickPicks}
-        />
-      </div>
-      <CashEntriesTable entries={entries} />
+      <PageHeader
+        title="Penerimaan"
+        eyebrow="Catat pemasukan kas dan bank — langsung menjadi jurnal seimbang."
+        actions={
+          <CashEntryDialog
+            kind="TERIMA"
+            title="Catat Penerimaan"
+            triggerLabel="Tambah Penerimaan"
+            cashAccounts={cashAccounts}
+            counterAccounts={leaf}
+            contacts={contacts}
+            quickPicks={quickPicks}
+          />
+        }
+      />
+      {showSummary && (
+        <p className="text-xs text-ink-soft tnum -mt-3">
+          {monthLabel} · Masuk {Money.formatIdr(summary.postedTotalMinor)}
+          {summary.draftCount > 0 &&
+            ` · ${summary.draftCount} draft menunggu dicek`}
+        </p>
+      )}
+      <CashEntriesTable kind="TERIMA" entries={entries} />
     </div>
   );
 }

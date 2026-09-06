@@ -3,18 +3,13 @@ import { db } from "@/server/db";
 import { getCashHistoryRepo } from "@/server/db/repos/cash-bank.repo";
 import { accounts } from "@/server/db/schema/org";
 import { Money } from "@/core/money/money";
+import { PageHeader } from "@/components/page-header";
 import { HistoryTable } from "@/components/kas-bank/history-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { eq, and, or } from "drizzle-orm";
-
-function monthRange(d: Date): { dari: string; sampai: string } {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const last = new Date(y, d.getMonth() + 1, 0).getDate();
-  return { dari: `${y}-${m}-01`, sampai: `${y}-${m}-${last}` };
-}
+import { currentMonthRange } from "../_data";
 
 export default async function HistoriPage({
   searchParams,
@@ -32,7 +27,7 @@ export default async function HistoriPage({
         or(eq(accounts.isBank, true), eq(accounts.isCash, true))
       )
     );
-  const def = monthRange(new Date());
+  const def = currentMonthRange();
   const akun = sp.akun ?? cashAccounts[0]?.id ?? "";
   const dari = sp.dari ?? def.dari;
   const sampai = sp.sampai ?? def.sampai;
@@ -42,19 +37,18 @@ export default async function HistoriPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-xl font-semibold text-ink">
-          Histori Bank
-        </h1>
-        <p className="text-sm text-ink-soft">
-          Mutasi kas/bank versi pembukuan — dasar pencocokan rekonsiliasi.
-        </p>
-      </div>
+      <PageHeader
+        title="Histori Bank"
+        eyebrow="Mutasi kas dan bank versi pembukuan — bandingkan dengan rekening koran saat rekonsiliasi."
+      />
 
-      <form method="get" className="flex flex-wrap items-end gap-3">
+      <form
+        method="get"
+        className="flex flex-wrap items-end gap-3 rounded-xl border border-rule bg-paper p-4 shadow-2xs"
+      >
         <div className="space-y-1.5">
           <Label htmlFor="hist-akun" className="text-xs font-medium text-ink">
-            Akun
+            Rekening
           </Label>
           <select
             id="hist-akun"
@@ -71,7 +65,7 @@ export default async function HistoriPage({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="hist-dari" className="text-xs font-medium text-ink">
-            Dari
+            Dari tanggal
           </Label>
           <Input
             id="hist-dari"
@@ -86,7 +80,7 @@ export default async function HistoriPage({
             htmlFor="hist-sampai"
             className="text-xs font-medium text-ink"
           >
-            Sampai
+            Sampai tanggal
           </Label>
           <Input
             id="hist-sampai"
@@ -102,12 +96,11 @@ export default async function HistoriPage({
       </form>
 
       {history && (
-        <p className="text-sm text-ink-soft">
-          {history.account.code} {history.account.name} · Saldo awal{" "}
-          {Money.formatIdr(history.openingMinor)}
-        </p>
+        <HistoryTable
+          lede={`${history.account.code} ${history.account.name} · Saldo awal periode ${Money.formatIdr(history.openingMinor)}`}
+          rows={history.rows}
+        />
       )}
-      {history && <HistoryTable rows={history.rows} />}
     </div>
   );
 }
