@@ -1,9 +1,7 @@
 import { and, asc, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
-import {
-  kasBankEntries,
-  type CashKind,
-} from "../schema/cash-bank";
+import { kasBankEntries, type CashKind } from "../schema/cash-bank";
 import { accounts } from "../schema/org";
+import { contacts } from "../schema/invoicing";
 import { journalEntries, journalLines } from "../schema/journal";
 import type { Queryable } from "./queryable";
 import {
@@ -266,6 +264,67 @@ export async function getCashSummaryRepo(
   return {
     postedTotalMinor: BigInt(posted?.total ?? 0),
     draftCount: draft?.n ?? 0,
+  };
+}
+
+export interface CashEntryDetail {
+  id: string;
+  kind: CashKind;
+  number: string;
+  entryDate: string;
+  memo: string;
+  amountMinor: bigint;
+  status: "DRAFT" | "POSTED";
+  journalEntryId: string | null;
+  createdBy: string | null;
+  cashCode: string;
+  cashName: string;
+  counterCode: string;
+  counterName: string;
+  contactName: string | null;
+}
+
+/** Satu entri kas-bank beserta nama akun dan kontak, atau null bila tak ada. */
+export async function getCashEntryDetailRepo(
+  q: Queryable,
+  orgId: string,
+  id: string
+): Promise<CashEntryDetail | null> {
+  const [row] = await q
+    .select()
+    .from(kasBankEntries)
+    .where(and(eq(kasBankEntries.orgId, orgId), eq(kasBankEntries.id, id)))
+    .limit(1);
+  if (!row) return null;
+  const acctRows = await q
+    .select({ id: accounts.id, code: accounts.code, name: accounts.name })
+    .from(accounts)
+    .where(eq(accounts.orgId, orgId));
+  const byId = new Map(acctRows.map((a) => [a.id, a]));
+  let contactName: string | null = null;
+  if (row.contactId) {
+    const [c] = await q
+      .select({ name: contacts.name })
+      .from(contacts)
+      .where(and(eq(contacts.orgId, orgId), eq(contacts.id, row.contactId)))
+      .limit(1);
+    contactName = c?.name ?? null;
+  }
+  return {
+    id: row.id,
+    kind: row.kind,
+    number: row.number,
+    entryDate: row.entryDate,
+    memo: row.memo,
+    amountMinor: row.amountMinor,
+    status: row.status,
+    journalEntryId: row.journalEntryId,
+    createdBy: row.createdBy,
+    cashCode: byId.get(row.cashAccountId)?.code ?? "?",
+    cashName: byId.get(row.cashAccountId)?.name ?? "?",
+    counterCode: byId.get(row.counterAccountId)?.code ?? "?",
+    counterName: byId.get(row.counterAccountId)?.name ?? "?",
+    contactName,
   };
 }
 

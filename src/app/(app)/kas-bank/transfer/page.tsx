@@ -1,14 +1,18 @@
+import Link from "next/link";
 import { requireContext } from "@/server/auth/guard";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import { CashEntriesTable } from "@/components/kas-bank/cash-entries-table";
-import { CashEntryDialog } from "@/components/kas-bank/cash-entry-dialog";
 import { Money } from "@/core/money/money";
 import { loadCashPageData } from "../_data";
 
 export default async function TransferPage() {
   const ctx = await requireContext();
-  const { entries, cashAccounts, summary, monthLabel } =
-    await loadCashPageData(ctx.orgId, "TRANSFER");
+  const { entries, summary, monthLabel } = await loadCashPageData(
+    ctx.orgId,
+    "TRANSFER"
+  );
   const showSummary =
     summary.postedTotalMinor > 0n || summary.draftCount > 0;
 
@@ -18,16 +22,15 @@ export default async function TransferPage() {
         title="Transfer Bank"
         eyebrow="Pindahkan dana antar kas dan bank — langsung menjadi jurnal seimbang."
         actions={
-          <CashEntryDialog
-            kind="TRANSFER"
-            title="Catat Transfer"
-            triggerLabel="Tambah Transfer"
-            cashAccounts={cashAccounts}
-            counterAccounts={cashAccounts}
-            contacts={[]}
-            quickPicks={[]}
-            transferMode
-          />
+          <Link href="/kas-bank/transfer/baru">
+            <Button
+              size="sm"
+              className="h-9 rounded-xl bg-terra px-3.5 text-xs font-medium text-white shadow-none transition-all hover:bg-terra/90 active:scale-[0.98]"
+            >
+              <Plus className="size-4 mr-1.5" />
+              Tambah Transfer
+            </Button>
+          </Link>
         }
       />
       {showSummary && (
@@ -37,7 +40,11 @@ export default async function TransferPage() {
             ` · ${summary.draftCount} draft menunggu dicek`}
         </p>
       )}
-      <CashEntriesTable kind="TRANSFER" entries={entries} />
+      <CashEntriesTable
+        kind="TRANSFER"
+        entries={entries}
+        detailBasePath="/kas-bank/transfer"
+      />
     </div>
   );
 }

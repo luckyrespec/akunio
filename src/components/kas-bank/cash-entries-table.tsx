@@ -45,9 +45,11 @@ const KIND_COPY: Record<
 export function CashEntriesTable({
   kind,
   entries,
+  detailBasePath,
 }: {
   kind: CashKind;
   entries: CashEntryRow[];
+  detailBasePath: string;
 }) {
   const [postingId, setPostingId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -109,8 +111,13 @@ export function CashEntriesTable({
                     <td className="px-4 py-3 text-ink-soft whitespace-nowrap">
                       {e.entryDate}
                     </td>
-                    <td className="px-4 py-3 font-mono text-ink">
-                      {e.number}
+                    <td className="px-4 py-3 font-mono">
+                      <Link
+                        href={`${detailBasePath}/${e.id}`}
+                        className="text-terra hover:underline underline-offset-2"
+                      >
+                        {e.number}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-ink font-medium">
                       {e.cashCode} {e.cashName}

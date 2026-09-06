@@ -129,9 +129,45 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("kas-bank repo", () => {
       "@/server/db/repos/cash-bank.repo"
     );
     const h = await withOrg(orgId, (tx) =>
-      getCashHistoryRepo(tx as never, orgId, kas, `${year}-01-01`, `${year}-12-31`)
+      getCashHistoryRepo(tx as never, orgId, kas, `${year}-01-01`, `${year}-02-15`)
     );
     const last = h.rows[h.rows.length - 1];
     expect(last.balanceMinor).toBe(-150_000n);
+  });
+
+  it("detail entri memuat nama akun dan kontak", async () => {
+    const { withOrg } = await import("@/server/db/repos/with-org");
+    const { createCashEntryRepo, getCashEntryDetailRepo } = await import(
+      "@/server/db/repos/cash-bank.repo"
+    );
+    const out = await withOrg(orgId, (tx) =>
+      createCashEntryRepo(
+        tx as never,
+        orgId,
+        "t@t.id",
+        {
+          kind: "BAYAR",
+          entryDate: `${year}-03-01`,
+          cashAccountId: kas,
+          counterAccountId: beban,
+          amountMinor: 75_000n,
+          memo: "Parkir",
+        },
+        { post: true }
+      )
+    );
+    expect(out.number).toBe(`BBK-${year}-0002`);
+    const detail = await withOrg(orgId, (tx) =>
+      getCashEntryDetailRepo(tx as never, orgId, out.id)
+    );
+    expect(detail?.number).toBe(`BBK-${year}-0002`);
+    expect(detail?.cashCode).toBe("1110");
+    expect(detail?.counterCode).toBe("5900");
+    expect(detail?.contactName).toBeNull();
+    expect(detail?.journalEntryId).toBe(out.journalEntryId);
+    const missing = await withOrg(orgId, (tx) =>
+      getCashEntryDetailRepo(tx as never, orgId, "00000000-0000-0000-0000-000000000000")
+    );
+    expect(missing).toBeNull();
   });
 });
