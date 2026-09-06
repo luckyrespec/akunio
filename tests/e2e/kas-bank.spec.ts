@@ -6,6 +6,9 @@ test("pembayaran tercatat dan muncul di list", async ({ page }) => {
   await signupAndVerify(page, "Kasir", email);
   await walkOnboardingToDashboard(page);
   await page.goto("/kas-bank/pembayaran");
+  // Tunggu kompilasi Turbopack + hidrasi selesai sebelum klik (hindari klik mati).
+  await page.waitForLoadState("networkidle", { timeout: 30000 });
+  await page.waitForTimeout(2000);
   await page.getByRole("button", { name: "Tambah Pembayaran" }).click();
   await page.getByRole("button", { name: "Gaji", exact: true }).click();
   await page.getByTestId("kas-bank-amount").fill("150000");
