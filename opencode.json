@@ -1,5 +1,4 @@
 {
-  "plugin": ["@dietrichgebert/ponytail"],
   "mcp": {
     "better-icons": {
       "type": "local",
