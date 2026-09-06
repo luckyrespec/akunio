@@ -28,6 +28,22 @@ test("tambah barang dengan Generate SKU", async ({ page }) => {
   await expect(page.getByText("Kertas HVS A4 E2E").first()).toBeVisible();
 });
 
+test("batch bisa sembunyikan kolom opsional", async ({ page }) => {
+  const email = `sed${Date.now()}@test.id`;
+  await signupAndVerify(page, "Gudang", email);
+  await walkOnboardingToDashboard(page);
+  await page.goto("/persediaan/daftar/baru/batch");
+  await page.waitForLoadState("networkidle", { timeout: 30000 });
+  await page.waitForTimeout(2000);
+  await expect(page.getByRole("columnheader", { name: /Kategori/ })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: /Barcode Pabrik/ })).toBeVisible();
+  await page.getByTestId("batch-kolom-toggle").click();
+  await page.getByRole("menuitemcheckbox", { name: "Kategori" }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("columnheader", { name: /Kategori/ })).toBeHidden();
+  await expect(page.getByRole("columnheader", { name: /Barcode Pabrik/ })).toBeVisible();
+});
+
 test("sidebar persediaan punya anak Daftar dan Opname", async ({ page }) => {
   const email = `sed${Date.now()}@test.id`;
   await signupAndVerify(page, "Gudang", email);

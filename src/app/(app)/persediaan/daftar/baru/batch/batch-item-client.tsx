@@ -15,28 +15,28 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   AlertCircle,
-  Package,
-  Coins,
-  TrendingUp,
   ChevronDown,
 } from "lucide-react";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
-import { Reveal, Stagger, StaggerItem, AnimatedNumber } from "@/components/motion";
-import { Money } from "@/core/money/money";
+import { Reveal } from "@/components/motion";
 import { createBatchItemsAction } from "@/server/actions/inventory.actions";
 
 interface BatchRow {
   id: string;
   code: string;
   appBarcode: string;
+  barcodePabrik: string;
   name: string;
   category: string;
   unit: string;
@@ -47,11 +47,11 @@ interface BatchRow {
 }
 
 const DEFAULT_ROWS: BatchRow[] = [
-  { id: "1", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
-  { id: "2", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
-  { id: "3", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
-  { id: "4", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
-  { id: "5", code: "", appBarcode: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "1", code: "", appBarcode: "", barcodePabrik: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "2", code: "", appBarcode: "", barcodePabrik: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "3", code: "", appBarcode: "", barcodePabrik: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "4", code: "", appBarcode: "", barcodePabrik: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
+  { id: "5", code: "", appBarcode: "", barcodePabrik: "", name: "", category: "", unit: "Pcs", initialQty: 0, initialCostText: "", standardSellingPriceText: "", minStockAlert: "5" },
 ];
 
 export function BatchItemClient() {
@@ -61,6 +61,27 @@ export function BatchItemClient() {
   const [error, setError] = useState<string | null>(null);
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Kolom opsional yang disembunyikan user (display saja — nilai tetap ikut tersimpan).
+  const [hiddenCols, setHiddenCols] = useState<Record<string, boolean>>({});
+
+const OPTIONAL_COLS = [
+  { key: "appBarcode", label: "App-barcode" },
+  { key: "barcodePabrik", label: "Barcode Pabrik" },
+  { key: "category", label: "Kategori" },
+  { key: "unit", label: "Satuan" },
+  { key: "initialQty", label: "Stok Awal" },
+  { key: "initialCostText", label: "Harga Modal" },
+  { key: "standardSellingPriceText", label: "Harga Jual" },
+  { key: "minStockAlert", label: "Min. Stok" },
+] as const;
+
+function OptionalBadge() {
+  return (
+    <span className="ml-1.5 rounded border border-rule bg-canvas px-1 py-px font-sans text-[9px] normal-case tracking-normal text-ink-soft">
+      opsional
+    </span>
+  );
+}
 
   const handleCellChange = (id: string, field: keyof BatchRow, value: string | number) => {
     setRows((prev) =>
@@ -76,6 +97,7 @@ export function BatchItemClient() {
         id: newId,
         code: "",
         appBarcode: "",
+        barcodePabrik: "",
         name: "",
         category: "",
         unit: "Pcs",
@@ -94,6 +116,7 @@ export function BatchItemClient() {
         id: String(Date.now() + i) + Math.random().toString(36).substring(2, 5),
         code: "",
         appBarcode: "",
+        barcodePabrik: "",
         name: "",
         category: "",
         unit: "Pcs",
@@ -113,6 +136,7 @@ export function BatchItemClient() {
           id: "1",
           code: "",
           appBarcode: "",
+          barcodePabrik: "",
           name: "",
           category: "",
           unit: "Pcs",
@@ -133,41 +157,6 @@ export function BatchItemClient() {
   );
   const validRowsCount = validRows.length;
 
-  // Real-time batch KPI metrics
-  const totalEstimatedCostMinor = useMemo(() => {
-    let total = BigInt(0);
-    for (const r of validRows) {
-      if (r.initialQty > 0 && r.initialCostText.trim()) {
-        try {
-          const unitCost = Money.parseIdr(r.initialCostText).minor;
-          total += unitCost * BigInt(r.initialQty);
-        } catch {
-          // ignore parsing error
-        }
-      }
-    }
-    return total;
-  }, [validRows]);
-
-  const totalEstimatedSellingMinor = useMemo(() => {
-    let total = BigInt(0);
-    for (const r of validRows) {
-      if (r.initialQty > 0 && r.standardSellingPriceText.trim()) {
-        try {
-          const unitPrice = Money.parseIdr(r.standardSellingPriceText).minor;
-          total += unitPrice * BigInt(r.initialQty);
-        } catch {
-          // ignore parsing error
-        }
-      }
-    }
-    return total;
-  }, [validRows]);
-
-  const uniqueCategoriesCount = useMemo(() => {
-    return new Set(validRows.map((r) => r.category.trim()).filter(Boolean)).size;
-  }, [validRows]);
-
   // 1. Download Template CSV / Excel
   const handleDownloadTemplate = () => {
     const headers = [
@@ -179,12 +168,14 @@ export function BatchItemClient() {
       "Harga Modal",
       "Harga Jual",
       "Min Stok",
+      "App-barcode",
+      "Barcode Pabrik",
     ];
 
     const sampleRows = [
-      ["BRG-001", "Kertas HVS A4 70gr", "Alat Tulis", "Rim", "10", "45000", "55000", "5"],
-      ["BRG-002", "Pulpen Gel Hitam 0.5", "Alat Tulis", "Lusin", "25", "30000", "38000", "10"],
-      ["BRG-003", "Buku Tulis Sinar 38", "Buku", "Pak", "15", "25000", "32000", "5"],
+      ["BRG-001", "Kertas HVS A4 70gr", "Alat Tulis", "Rim", "10", "45000", "55000", "5", "20000001", "8991234567890"],
+      ["BRG-002", "Pulpen Gel Hitam 0.5", "Alat Tulis", "Lusin", "25", "30000", "38000", "10", "20000002", ""],
+      ["BRG-003", "Buku Tulis Sinar 38", "Buku", "Pak", "15", "25000", "32000", "5", "20000003", ""],
     ];
 
     const escapeCsvValue = (val: string) => {
@@ -285,6 +276,7 @@ export function BatchItemClient() {
               id: String(Date.now() + idx) + Math.random().toString(36).substring(2, 5),
               code,
               appBarcode: (cols[8] || "").trim(),
+              barcodePabrik: (cols[9] || "").trim(),
               name,
               category,
               unit,
@@ -337,7 +329,18 @@ export function BatchItemClient() {
     }
 
     startTransition(async () => {
-      const res = await createBatchItemsAction(validRows);
+      const res = await createBatchItemsAction(validRows.map((r) => ({
+        code: r.code || undefined,
+        appBarcode: r.appBarcode || undefined,
+        barcode: r.barcodePabrik || undefined,
+        name: r.name,
+        category: r.category,
+        unit: r.unit,
+        initialQty: r.initialQty,
+        initialCostText: r.initialCostText,
+        standardSellingPriceText: r.standardSellingPriceText,
+        minStockAlert: r.minStockAlert,
+      })));
       if (!res.ok) {
         setError(res.error || "Gagal menyimpan batch barang");
       } else if (res.errors && res.errors.length > 0) {
@@ -496,72 +499,6 @@ export function BatchItemClient() {
         </div>
       )}
 
-      {/* KPI Cards Elevation — Tonal Paper & Ink Matte */}
-      <Stagger className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* Card 1: SKU Siap Simpan */}
-        <StaggerItem>
-          <div className="relative p-5 sm:p-6 rounded-2xl bg-paper border border-rule shadow-xs hover:shadow-sm transition-shadow">
-            <div className="flex items-center justify-between text-ink-soft mb-2.5">
-              <span className="text-[11px] font-mono uppercase tracking-[0.1em] font-medium">
-                SKU Siap Simpan
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-canvas border border-rule flex items-center justify-center">
-                <Package className="size-4 text-terra" />
-              </div>
-            </div>
-            <div className="text-3xl font-display font-semibold tracking-tight text-ink tnum">
-              {validRowsCount} <span className="text-sm font-sans font-normal text-ink-soft">/ {rows.length} baris</span>
-            </div>
-            <div className="mt-4 pt-3 border-t border-rule/60 flex items-center justify-between text-xs text-ink-soft">
-              <span>Kategori Terisi</span>
-              <span className="font-mono text-ink font-semibold">{uniqueCategoriesCount} Jenis</span>
-            </div>
-          </div>
-        </StaggerItem>
-
-        {/* Card 2: Estimasi Total Modal Stok Awal */}
-        <StaggerItem>
-          <div className="relative p-5 sm:p-6 rounded-2xl bg-paper border border-rule shadow-xs hover:shadow-sm transition-shadow">
-            <div className="flex items-center justify-between text-ink-soft mb-2.5">
-              <span className="text-[11px] font-mono uppercase tracking-[0.1em] font-medium">
-                Estimasi Modal Awal
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-canvas border border-rule flex items-center justify-center">
-                <Coins className="size-4 text-terra" />
-              </div>
-            </div>
-            <div className="text-3xl font-display font-semibold tracking-tight text-ink tnum">
-              <AnimatedNumber minor={totalEstimatedCostMinor} />
-            </div>
-            <div className="mt-4 pt-3 border-t border-rule/60 flex items-center justify-between text-xs text-ink-soft">
-              <span>Kalkulasi Otomatis</span>
-              <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">Qty x Modal</span>
-            </div>
-          </div>
-        </StaggerItem>
-
-        {/* Card 3: Potensi Nilai Jual Stok Awal */}
-        <StaggerItem>
-          <div className="relative p-5 sm:p-6 rounded-2xl bg-paper border border-rule shadow-xs hover:shadow-sm transition-shadow">
-            <div className="flex items-center justify-between text-ink-soft mb-2.5">
-              <span className="text-[11px] font-mono uppercase tracking-[0.1em] font-medium">
-                Potensi Nilai Jual
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-canvas border border-rule flex items-center justify-center">
-                <TrendingUp className="size-4 text-terra" />
-              </div>
-            </div>
-            <div className="text-3xl font-display font-semibold tracking-tight text-ink tnum">
-              <AnimatedNumber minor={totalEstimatedSellingMinor} />
-            </div>
-            <div className="mt-4 pt-3 border-t border-rule/60 flex items-center justify-between text-xs text-ink-soft">
-              <span>Proyeksi Bruto</span>
-              <span className="font-mono text-ink font-semibold">Qty x Jual</span>
-            </div>
-          </div>
-        </StaggerItem>
-      </Stagger>
-
       {/* Spreadsheet Grid Container — Swiss 2.0 Typography & Table Rhythm */}
       <Reveal>
         <div className="border border-rule rounded-2xl bg-paper overflow-hidden shadow-xs">
@@ -602,6 +539,37 @@ export function BatchItemClient() {
                 <Plus className="size-3.5 mr-1 text-terra" />
                 Tambah 5 Baris
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-testid="batch-kolom-toggle"
+                    className="h-8 rounded-xl text-xs font-mono border-rule bg-paper hover:bg-canvas text-ink transition-colors shadow-xs"
+                    aria-label="Tampilkan atau sembunyikan kolom opsional"
+                  >
+                    Kolom
+                    <ChevronDown className="size-3.5 ml-1 text-ink-soft" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 rounded-xl border-rule bg-paper p-1.5 shadow-md">
+                  <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-mono uppercase tracking-wider text-ink-soft">
+                    Kolom opsional
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {OPTIONAL_COLS.map((col) => (
+                    <DropdownMenuCheckboxItem
+                      key={col.key}
+                      checked={!hiddenCols[col.key]}
+                      onCheckedChange={(v) => setHiddenCols((p) => ({ ...p, [col.key]: !v }))}
+                      className="cursor-pointer rounded-lg text-xs font-medium text-ink focus:bg-canvas"
+                    >
+                      {col.label}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -612,14 +580,31 @@ export function BatchItemClient() {
                 <tr>
                   <th className="py-3 px-3.5 font-medium w-12 text-center">#</th>
                   <th className="py-3 px-3 font-medium w-36">Kode SKU</th>
-                  <th className="py-3 px-3 font-medium w-32">App-barcode</th>
+                  {!hiddenCols.appBarcode && (
+                    <th className="py-3 px-3 font-medium w-32">App-barcode<OptionalBadge /></th>
+                  )}
+                  {!hiddenCols.barcodePabrik && (
+                    <th className="py-3 px-3 font-medium w-40">Barcode Pabrik<OptionalBadge /></th>
+                  )}
                   <th className="py-3 px-3 font-medium min-w-[220px]">Nama Barang *</th>
-                  <th className="py-3 px-3 font-medium w-36">Kategori</th>
-                  <th className="py-3 px-3 font-medium w-28">Satuan</th>
-                  <th className="py-3 px-3 font-medium text-right w-24">Stok Awal</th>
-                  <th className="py-3 px-3 font-medium text-right w-36">Harga Modal (Rp)</th>
-                  <th className="py-3 px-3 font-medium text-right w-36">Harga Jual (Rp)</th>
-                  <th className="py-3 px-3 font-medium text-right w-24">Min. Stok</th>
+                  {!hiddenCols.category && (
+                    <th className="py-3 px-3 font-medium w-36">Kategori<OptionalBadge /></th>
+                  )}
+                  {!hiddenCols.unit && (
+                    <th className="py-3 px-3 font-medium w-28">Satuan<OptionalBadge /></th>
+                  )}
+                  {!hiddenCols.initialQty && (
+                    <th className="py-3 px-3 font-medium text-right w-24">Stok Awal<OptionalBadge /></th>
+                  )}
+                  {!hiddenCols.initialCostText && (
+                    <th className="py-3 px-3 font-medium text-right w-36">Harga Modal (Rp)<OptionalBadge /></th>
+                  )}
+                  {!hiddenCols.standardSellingPriceText && (
+                    <th className="py-3 px-3 font-medium text-right w-36">Harga Jual (Rp)<OptionalBadge /></th>
+                  )}
+                  {!hiddenCols.minStockAlert && (
+                    <th className="py-3 px-3 font-medium text-right w-24">Min. Stok<OptionalBadge /></th>
+                  )}
                   <th className="py-3 px-3 font-medium w-12 text-center">Aksi</th>
                 </tr>
               </thead>
@@ -646,14 +631,26 @@ export function BatchItemClient() {
                           className="h-8 text-xs font-mono rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
-                      <td className="py-2 px-2">
-                        <Input
-                          placeholder="20000001"
-                          value={row.appBarcode}
-                          onChange={(e) => handleCellChange(row.id, "appBarcode", e.target.value)}
-                          className="h-8 text-xs font-mono rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
-                        />
-                      </td>
+                      {!hiddenCols.appBarcode && (
+                        <td className="py-2 px-2">
+                          <Input
+                            placeholder="20000001"
+                            value={row.appBarcode}
+                            onChange={(e) => handleCellChange(row.id, "appBarcode", e.target.value)}
+                            className="h-8 text-xs font-mono rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
+                          />
+                        </td>
+                      )}
+                      {!hiddenCols.barcodePabrik && (
+                        <td className="py-2 px-2">
+                          <Input
+                            placeholder="899..."
+                            value={row.barcodePabrik}
+                            onChange={(e) => handleCellChange(row.id, "barcodePabrik", e.target.value)}
+                            className="h-8 text-xs font-mono rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
+                          />
+                        </td>
+                      )}
                       <td className="py-2 px-2">
                         <Input
                           placeholder="Nama produk..."
@@ -662,56 +659,68 @@ export function BatchItemClient() {
                           className="h-8 text-xs rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
                         />
                       </td>
-                      <td className="py-2 px-2">
-                        <Input
-                          placeholder="Alat Tulis"
-                          value={row.category}
-                          onChange={(e) => handleCellChange(row.id, "category", e.target.value)}
-                          className="h-8 text-xs rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
-                        />
-                      </td>
-                      <td className="py-2 px-2">
-                        <Input
-                          placeholder="Pcs"
-                          value={row.unit}
-                          onChange={(e) => handleCellChange(row.id, "unit", e.target.value)}
-                          className="h-8 text-xs rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
-                        />
-                      </td>
-                      <td className="py-2 px-2">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={row.initialQty}
-                          onChange={(e) => handleCellChange(row.id, "initialQty", Number(e.target.value))}
-                          className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
-                        />
-                      </td>
-                      <td className="py-2 px-2">
-                        <Input
-                          placeholder="0"
-                          value={row.initialCostText}
-                          onChange={(e) => handleCellChange(row.id, "initialCostText", e.target.value)}
-                          className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
-                        />
-                      </td>
-                      <td className="py-2 px-2">
-                        <Input
-                          placeholder="0"
-                          value={row.standardSellingPriceText}
-                          onChange={(e) => handleCellChange(row.id, "standardSellingPriceText", e.target.value)}
-                          className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
-                        />
-                      </td>
-                      <td className="py-2 px-2">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={row.minStockAlert}
-                          onChange={(e) => handleCellChange(row.id, "minStockAlert", e.target.value)}
-                          className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
-                        />
-                      </td>
+                      {!hiddenCols.category && (
+                        <td className="py-2 px-2">
+                          <Input
+                            placeholder="Alat Tulis"
+                            value={row.category}
+                            onChange={(e) => handleCellChange(row.id, "category", e.target.value)}
+                            className="h-8 text-xs rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
+                          />
+                        </td>
+                      )}
+                      {!hiddenCols.unit && (
+                        <td className="py-2 px-2">
+                          <Input
+                            placeholder="Pcs"
+                            value={row.unit}
+                            onChange={(e) => handleCellChange(row.id, "unit", e.target.value)}
+                            className="h-8 text-xs rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
+                          />
+                        </td>
+                      )}
+                      {!hiddenCols.initialQty && (
+                        <td className="py-2 px-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            value={row.initialQty}
+                            onChange={(e) => handleCellChange(row.id, "initialQty", Number(e.target.value))}
+                            className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
+                          />
+                        </td>
+                      )}
+                      {!hiddenCols.initialCostText && (
+                        <td className="py-2 px-2">
+                          <Input
+                            placeholder="0"
+                            value={row.initialCostText}
+                            onChange={(e) => handleCellChange(row.id, "initialCostText", e.target.value)}
+                            className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
+                          />
+                        </td>
+                      )}
+                      {!hiddenCols.standardSellingPriceText && (
+                        <td className="py-2 px-2">
+                          <Input
+                            placeholder="0"
+                            value={row.standardSellingPriceText}
+                            onChange={(e) => handleCellChange(row.id, "standardSellingPriceText", e.target.value)}
+                            className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
+                          />
+                        </td>
+                      )}
+                      {!hiddenCols.minStockAlert && (
+                        <td className="py-2 px-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            value={row.minStockAlert}
+                            onChange={(e) => handleCellChange(row.id, "minStockAlert", e.target.value)}
+                            className="h-8 text-xs text-right font-mono tnum rounded-lg bg-canvas border-rule focus-visible:ring-1 focus-visible:ring-terra"
+                          />
+                        </td>
+                      )}
                       <td className="py-2 px-2 text-center">
                         <Button
                           type="button"
@@ -736,7 +745,7 @@ export function BatchItemClient() {
             <span className="inline-flex items-center gap-2">
               <Info className="size-4 text-terra shrink-0" />
               <span>
-                Baris kosong (tanpa SKU &amp; Nama) otomatis dilewati saat penyimpanan. Kolom harga dan stok otomatis dikonversi ke minor unit mata uang.
+                Baris kosong (tanpa Nama) otomatis dilewati saat penyimpanan. Kolom harga dan stok otomatis dikonversi ke minor unit mata uang. Kolom bertanda opsional boleh disembunyikan lewat tombol Kolom — nilainya tetap tersimpan.
               </span>
             </span>
             <div className="flex items-center gap-2">
