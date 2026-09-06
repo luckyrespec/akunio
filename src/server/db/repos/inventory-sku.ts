@@ -3,10 +3,12 @@ import type { Queryable } from "./queryable";
 import { inventorySkuCounters } from "../schema/inventory";
 
 /** Satu-satunya tempat format SKU/barcode app. Counter per-org + advisory lock
- *  agar insert konkuren tidak mendapat nomor sama (pola journal_seq_counters). */
+ *  agar insert konkuren tidak mendapat nomor sama (pola journal_seq_counters).
+ *  kind BARANG -> BRG-NNNN, JASA -> JSA-NNNN (satu counter berurutan). */
 export async function nextSkuCodes(
   q: Queryable,
   orgId: string,
+  kind: "BARANG" | "JASA" = "BARANG",
 ): Promise<{ code: string; appBarcode: string }> {
   await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`sku:${orgId}`}))`);
   const [row] = await q
@@ -24,7 +26,7 @@ export async function nextSkuCodes(
     await q.insert(inventorySkuCounters).values({ orgId, lastSeq: seq });
   }
   return {
-    code: `BRG-${String(seq).padStart(4, "0")}`,
+    code: `${kind === "JASA" ? "JSA-" : "BRG-"}${String(seq).padStart(4, "0")}`,
     appBarcode: String(20_000_000 + seq),
   };
 }

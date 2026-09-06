@@ -17,6 +17,9 @@ import { calculateStockDifference } from "@/core/inventory/valuation";
 
 export interface CreateItemInput {
   code?: string;
+  itemType?: "BARANG" | "JASA";
+  revenueAccountId?: string | null;
+  expenseAccountId?: string | null;
   name: string;
   barcode?: string;
   appBarcode?: string;
@@ -99,6 +102,20 @@ export async function listInventoryItems(q: Queryable, orgId: string) {
     .orderBy(desc(inventoryItems.createdAt));
 }
 
+export async function listServiceItems(q: Queryable, orgId: string) {
+  return q
+    .select()
+    .from(inventoryItems)
+    .where(
+      and(
+        eq(inventoryItems.orgId, orgId),
+        eq(inventoryItems.isActive, true),
+        eq(inventoryItems.itemType, "JASA"),
+      ),
+    )
+    .orderBy(desc(inventoryItems.createdAt));
+}
+
 export async function getInventoryItem(q: Queryable, orgId: string, itemId: string) {
   const [item] = await q
     .select()
@@ -115,21 +132,25 @@ export async function createInventoryItem(
 ) {
   let code = input.code?.trim().toUpperCase() ?? "";
   let appBarcode = input.appBarcode?.trim() ?? "";
-  if (!code || !appBarcode) {
-    const gen = await nextSkuCodes(q, orgId);
+  const itemType = input.itemType ?? "BARANG";
+  if (itemType === "JASA" && (input.initialQty ?? 0) > 0) {
+    throw new Error("JASA_TANPA_STOK: jasa tidak punya stok awal");
+  }
+  if (!code || (itemType === "BARANG" && !appBarcode)) {
+    const gen = await nextSkuCodes(q, orgId, itemType);
     if (!code) code = gen.code;
-    if (!appBarcode) appBarcode = gen.appBarcode;
+    if (!appBarcode && itemType === "BARANG") appBarcode = gen.appBarcode;
   }
   const name = input.name.trim();
   if (!code || !name) throw new Error("KODE_DAN_NAMA_WAJIB_DIISI");
-  if (!/^[0-9]{1,16}$/.test(appBarcode)) {
+  if (appBarcode && !/^[0-9]{1,16}$/.test(appBarcode)) {
     throw new Error("APP_BARCODE_TIDAK_VALID: hanya digit, maks 16 karakter");
   }
-  const initialQty = input.initialQty ?? 0;
+  const initialQty = itemType === "JASA" ? 0 : (input.initialQty ?? 0);
   if (!Number.isFinite(initialQty) || initialQty < 0) {
     throw new Error("STOK_AWAL_TIDAK_VALID: kuantitas harus >= 0");
   }
-  const initialCostMinor = input.initialCostMinor ?? 0n;
+  const initialCostMinor = itemType === "JASA" ? 0n : (input.initialCostMinor ?? 0n);
   if (initialCostMinor < 0n) throw new Error("HARGA_MODAL_TIDAK_VALID");
   const totalCostMinor = costForQty(initialCostMinor, initialQty);
 
@@ -140,9 +161,12 @@ export async function createInventoryItem(
       .values({
         orgId,
         code,
+        itemType,
+        revenueAccountId: input.revenueAccountId ?? null,
+        expenseAccountId: input.expenseAccountId ?? null,
         name,
         barcode: input.barcode?.trim() || null,
-        appBarcode,
+        appBarcode: appBarcode || null,
         unit: input.unit?.trim() || "Pcs",
         category: input.category?.trim() || null,
         minStockAlert: input.minStockAlert || "0",
