@@ -40,9 +40,10 @@ export async function getInventoryOverviewAction() {
 }
 
 export async function createItemAction(payload: {
-  code: string;
+  code?: string;
   name: string;
   barcode?: string;
+  appBarcode?: string;
   unit?: string;
   category?: string;
   minStockAlert?: string;
@@ -62,6 +63,7 @@ export async function createItemAction(payload: {
     const item = await withOrg(ctx.orgId, async (tx) =>
       createInventoryItem(tx, ctx.orgId, {
         code: payload.code,
+        appBarcode: payload.appBarcode,
         name: payload.name,
         barcode: payload.barcode,
         unit: payload.unit,
@@ -74,6 +76,7 @@ export async function createItemAction(payload: {
     );
 
     revalidatePath("/persediaan");
+    revalidatePath("/persediaan/daftar");
     return { ok: true, item };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menyimpan barang";
@@ -82,9 +85,10 @@ export async function createItemAction(payload: {
 }
 
 export async function createBatchItemsAction(items: Array<{
-  code: string;
+  code?: string;
   name: string;
   barcode?: string;
+  appBarcode?: string;
   unit?: string;
   category?: string;
   minStockAlert?: string;
@@ -107,15 +111,17 @@ export async function createBatchItemsAction(items: Array<{
         const payload = items[idx];
         const code = (payload.code ?? "").trim().toUpperCase();
         const name = (payload.name ?? "").trim();
-        if (!code || !name) {
-          skipped.push({ index: idx, reason: "Kode SKU dan Nama kosong" });
+        if (!name) {
+          skipped.push({ index: idx, reason: "Nama kosong" });
           continue;
         }
-        if (seen.has(code)) {
-          errors.push({ index: idx, code, message: `Duplikat SKU dalam batch: ${code}` });
-          continue;
+        if (code) {
+          if (seen.has(code)) {
+            errors.push({ index: idx, code, message: `Duplikat SKU dalam batch: ${code}` });
+            continue;
+          }
+          seen.add(code);
         }
-        seen.add(code);
         if (payload.initialQty !== undefined && (!Number.isFinite(payload.initialQty) || payload.initialQty < 0)) {
           errors.push({ index: idx, code, message: "Stok awal harus angka >= 0" });
           continue;
@@ -129,7 +135,8 @@ export async function createBatchItemsAction(items: Array<{
             : 0n;
 
           const item = await createInventoryItem(tx, ctx.orgId, {
-            code,
+            code: code || undefined,
+            appBarcode: payload.appBarcode || undefined,
             name,
             barcode: payload.barcode,
             unit: payload.unit,
@@ -149,6 +156,7 @@ export async function createBatchItemsAction(items: Array<{
     });
 
     revalidatePath("/persediaan");
+    revalidatePath("/persediaan/daftar");
     return {
       ok: true,
       count: created.results.length,

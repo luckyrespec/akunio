@@ -11,13 +11,15 @@ import {
 import { accounts } from "../schema/org";
 import { journalEntries, journalLines } from "../schema/journal";
 import { createDraftJournalEntry, toMinor } from "./journals.repo";
+import { nextSkuCodes } from "./inventory-sku";
 import { findPeriodByDate } from "./periods.repo";
 import { calculateStockDifference } from "@/core/inventory/valuation";
 
 export interface CreateItemInput {
-  code: string;
+  code?: string;
   name: string;
   barcode?: string;
+  appBarcode?: string;
   unit?: string;
   category?: string;
   minStockAlert?: string;
@@ -33,6 +35,18 @@ function qtyToDb(qty: number): string {
 function costForQty(unitCostMinor: bigint, qty: number): bigint {
   const absQty = Math.abs(qty);
   return (unitCostMinor * BigInt(Math.round(absQty * 10000))) / 10000n;
+}
+
+/** drizzle membungkus pg error sebagai "Failed query: ..." dengan cause berantai —
+ *  nama constraint ada di cause, bukan message luar. */
+function errorText(e: unknown): string {
+  const parts: string[] = [];
+  let cur: unknown = e;
+  for (let i = 0; i < 4 && cur instanceof Error; i++) {
+    parts.push(cur.message);
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return parts.join("\n");
 }
 
 export async function getInventorySettings(q: Queryable, orgId: string) {
@@ -99,9 +113,18 @@ export async function createInventoryItem(
   orgId: string,
   input: CreateItemInput,
 ) {
-  const code = input.code.trim().toUpperCase();
+  let code = input.code?.trim().toUpperCase() ?? "";
+  let appBarcode = input.appBarcode?.trim() ?? "";
+  if (!code || !appBarcode) {
+    const gen = await nextSkuCodes(q, orgId);
+    if (!code) code = gen.code;
+    if (!appBarcode) appBarcode = gen.appBarcode;
+  }
   const name = input.name.trim();
   if (!code || !name) throw new Error("KODE_DAN_NAMA_WAJIB_DIISI");
+  if (!/^[0-9]{1,16}$/.test(appBarcode)) {
+    throw new Error("APP_BARCODE_TIDAK_VALID: hanya digit, maks 16 karakter");
+  }
   const initialQty = input.initialQty ?? 0;
   if (!Number.isFinite(initialQty) || initialQty < 0) {
     throw new Error("STOK_AWAL_TIDAK_VALID: kuantitas harus >= 0");
@@ -110,22 +133,35 @@ export async function createInventoryItem(
   if (initialCostMinor < 0n) throw new Error("HARGA_MODAL_TIDAK_VALID");
   const totalCostMinor = costForQty(initialCostMinor, initialQty);
 
-  const [item] = await q
-    .insert(inventoryItems)
-    .values({
-      orgId,
-      code,
-      name,
-      barcode: input.barcode?.trim() || null,
-      unit: input.unit?.trim() || "Pcs",
-      category: input.category?.trim() || null,
-      minStockAlert: input.minStockAlert || "0",
-      currentQty: qtyToDb(initialQty),
-      averageCostMinor: initialCostMinor,
-      totalCostMinor,
-      standardSellingPriceMinor: input.standardSellingPriceMinor ?? 0n,
-    })
-    .returning();
+  let item: typeof inventoryItems.$inferSelect;
+  try {
+    [item] = await q
+      .insert(inventoryItems)
+      .values({
+        orgId,
+        code,
+        name,
+        barcode: input.barcode?.trim() || null,
+        appBarcode,
+        unit: input.unit?.trim() || "Pcs",
+        category: input.category?.trim() || null,
+        minStockAlert: input.minStockAlert || "0",
+        currentQty: qtyToDb(initialQty),
+        averageCostMinor: initialCostMinor,
+        totalCostMinor,
+        standardSellingPriceMinor: input.standardSellingPriceMinor ?? 0n,
+      })
+      .returning();
+  } catch (e) {
+    const msg = errorText(e);
+    if (msg.includes("inventory_items_org_code_uq")) {
+      throw new Error("SKU_SUDAH_DIPAKAI: kode SKU sudah terdaftar");
+    }
+    if (msg.includes("inventory_items_org_app_barcode_uq")) {
+      throw new Error("APP_BARCODE_SUDAH_DIPAKAI: barcode app sudah terdaftar");
+    }
+    throw e;
+  }
 
   if (initialQty > 0) {
     // Catat layer FIFO
