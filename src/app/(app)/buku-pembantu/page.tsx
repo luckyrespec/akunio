@@ -15,6 +15,8 @@ const NAV_ROWS = [
 
 export default async function BukuPembantuPage() {
   const rows = await getSubledgerReconAction();
+  const byKind = new Map(rows.map((r) => [r.kind, r]));
+  const mismatch = rows.filter((r) => r.differenceMinor !== "0");
 
   return (
     <div className="space-y-6">
@@ -23,6 +25,33 @@ export default async function BukuPembantuPage() {
         eyebrow="Total rincian vs saldo akun kontrol — harus nol selisih"
         actions={<RunCheckButton />}
       />
+      {rows.length > 0 && (
+        <div
+          data-testid="subledger-verdict"
+          className="flex flex-col gap-3 rounded-2xl border border-rule bg-paper p-5 shadow-2xs sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <p className="font-display text-2xl font-semibold tracking-tight text-ink">
+              {mismatch.length === 0 ? "Pembukuan rapi — semua cocok" : `${mismatch.length} akun selisih`}
+            </p>
+            <p className="mt-1 text-xs text-ink-soft">
+              {mismatch.length === 0
+                ? `${rows.length} akun kontrol sama dengan total rinciannya.`
+                : `Periksa ${mismatch.map((m) => SUBLEDGER_KIND_LABEL[m.kind as keyof typeof SUBLEDGER_KIND_LABEL] ?? m.kind).join(", ")}.`}
+            </p>
+          </div>
+          <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
+              mismatch.length === 0
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+            }`}
+          >
+            <span className={`size-2 rounded-full ${mismatch.length === 0 ? "bg-emerald-500" : "bg-rose-500"}`} />
+            {mismatch.length === 0 ? `${rows.length}/${rows.length} cocok` : "Butuh rekonsiliasi"}
+          </span>
+        </div>
+      )}
       <div className="rounded-xl border border-rule overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -66,6 +95,7 @@ export default async function BukuPembantuPage() {
         </h2>
         {NAV_ROWS.map((n) => {
           const Icon = n.icon;
+          const recon = byKind.get(n.kind);
           return (
             <Link
               key={n.kind}
@@ -80,7 +110,15 @@ export default async function BukuPembantuPage() {
                 <span className="block text-sm font-semibold text-ink">{n.title}</span>
                 <span className="block text-xs text-ink-soft truncate">{n.desc}</span>
               </span>
-              <ChevronRight className="size-4 ml-auto shrink-0 text-ink-soft" />
+              {recon && (
+                <span className="ml-auto shrink-0 text-right">
+                  <span className="block font-mono text-sm font-bold text-ink tnum">
+                    {Money.formatIdr(recon.controlBalanceMinor)}
+                  </span>
+                  <span className="block text-[11px] text-ink-soft">saldo kontrol</span>
+                </span>
+              )}
+              <ChevronRight className="size-4 shrink-0 text-ink-soft" />
             </Link>
           );
         })}

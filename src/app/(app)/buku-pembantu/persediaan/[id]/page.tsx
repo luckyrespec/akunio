@@ -22,6 +22,11 @@ export default async function ItemCardPage({ params }: ItemCardPageProps) {
 
   const { item, rows } = card;
   const status = stockStatus(Number(item.currentQty), Number(item.minStockAlert ?? "0"));
+  const curQty = Number(item.currentQty);
+  const minQty = Number(item.minStockAlert ?? "0");
+  const meterScale = Number.isFinite(curQty) && Number.isFinite(minQty) && minQty > 0
+    ? Math.max(curQty, minQty * 1.5)
+    : null;
 
   return (
     <div className="space-y-4">
@@ -48,6 +53,22 @@ export default async function ItemCardPage({ params }: ItemCardPageProps) {
           <div className="rounded-2xl border border-rule bg-paper p-3.5 shadow-2xs">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Saldo Unit</span>
             <p className="mt-1 font-mono text-base font-bold text-ink">{formatQty(item.currentQty)} {item.unit}</p>
+            {meterScale !== null && (
+              <div className="mt-2">
+                <div className="relative h-1.5 rounded-full bg-canvas">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-terra"
+                    style={{ width: `${Math.min(100, (curQty / meterScale) * 100)}%` }}
+                  />
+                  <div
+                    className="absolute -top-0.5 -bottom-0.5 w-0.5 rounded bg-ink"
+                    style={{ left: `${Math.min(100, (minQty / meterScale) * 100)}%` }}
+                    title={`Minimum ${formatQty(item.minStockAlert ?? "0")}`}
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-ink-soft">{(curQty / minQty).toFixed(1)}× stok minimum</p>
+              </div>
+            )}
           </div>
           <div className="rounded-2xl border border-rule bg-paper p-3.5 shadow-2xs">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Harga Rata-rata</span>

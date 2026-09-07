@@ -17,6 +17,7 @@ const STATUS_BADGE = {
 export default async function PersediaanListPage() {
   const ctx = await requireContext();
   const items = await listItemCards(db, ctx.orgId);
+  const totalNilai = items.reduce((a, it) => a + it.totalCostMinor, 0n);
 
   return (
     <div className="space-y-4">
@@ -28,6 +29,9 @@ export default async function PersediaanListPage() {
         title="Kartu Persediaan"
         eyebrow="Saldo dan nilai tiap barang — klik untuk kartu mutasi per SKU"
       />
+      <p className="text-xs text-ink-soft">
+        {items.length} barang · total nilai <strong className="font-mono text-ink tnum">{Money.formatIdr(totalNilai)}</strong>
+      </p>
       <div className="rounded-xl border border-rule overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left tnum">

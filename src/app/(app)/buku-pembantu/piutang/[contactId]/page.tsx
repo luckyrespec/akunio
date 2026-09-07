@@ -53,9 +53,9 @@ export default async function PiutangCardPage({ params }: PiutangCardPageProps) 
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Dibayar</span>
             <p className="mt-1 font-mono text-base font-bold text-ink">{Money.formatIdr(paid)}</p>
           </div>
-          <div className="rounded-2xl border border-rule bg-paper p-3.5 shadow-2xs">
+          <div className="rounded-2xl border border-rule bg-paper p-3.5 shadow-2xs md:col-span-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Sisa Piutang</span>
-            <p className="mt-1 font-mono text-base font-bold text-ink">{Money.formatIdr(sisa)}</p>
+            <p className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink tnum">{Money.formatIdr(sisa)}</p>
           </div>
         </div>
       </Reveal>
