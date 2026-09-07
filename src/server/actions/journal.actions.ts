@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import {
   postJournalEntry, getPostedEntry, linkDocumentToEntry, PostingError,
@@ -49,7 +49,7 @@ export async function createAndPostAction(payload: {
         creditMinor: Money.parseIdr(l.creditText.trim() === "" ? "0" : l.creditText).minor,
       })),
     };
-    const out = await db.transaction(async (tx) => {
+    const out = await withOrg(ctx.orgId, async (tx) => {
       const r = await postJournalEntry(tx, ctx.orgId, ctx.userEmail, entry);
       if (payload.document) {
         await linkDocumentToEntry(tx, {
@@ -76,7 +76,7 @@ export async function createAndPostAction(payload: {
 export async function reverseEntryAction(entryId: string, dateISO: string): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const out = await db.transaction(async (tx) => {
+    const out = await withOrg(ctx.orgId, async (tx) => {
       const original = await getPostedEntry(tx, ctx.orgId, entryId);
       if (!original) throw new Error("JURNAL_TIDAK_DITEMUKAN");
       const reversalInput = makeReversal(
