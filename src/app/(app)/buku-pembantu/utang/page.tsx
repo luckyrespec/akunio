@@ -6,11 +6,41 @@ import { listContactCards } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
 import { Money } from "@/core/money/money";
 import { ContactListTable } from "@/components/subsidiary/contact-ledger";
+import { FilterBar } from "@/components/subsidiary/filter-bar";
 
-export default async function UtangListPage() {
+const BALANCE_OPTIONS = ["SEMUA", "ADA_SISA", "LUNAS"] as const;
+const BALANCE_LABEL: Record<(typeof BALANCE_OPTIONS)[number], string> = {
+  SEMUA: "Semua",
+  ADA_SISA: "Ada sisa",
+  LUNAS: "Lunas",
+};
+
+export default async function UtangListPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ q?: string; st?: string }>;
+}) {
   const ctx = await requireContext();
   const rows = await listContactCards(db, ctx.orgId, "BILL");
-  const totalSisa = rows.reduce((a, r) => a + r.outstandingMinor, 0n);
+  const q = ((await searchParams)?.q ?? "").trim();
+  const st = ((await searchParams)?.st ?? "SEMUA").toUpperCase();
+  const activeSt = (BALANCE_OPTIONS as readonly string[]).includes(st) ? st : "SEMUA";
+  const ql = q.toLowerCase();
+  const filtered = rows.filter((r) => {
+    if (ql && !r.name.toLowerCase().includes(ql)) return false;
+    if (activeSt === "ADA_SISA") return r.outstandingMinor > 0n;
+    if (activeSt === "LUNAS") return r.outstandingMinor === 0n;
+    return true;
+  });
+  const isFiltering = q !== "" || activeSt !== "SEMUA";
+  const totalSisa = filtered.reduce((a, r) => a + r.outstandingMinor, 0n);
+  const hrefFor = (nextSt: string) => {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (nextSt !== "SEMUA") p.set("st", nextSt);
+    const s = p.toString();
+    return `/buku-pembantu/utang${s ? `?${s}` : ""}`;
+  };
 
   return (
     <div className="space-y-4">
@@ -22,13 +52,22 @@ export default async function UtangListPage() {
         title="Kartu Utang"
         eyebrow="Tagihan, pelunasan, dan sisa tiap pemasok"
       />
-      <p className="text-xs text-ink-soft">
-        {rows.length} pemasok · sisa terutang <strong className="font-mono text-ink tnum">{Money.formatIdr(totalSisa)}</strong>
+      <p className="text-xs text-ink-soft" role="status">
+        {isFiltering ? `${filtered.length} dari ${rows.length} pemasok` : `${rows.length} pemasok`} · sisa terutang{" "}
+        <strong className="font-mono text-ink tnum">{Money.formatIdr(totalSisa)}</strong>
       </p>
+      <FilterBar
+        q={q}
+        keepParams={activeSt !== "SEMUA" ? { st: activeSt } : {}}
+        pills={BALANCE_OPTIONS.map((s) => ({ value: s, label: BALANCE_LABEL[s], href: hrefFor(s), active: s === activeSt }))}
+        searchPlaceholder="Cari nama pemasok…"
+      />
       <ContactListTable
-        rows={rows}
+        rows={filtered}
         basePath="/buku-pembantu/utang"
         emptyHint="Belum ada tagihan pembelian aktif."
+        isFiltering={isFiltering}
+        clearHref="/buku-pembantu/utang"
       />
     </div>
   );

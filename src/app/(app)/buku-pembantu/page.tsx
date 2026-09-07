@@ -18,14 +18,47 @@ export default async function BukuPembantuPage() {
   const rows = await getSubledgerReconAction();
   const byKind = new Map(rows.map((r) => [r.kind, r]));
   const mismatch = rows.filter((r) => r.differenceMinor !== "0");
+  const sum = (pick: (r: (typeof rows)[number]) => string) =>
+    rows.reduce((a, r) => a + BigInt(pick(r)), 0n);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Buku Pembantu"
-        eyebrow="Total rincian vs saldo akun kontrol — harus nol selisih"
+        eyebrow="Pantau keselarasan akun kontrol dengan rinciannya"
         actions={<RunCheckButton />}
       />
+      {rows.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-rule bg-paper p-3.5 shadow-2xs">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+              Akun Kontrol
+            </span>
+            <p className="mt-1 font-display text-xl sm:text-2xl font-bold text-ink">
+              {rows.length}
+              <span className="ml-2 font-sans text-xs font-normal text-ink-soft">
+                ({rows.length - mismatch.length} cocok)
+              </span>
+            </p>
+          </div>
+          <div className="rounded-2xl border border-rule bg-paper p-3.5 shadow-2xs">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+              Total Saldo Kontrol
+            </span>
+            <p className="mt-1 font-mono text-sm sm:text-base font-bold text-ink tnum">
+              {Money.formatIdr(sum((r) => r.controlBalanceMinor))}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-rule bg-paper p-3.5 shadow-2xs">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+              Total Pembantu
+            </span>
+            <p className="mt-1 font-mono text-sm sm:text-base font-bold text-ink tnum">
+              {Money.formatIdr(sum((r) => r.subledgerTotalMinor))}
+            </p>
+          </div>
+        </div>
+      )}
       {rows.length > 0 && (
         <Entrance>
         <div

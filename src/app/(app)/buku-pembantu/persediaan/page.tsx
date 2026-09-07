@@ -7,6 +7,7 @@ import { stockStatus, formatQty } from "@/core/subledger/cards";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Money } from "@/core/money/money";
+import { FilterBar } from "@/components/subsidiary/filter-bar";
 
 const STATUS_BADGE = {
   AMAN: "outline",
@@ -14,10 +15,35 @@ const STATUS_BADGE = {
   HABIS: "destructive",
 } as const;
 
-export default async function PersediaanListPage() {
+const STATUS_OPTIONS = ["SEMUA", "AMAN", "MENIPIS", "HABIS"] as const;
+
+export default async function PersediaanListPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ q?: string; st?: string }>;
+}) {
   const ctx = await requireContext();
   const items = await listItemCards(db, ctx.orgId);
-  const totalNilai = items.reduce((a, it) => a + it.totalCostMinor, 0n);
+  const q = ((await searchParams)?.q ?? "").trim();
+  const st = ((await searchParams)?.st ?? "SEMUA").toUpperCase();
+  const activeSt = (STATUS_OPTIONS as readonly string[]).includes(st) ? st : "SEMUA";
+  const ql = q.toLowerCase();
+  const filtered = items.filter((it) => {
+    if (ql && !`${it.code} ${it.name}`.toLowerCase().includes(ql)) return false;
+    if (activeSt !== "SEMUA") {
+      return stockStatus(Number(it.currentQty), Number(it.minStockAlert ?? "0")) === activeSt;
+    }
+    return true;
+  });
+  const isFiltering = q !== "" || activeSt !== "SEMUA";
+  const totalNilai = filtered.reduce((a, it) => a + it.totalCostMinor, 0n);
+  const hrefFor = (nextSt: string) => {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (nextSt !== "SEMUA") p.set("st", nextSt);
+    const s = p.toString();
+    return `/buku-pembantu/persediaan${s ? `?${s}` : ""}`;
+  };
 
   return (
     <div className="space-y-4">
@@ -29,9 +55,21 @@ export default async function PersediaanListPage() {
         title="Kartu Persediaan"
         eyebrow="Saldo dan nilai tiap barang — klik untuk kartu mutasi per SKU"
       />
-      <p className="text-xs text-ink-soft">
-        {items.length} barang · total nilai <strong className="font-mono text-ink tnum">{Money.formatIdr(totalNilai)}</strong>
+      <p className="text-xs text-ink-soft" role="status">
+        {isFiltering ? `${filtered.length} dari ${items.length} barang` : `${items.length} barang`} · total nilai{" "}
+        <strong className="font-mono text-ink tnum">{Money.formatIdr(totalNilai)}</strong>
       </p>
+      <FilterBar
+        q={q}
+        keepParams={activeSt !== "SEMUA" ? { st: activeSt } : {}}
+        pills={STATUS_OPTIONS.map((s) => ({
+          value: s,
+          label: s === "SEMUA" ? "Semua" : s.charAt(0) + s.slice(1).toLowerCase(),
+          href: hrefFor(s),
+          active: s === activeSt,
+        }))}
+        searchPlaceholder="Cari kode atau nama barang…"
+      />
       <div className="rounded-xl border border-rule overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left tnum">
@@ -48,14 +86,27 @@ export default async function PersediaanListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-rule/60">
-              {items.length === 0 ? (
+              {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-ink-soft">
-                    Belum ada barang. Tambahkan lewat Persediaan → Daftar Barang.
+                    {isFiltering ? (
+                      <>
+                        <p className="font-medium text-ink text-sm">Tidak ada hasil yang cocok</p>
+                        <p className="mt-1 text-xs">
+                          Coba kata kunci lain atau{" "}
+                          <Link href="/buku-pembantu/persediaan" className="font-semibold text-terra hover:underline">
+                            hapus filter
+                          </Link>
+                          .
+                        </p>
+                      </>
+                    ) : (
+                      "Belum ada barang. Tambahkan lewat Persediaan → Daftar Barang."
+                    )}
                   </td>
                 </tr>
               ) : (
-                items.map((it) => {
+                filtered.map((it) => {
                   const status = stockStatus(Number(it.currentQty), Number(it.minStockAlert ?? "0"));
                   return (
                     <tr key={it.id} data-testid="persediaan-row" className="hover:bg-canvas/40 transition-colors">
@@ -71,9 +122,10 @@ export default async function PersediaanListPage() {
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <Link
                           href={`/buku-pembantu/persediaan/${it.id}`}
+                          aria-label={`Buka kartu ${it.code} ${it.name}`}
                           className="inline-flex items-center gap-1 text-xs font-semibold text-terra hover:underline"
                         >
-                          <span>Kartu</span>
+                          <span>Lihat kartu</span>
                           <ChevronRight className="size-3.5" />
                         </Link>
                       </td>

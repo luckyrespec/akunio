@@ -5,20 +5,22 @@ import type { ContactCardSummary } from "@/server/db/repos/subsidiary.repo";
 import type { ContactLedgerEntry } from "@/core/subledger/cards";
 
 export function ContactListTable({
-  rows, basePath, emptyHint,
+  rows, basePath, emptyHint, isFiltering = false, clearHref,
 }: {
   rows: ContactCardSummary[];
   basePath: string;
   emptyHint: string;
+  isFiltering?: boolean;
+  clearHref?: string;
 }) {
   return (
     <div className="rounded-xl border border-rule overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-xs text-left tnum">
+        <table className="w-full text-xs text-left tnum" aria-label="Daftar kartu kontak">
           <thead>
             <tr className="border-b border-rule bg-canvas/80 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
               <th className="px-4 py-3">Nama</th>
-              <th className="px-4 py-3 text-right">Faktur Aktif</th>
+              <th className="px-4 py-3 text-right" title="Jumlah faktur/tagihan (tanpa yang void)">Faktur</th>
               <th className="px-4 py-3 text-right">Total</th>
               <th className="px-4 py-3 text-right">Dibayar</th>
               <th className="px-4 py-3 text-right">Sisa</th>
@@ -28,7 +30,22 @@ export function ContactListTable({
           <tbody className="divide-y divide-rule/60">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-ink-soft">{emptyHint}</td>
+                <td colSpan={6} className="px-4 py-12 text-center text-ink-soft">
+                  {isFiltering && clearHref ? (
+                    <>
+                      <p className="font-medium text-ink text-sm">Tidak ada hasil yang cocok</p>
+                      <p className="mt-1 text-xs">
+                        Coba kata kunci lain atau{" "}
+                        <Link href={clearHref} className="font-semibold text-terra hover:underline">
+                          hapus filter
+                        </Link>
+                        .
+                      </p>
+                    </>
+                  ) : (
+                    emptyHint
+                  )}
+                </td>
               </tr>
             ) : (
               rows.map((r) => (
@@ -41,9 +58,10 @@ export function ContactListTable({
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <Link
                       href={`${basePath}/${r.id}`}
+                      aria-label={`Buka kartu ${r.name}`}
                       className="inline-flex items-center gap-1 text-xs font-semibold text-terra hover:underline"
                     >
-                      <span>Kartu</span>
+                      <span>Lihat kartu</span>
                       <ChevronRight className="size-3.5" />
                     </Link>
                   </td>
@@ -62,7 +80,7 @@ export function ContactCardTable({ entries }: { entries: ContactLedgerEntry[] })
   return (
     <div className="rounded-xl border border-rule overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-xs text-left tnum">
+        <table className="w-full text-xs text-left tnum" aria-label="Kartu mutasi kontak">
           <thead>
             <tr className="border-b border-rule bg-canvas/80 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
               <th className="px-4 py-3">Tanggal</th>
