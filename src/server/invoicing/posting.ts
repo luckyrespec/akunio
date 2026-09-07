@@ -287,6 +287,13 @@ export async function postInvoiceToLedger(
         memo: `Piutang ${inv.invoiceNumber}`,
       });
 
+      // Kompatibilitas: faktur tanpa baris (insert header langsung) pakai satu
+      // akun pendapatan seperti perilaku lama.
+      if (revenueGroups.size === 0) {
+        const revAccount = await getAccountByCode(tx, orgId, "4100"); // Pendapatan Usaha
+        revenueGroups.set(revAccount.id, inv.subtotalMinor - inv.discountMinor);
+      }
+
       // Kredit: Pendapatan per akun (Net Subtotal per grup)
       for (const [accountId, netto] of revenueGroups) {
         if (netto === 0n) continue;
@@ -410,6 +417,17 @@ export async function postInvoiceToLedger(
         lines.push({
           accountId,
           debitMinor: netto,
+          creditMinor: 0n,
+          memo: `Beban/Pembelian ${inv.invoiceNumber}`,
+        });
+      }
+
+      // Kompatibilitas: tagihan tanpa baris pakai satu akun beban seperti perilaku lama.
+      if (![...debitGroups.values()].some((v) => v !== 0n)) {
+        const expAccount = await getAccountByCode(tx, orgId, "5100"); // Beban/Pembelian
+        lines.push({
+          accountId: expAccount.id,
+          debitMinor: inv.subtotalMinor - inv.discountMinor,
           creditMinor: 0n,
           memo: `Beban/Pembelian ${inv.invoiceNumber}`,
         });
