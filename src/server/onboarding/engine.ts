@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import { accounts, fiscalPeriods, organizations } from "@/server/db/schema/org";
+import { subledgerControls } from "@/server/db/schema/subledger";
 import { journalEntries } from "@/server/db/schema/journal";
 import {
   getProfile,
@@ -456,6 +457,7 @@ export async function finalizeOnboarding(orgId: string, key: string): Promise<Fi
 
     let replaced = false;
     if (!posted) {
+      await tx.delete(subledgerControls).where(eq(subledgerControls.orgId, orgId));
       await tx.delete(accounts).where(eq(accounts.orgId, orgId));
       await seedOrgAccounts(orgId, defs, tx);
       replaced = true;
@@ -518,13 +520,11 @@ export async function finalizeOnboarding(orgId: string, key: string): Promise<Fi
     const { seedSubledgerControls } = await import("@/server/db/repos/subledger.repo");
     const arAcc = orgAccounts.find((a) => a.code === "1200");
     const apAcc = orgAccounts.find((a) => a.code === "2100");
-    if (invAcc && arAcc && apAcc) {
-      await seedSubledgerControls(tx, orgId, {
-        receivableAccountId: arAcc.id,
-        payableAccountId: apAcc.id,
-        inventoryAccountId: invAcc.id,
-      });
-    }
+    await seedSubledgerControls(tx, orgId, {
+      receivableAccountId: arAcc?.id ?? null,
+      payableAccountId: apAcc?.id ?? null,
+      inventoryAccountId: invAcc?.id ?? null,
+    });
 
     await upsertProfile(tx, orgId, {
       status: "COMPLETED",

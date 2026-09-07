@@ -19,13 +19,16 @@ export async function getControlKindByAccount(q: Queryable, orgId: string): Prom
 export async function seedSubledgerControls(
   q: Queryable,
   orgId: string,
-  ids: { receivableAccountId: string; payableAccountId: string; inventoryAccountId: string },
+  ids: { receivableAccountId?: string | null; payableAccountId?: string | null; inventoryAccountId?: string | null },
 ): Promise<void> {
-  await q.insert(subledgerControls).values([
-    { orgId, kind: "PIUTANG", controlAccountId: ids.receivableAccountId },
-    { orgId, kind: "UTANG", controlAccountId: ids.payableAccountId },
-    { orgId, kind: "PERSEDIAAN", controlAccountId: ids.inventoryAccountId },
-  ]).onConflictDoNothing({ target: [subledgerControls.orgId, subledgerControls.kind] });
+  const rows = [
+    ids.receivableAccountId ? { orgId, kind: "PIUTANG", controlAccountId: ids.receivableAccountId } : null,
+    ids.payableAccountId ? { orgId, kind: "UTANG", controlAccountId: ids.payableAccountId } : null,
+    ids.inventoryAccountId ? { orgId, kind: "PERSEDIAAN", controlAccountId: ids.inventoryAccountId } : null,
+  ].filter((r): r is { orgId: string; kind: "PIUTANG" | "UTANG" | "PERSEDIAAN"; controlAccountId: string } => r !== null);
+  if (rows.length === 0) return;
+  await q.insert(subledgerControls).values(rows)
+    .onConflictDoNothing({ target: [subledgerControls.orgId, subledgerControls.kind] });
 }
 
 export interface NewSubledgerLink {
