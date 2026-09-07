@@ -5,6 +5,7 @@ import { Money } from "@/core/money/money";
 import { SUBLEDGER_KIND_LABEL, SUBLEDGER_LIST_ROUTE } from "@/core/subledger/cards";
 import { getSubledgerReconAction } from "@/server/actions/subledger.actions";
 import { RunCheckButton } from "./run-check-button";
+import { Entrance } from "@/components/subsidiary/animated";
 import { Package, Users, Store, ChevronRight } from "lucide-react";
 
 const NAV_ROWS = [
@@ -26,6 +27,7 @@ export default async function BukuPembantuPage() {
         actions={<RunCheckButton />}
       />
       {rows.length > 0 && (
+        <Entrance>
         <div
           data-testid="subledger-verdict"
           className="flex flex-col gap-3 rounded-2xl border border-rule bg-paper p-5 shadow-2xs sm:flex-row sm:items-center sm:justify-between"
@@ -51,16 +53,17 @@ export default async function BukuPembantuPage() {
             {mismatch.length === 0 ? `${rows.length}/${rows.length} cocok` : "Butuh rekonsiliasi"}
           </span>
         </div>
+        </Entrance>
       )}
       <div className="rounded-xl border border-rule overflow-hidden">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm tnum">
           <thead>
-            <tr className="text-[11px] uppercase text-ink-soft border-b border-rule">
-              <th className="text-left font-semibold px-4 py-2">Buku Pembantu</th>
-              <th className="text-right font-semibold px-4 py-2">Saldo Kontrol</th>
-              <th className="text-right font-semibold px-4 py-2">Total Pembantu</th>
-              <th className="text-right font-semibold px-4 py-2">Selisih</th>
-              <th className="text-right font-semibold px-4 py-2">Status</th>
+            <tr className="border-b border-rule bg-canvas/80 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+              <th className="text-left px-4 py-3">Buku Pembantu</th>
+              <th className="text-right px-4 py-3">Saldo Kontrol</th>
+              <th className="text-right px-4 py-3">Total Pembantu</th>
+              <th className="text-right px-4 py-3">Selisih</th>
+              <th className="text-right px-4 py-3">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -69,9 +72,9 @@ export default async function BukuPembantuPage() {
               return (
                 <tr key={r.kind} data-testid="subledger-row" className="border-b border-rule/60 last:border-0">
                   <td className="px-4 py-2.5 font-medium text-ink">{SUBLEDGER_KIND_LABEL[r.kind as keyof typeof SUBLEDGER_KIND_LABEL] ?? r.kind}</td>
-                  <td className="px-4 py-2.5 text-right tnum">{Money.formatIdr(r.controlBalanceMinor)}</td>
-                  <td className="px-4 py-2.5 text-right tnum">{Money.formatIdr(r.subledgerTotalMinor)}</td>
-                  <td className="px-4 py-2.5 text-right tnum">{Money.formatIdr(r.differenceMinor)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono">{Money.formatIdr(r.controlBalanceMinor)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono">{Money.formatIdr(r.subledgerTotalMinor)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono">{Money.formatIdr(r.differenceMinor)}</td>
                   <td className="px-4 py-2.5 text-right">
                     <Badge variant={ok ? "outline" : "destructive"}>{ok ? "Cocok" : "Selisih"}</Badge>
                   </td>

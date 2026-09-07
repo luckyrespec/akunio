@@ -7,6 +7,7 @@ import { getItemCard } from "@/server/db/repos/subsidiary.repo";
 import { stockStatus, formatQty, avgCost } from "@/core/subledger/cards";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { MeterFill } from "@/components/subsidiary/animated";
 import { Money } from "@/core/money/money";
 import { Reveal } from "@/components/motion";
 
@@ -56,9 +57,9 @@ export default async function ItemCardPage({ params }: ItemCardPageProps) {
             {meterScale !== null && (
               <div className="mt-2">
                 <div className="relative h-1.5 rounded-full bg-canvas">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full bg-terra"
-                    style={{ width: `${Math.min(100, (curQty / meterScale) * 100)}%` }}
+                  <MeterFill
+                    fill={Math.min(100, (curQty / meterScale) * 100)}
+                    title={`Minimum ${formatQty(item.minStockAlert ?? "0")}`}
                   />
                   <div
                     className="absolute -top-0.5 -bottom-0.5 w-0.5 rounded bg-ink"
