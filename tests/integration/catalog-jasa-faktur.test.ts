@@ -77,6 +77,7 @@ describe("posting jual campur", () => {
     const { upsertInventorySettings } = await import("@/server/db/repos/inventory.repo");
     const { accounts } = await import("@/server/db/schema/org");
     const { journalLines } = await import("@/server/db/schema/journal");
+    const { toMinor } = await import("@/server/db/repos/journals.repo");
     const { eq } = await import("drizzle-orm");
 
     const { orgId } = await makeOrg("salon-campur");
@@ -144,7 +145,7 @@ describe("posting jual campur", () => {
     const lines = await db.select({ debit: journalLines.debit, credit: journalLines.credit, accountId: journalLines.accountId }).from(journalLines).where(eq(journalLines.entryId, entryId));
     const codeOf = (accountId: string) => accRows.find((a) => a.id === accountId)!.code;
     const sum = (code: string, col: "debit" | "credit") =>
-      lines.filter((l) => codeOf(l.accountId) === code).reduce((a, l) => a + BigInt(l[col] as string), 0n);
+      lines.filter((l) => codeOf(l.accountId) === code).reduce((a, l) => a + toMinor(l[col] as string), 0n);
     expect(sum("1200", "debit")).toBe(120000n);
     expect(sum("4110", "credit")).toBe(70000n);
     expect(sum("4130", "credit")).toBe(50000n);
@@ -217,8 +218,9 @@ describe("posting beli + periodic + void", () => {  beforeEach(async () => {
     const accRows = await db.select().from((await import("@/server/db/schema/org")).accounts).where(eq((await import("@/server/db/schema/org")).accounts.orgId, orgId));
     for (const l of lines) {
       const code = accRows.find((a) => a.id === l.accountId)!.code;
-      sums.set(`${code}:D`, (sums.get(`${code}:D`) ?? 0n) + BigInt(l.debit as string));
-      sums.set(`${code}:C`, (sums.get(`${code}:C`) ?? 0n) + BigInt(l.credit as string));
+      const { toMinor: toMin } = await import("@/server/db/repos/journals.repo");
+      sums.set(`${code}:D`, (sums.get(`${code}:D`) ?? 0n) + toMin(l.debit as string));
+      sums.set(`${code}:C`, (sums.get(`${code}:C`) ?? 0n) + toMin(l.credit as string));
     }
     expect(sums.get("1300:D")).toBe(120000n);
     expect(sums.get("2100:C")).toBe(120000n);
