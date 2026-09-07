@@ -3,7 +3,8 @@ import type { Queryable } from "./queryable";
 import { contacts, invoices, invoicePayments } from "../schema/invoicing";
 import { inventoryItems, inventoryTransactions, stockOpnames } from "../schema/inventory";
 import { buildContactCard, type ContactLedgerInput } from "@/core/subledger/cards";
-import { getSubledgerControls, type SubledgerKind } from "./subledger.repo";
+import { getSubledgerControls } from "./subledger.repo";
+import type { SubledgerKind } from "../schema/subledger";
 
 /** Kind kontrol untuk sebuah akun, atau null bila bukan akun kontrol. */
 export async function getControlForAccount(
