@@ -41,9 +41,14 @@ export function validateSubledgerControl(args: {
   controlByAccountId: Map<string, SubledgerKind>;
   source: JournalSource;
   isOpeningBalance?: boolean;
+  isLegacyReversal?: boolean;
 }): SubledgerIssue[] {
   const issues: SubledgerIssue[] = [];
   if (args.isOpeningBalance) return issues;
+  // Reversal atas entri warisan (tanpa links) neto nol terhadap aslinya:
+  // diizinkan agar koreksi masa transisi tidak terkunci. Reversal atas
+  // jurnal modul (ber-links) tetap wajib via modul.
+  if (args.isLegacyReversal) return issues;
   const manual = MANUAL_SOURCES.has(args.source);
   args.lines.forEach((l, index) => {
     const kind = args.controlByAccountId.get(l.accountId);

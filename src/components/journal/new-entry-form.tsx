@@ -17,7 +17,9 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import { createAndPostAction } from "@/server/actions/journal.actions";
 import { uploadDocumentAction } from "@/server/actions/upload.actions";
+import { PostedSuccess } from "@/components/journal/posted-success";
 import { Money } from "@/core/money/money";
+import { moduleLabelForKind } from "@/core/subledger/guard";
 import { todayISO } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import { SplitButton } from "@/components/ui/split-button";
@@ -46,8 +48,10 @@ function safeMinor(text: string): bigint | null {
 
 export function NewEntryForm({
   accounts,
+  controlKinds = {},
 }: {
   accounts: Array<{ id: string; code?: string; name?: string; label?: string }>;
+  controlKinds?: Record<string, "PIUTANG" | "UTANG" | "PERSEDIAAN">;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -84,6 +88,16 @@ export function NewEntryForm({
   }, [rows]);
 
   const nextKey = Math.max(0, ...rows.map((r) => r.key)) + 1;
+
+  // Akun kontrol tidak bisa diposting via jurnal manual (B1) — cegah sebelum submit.
+  const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
+  const blockedRows: Array<{ key: number; index: number; label: string; kind: "PIUTANG" | "UTANG" | "PERSEDIAAN" }> = [];
+  rows.forEach((r, index) => {
+    const kind = controlKinds[r.accountId];
+    if (r.accountId && kind) {
+      blockedRows.push({ key: r.key, index, label: accountById.get(r.accountId)?.label ?? r.accountId, kind });
+    }
+  });
 
   function update(key: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -170,58 +184,7 @@ export function NewEntryForm({
 
   if (posted) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-        className="mx-auto w-full max-w-lg rounded-2xl border border-rule bg-paper p-8 text-center shadow-xs"
-      >
-        <motion.div
-          initial={{ scale: 0.85, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 320, damping: 22, delay: 0.05 }}
-          className="mx-auto flex size-12 items-center justify-center rounded-full bg-debit/10 text-debit"
-        >
-          <CheckCircle2 className="size-6" />
-        </motion.div>
-        <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
-          Terposting &amp; Terkunci
-        </p>
-        <p className="tnum mt-1 font-display text-3xl font-semibold tracking-tight text-ink">
-          {posted.number}
-        </p>
-        <p className="tnum mt-1 text-xs text-ink-soft">
-          {Money.fromMinor(posted.totalMinor).formatIdr()} · koreksi hanya via jurnal pembalik
-        </p>
-        <div className="rule-double mx-auto mt-4 max-w-[220px]" />
-        <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
-          {posted.id && (
-            <Button
-              type="button"
-              onClick={() => router.push(`/jurnal/${posted.id}`)}
-              className="bg-terra text-xs text-white hover:bg-terra/90"
-            >
-              Lihat Detail
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push("/jurnal")}
-            className="text-xs"
-          >
-            Lihat Jurnal Umum
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => window.location.reload()}
-            className="text-xs"
-          >
-            Tulis Jurnal Lagi
-          </Button>
-        </div>
-      </motion.div>
+      <PostedSuccess id={posted.id} number={posted.number} totalMinor={posted.totalMinor} />
     );
   }
 
@@ -244,7 +207,7 @@ export function NewEntryForm({
 
             <SplitButton
               primaryType="submit"
-              disabled={!totals.balanced || pending}
+              disabled={!totals.balanced || pending || blockedRows.length > 0}
               loading={pending}
               menuLabel="Opsi posting lainnya"
               items={[
@@ -257,6 +220,19 @@ export function NewEntryForm({
           </div>
         }
       />
+
+      {blockedRows.length > 0 && (
+        <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-ink">
+          <p className="font-semibold">Akun kontrol tidak bisa dijurnal manual:</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {blockedRows.map((b) => (
+              <li key={b.key}>
+                Baris {b.index + 1} · {b.label} — mutasi hanya via {moduleLabelForKind(b.kind)}.
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {flash?.id && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-debit/25 bg-debit/10 px-4 py-3 text-xs">

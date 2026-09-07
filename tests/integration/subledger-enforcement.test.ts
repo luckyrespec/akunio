@@ -87,4 +87,39 @@ describe("enforcement B1", () => {
     }));
     expect(ok.number.startsWith("JE-")).toBe(true);
   });
+
+  it("reversal warisan lolos; reversal jurnal modul ditolak", async () => {
+    const { orgId, byCode } = await setup();
+    const contact = await createContactRepo(db, orgId, { name: "C2", type: "CUSTOMER" });
+    const legacy = await withOrg(orgId, (tx) => postJournalEntry(tx, orgId, "t@t.id", {
+      dateISO: `${year}-09-07`, memo: "warisan", source: "MANUAL", isOpeningBalance: true,
+      lines: [
+        { accountId: byCode("1300"), debitMinor: 4_000n, creditMinor: 0n },
+        { accountId: byCode("3100"), debitMinor: 0n, creditMinor: 4_000n },
+      ],
+    }));
+    const reversed = await withOrg(orgId, (tx) => postJournalEntry(tx, orgId, "t@t.id", {
+      dateISO: `${year}-09-07`, memo: "balikan warisan", source: "MANUAL",
+      lines: [
+        { accountId: byCode("3100"), debitMinor: 4_000n, creditMinor: 0n },
+        { accountId: byCode("1300"), debitMinor: 0n, creditMinor: 4_000n },
+      ],
+    }, { reversalOfId: legacy.id }));
+    expect(reversed.number.startsWith("JE-")).toBe(true);
+
+    const modul = await withOrg(orgId, (tx) => postJournalEntry(tx, orgId, "t@t.id", {
+      dateISO: `${year}-09-07`, memo: "modul", source: "DOCUMENT",
+      lines: [
+        { accountId: byCode("1200"), debitMinor: 5_000n, creditMinor: 0n, subledgerLinks: [{ kind: "PIUTANG", refId: contact.id, amountMinor: 5_000n }] },
+        { accountId: byCode("4100"), debitMinor: 0n, creditMinor: 5_000n },
+      ],
+    }));
+    await expect(withOrg(orgId, (tx) => postJournalEntry(tx, orgId, "t@t.id", {
+      dateISO: `${year}-09-07`, memo: "balikan modul via manual", source: "MANUAL",
+      lines: [
+        { accountId: byCode("4100"), debitMinor: 5_000n, creditMinor: 0n },
+        { accountId: byCode("1200"), debitMinor: 0n, creditMinor: 5_000n },
+      ],
+    }, { reversalOfId: modul.id }))).rejects.toThrow("AKUN_KONTROL_WAJIB_VIA_MODUL");
+  });
 });

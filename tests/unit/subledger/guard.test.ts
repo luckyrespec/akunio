@@ -56,6 +56,13 @@ describe("validateSubledgerControl", () => {
     expect(issues).toEqual([]);
   });
 
+  it("reversal warisan tanpa links bypass; bukan warisan tetap ditolak", () => {
+    const legacy = validateSubledgerControl({ lines: [line()], controlByAccountId: controls, source: "MANUAL", isLegacyReversal: true });
+    expect(legacy).toEqual([]);
+    const biasa = validateSubledgerControl({ lines: [line()], controlByAccountId: controls, source: "MANUAL" });
+    expect(biasa[0]?.code).toBe("AKUN_KONTROL_WAJIB_VIA_MODUL");
+  });
+
   it("akun non-kontrol tidak diperiksa", () => {
     const issues = validateSubledgerControl({
       lines: [{ accountId: "acc-beban", debitMinor: 1_000n, creditMinor: 0n }],

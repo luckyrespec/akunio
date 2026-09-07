@@ -1,6 +1,7 @@
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { listAccounts } from "@/server/db/repos/accounts.repo";
+import { getControlKindByAccount } from "@/server/db/repos/subledger.repo";
 import { NewEntryForm } from "@/components/journal/new-entry-form";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
@@ -9,6 +10,7 @@ export default async function JurnalBaruPage() {
   const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
   const rows = await db.transaction((tx) => listAccounts(tx, ctx.orgId));
   const leaves = rows.filter((a) => !rows.some((c) => c.parentCode === a.code));
+  const controls = await db.transaction((tx) => getControlKindByAccount(tx, ctx.orgId));
 
   return (
     <section className="w-full space-y-6">
@@ -26,6 +28,7 @@ export default async function JurnalBaruPage() {
           name: a.name,
           label: `${a.code} · ${a.name}`,
         }))}
+        controlKinds={Object.fromEntries(controls)}
       />
     </section>
   );

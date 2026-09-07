@@ -503,9 +503,19 @@ export async function finalizeOnboarding(orgId: string, key: string): Promise<Fi
         .where(eq(organizations.id, orgId));
     }
 
-    // Inisialisasi pengaturan default persediaan & stok
+    // Inisialisasi pengaturan default persediaan & stok.
+    // Kontrol subledger WAJIB akun daun (bisa diposting): induk grup seperti
+    // 1300 ditolak aturan GROUP_ACCOUNT, jadi jangan pernah daftarkan induk.
     const orgAccounts = await tx.select().from(accounts).where(eq(accounts.orgId, orgId));
-    const invAcc = orgAccounts.find((a) => a.code.startsWith("1-13") || a.name.toLowerCase().includes("persediaan"));
+    const isParent = (code: string) => orgAccounts.some((a) => a.parentCode === code);
+    const persediaanCands = orgAccounts.filter(
+      (a) => a.code.startsWith("13") || a.code.startsWith("1-13") || a.name.toLowerCase().includes("persediaan"),
+    );
+    const invAcc =
+      persediaanCands.find((a) => a.code === "1310" && !isParent(a.code)) ??
+      persediaanCands.find((a) => !isParent(a.code)) ??
+      persediaanCands[0] ??
+      null;
     const cogsAcc = orgAccounts.find((a) => a.code.startsWith("5-10") || a.name.toLowerCase().includes("pokok penjualan"));
     const lossAcc = orgAccounts.find((a) => a.name.toLowerCase().includes("selisih") || a.code.startsWith("5-19"));
 

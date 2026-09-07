@@ -37,6 +37,7 @@ async function assertSubledgerControl(
     controlByAccountId,
     source: input.source ?? "MANUAL",
     isOpeningBalance: input.isOpeningBalance,
+    isLegacyReversal: input.isLegacyReversal,
   });
   if (issues.length === 0) return;
   const first = issues[0];
@@ -377,7 +378,14 @@ export async function postJournalEntry(
   const acctIssues = checkPostingAccounts(input.lines, postingMetaMap(orgAccounts));
   if (acctIssues.length > 0) throw new PostingError(acctIssues);
 
-  await assertSubledgerControl(q, orgId, input, orgAccounts);
+  // Reversal atas entri warisan (tanpa links subledger) diizinkan menyentuh
+  // akun kontrol — neto nol terhadap aslinya. Reversal jurnal modul tetap wajib via modul.
+  let legacyReversal = false;
+  if (opts.reversalOfId) {
+    const origLinks = await listLinksForEntry(q, orgId, opts.reversalOfId);
+    legacyReversal = !origLinks.some((r) => r.linkId);
+  }
+  await assertSubledgerControl(q, orgId, { ...input, isLegacyReversal: legacyReversal }, orgAccounts);
 
   // Numbers are year-scoped (JE-YYYY-NNNN unique per org) while counters are
   // stored per period; the xact lock makes the cross-period read-modify-write

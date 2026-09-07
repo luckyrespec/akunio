@@ -18,4 +18,6 @@ export interface JournalEntryInput {
   source?: JournalSource;
   idempotencyKey?: string;
   isOpeningBalance?: boolean;
+  /** Internal: reversal atas entri warisan tanpa links (neto nol, tanpa jejak baru). */
+  isLegacyReversal?: boolean;
 }
