@@ -12,6 +12,7 @@ import { getInventorySettings } from "@/server/db/repos/inventory.repo";
 import { postJournalEntry, toMinor } from "@/server/db/repos/journals.repo";
 import { journalLines } from "@/server/db/schema/journal";
 import { calculateItemTotal } from "@/core/invoicing/calculations";
+import type { JournalLineInput } from "@/core/journals/types";
 import { calculateWeightedAverage, consumeFifoLayers } from "@/core/inventory/valuation";
 import type { FifoLayer } from "@/core/inventory/types";
 import { eq, and, asc, inArray, sql } from "drizzle-orm";
@@ -228,7 +229,7 @@ export async function postInvoiceToLedger(
   }
 
   return db.transaction(async (tx) => {
-    const lines: Array<{ accountId: string; debitMinor: bigint; creditMinor: bigint; memo?: string }> = [];
+    const lines: JournalLineInput[] = [];
 
     // Katalog ter-link (barang vs jasa) + kebijakan persediaan — dipakai cabang jual maupun beli.
     const linkedIds = [
@@ -302,6 +303,7 @@ export async function postInvoiceToLedger(
         debitMinor: inv.totalMinor,
         creditMinor: 0n,
         memo: `Piutang ${inv.invoiceNumber}`,
+        subledgerLinks: [{ kind: "PIUTANG", refId: inv.contactId, amountMinor: inv.totalMinor }],
       });
 
       // Kompatibilitas: faktur tanpa baris (insert header langsung) pakai satu
@@ -339,8 +341,9 @@ export async function postInvoiceToLedger(
         const cogsAccId =
           settings?.cogsAccountId ?? (await getAccountByCode(tx, orgId, "5100")).id;
         let hppTotal = 0n;
+        const hppLinks: Array<{ kind: "PERSEDIAAN"; refId: string; amountMinor: bigint; qty: number }> = [];
         for (const m of barangMutations) {
-          hppTotal += await applyInvoiceStockOut(
+          const cost = await applyInvoiceStockOut(
             tx,
             orgId,
             m.master,
@@ -350,6 +353,8 @@ export async function postInvoiceToLedger(
             inv.id,
             `Jual ${inv.invoiceNumber} (${m.master.code})`,
           );
+          hppTotal += cost;
+          hppLinks.push({ kind: "PERSEDIAAN", refId: m.master.id, amountMinor: cost, qty: m.qty });
         }
         if (hppTotal > 0n) {
           lines.push({
@@ -363,6 +368,7 @@ export async function postInvoiceToLedger(
             debitMinor: 0n,
             creditMinor: hppTotal,
             memo: `Persediaan keluar ${inv.invoiceNumber}`,
+            subledgerLinks: hppLinks,
           });
         }
       }
@@ -376,6 +382,8 @@ export async function postInvoiceToLedger(
         debitGroups.set(accountId, (debitGroups.get(accountId) ?? 0n) + netto);
       };
       const barangIns: Array<{ master: CatalogMaster; qty: number; unitCostMinor: bigint }> = [];
+      const invLinks: Array<{ kind: "PERSEDIAAN"; refId: string; amountMinor: bigint; qty: number }> = [];
+      const invAccIds = new Set<string>();
       let purchaseAccountId: string | null = null;
 
       const resolveInventoryAccountId = async (): Promise<string> =>
@@ -398,7 +406,10 @@ export async function postInvoiceToLedger(
             const qty = parseQty(line.quantity, line.description);
             const unitCostMinor =
               qty > 0 ? (calc.netSubtotalMinor * 100n) / BigInt(Math.round(qty * 100)) : 0n;
-            addDebit(await resolveInventoryAccountId(), calc.netSubtotalMinor);
+            const invId = await resolveInventoryAccountId();
+            addDebit(invId, calc.netSubtotalMinor);
+            invAccIds.add(invId);
+            invLinks.push({ kind: "PERSEDIAAN", refId: master.id, amountMinor: calc.netSubtotalMinor, qty });
             barangIns.push({ master, qty, unitCostMinor });
           } else {
             purchaseAccountId ??=
@@ -418,6 +429,7 @@ export async function postInvoiceToLedger(
           debitMinor: netto,
           creditMinor: 0n,
           memo: `Beban/Pembelian ${inv.invoiceNumber}`,
+          ...(invAccIds.has(accountId) ? { subledgerLinks: invLinks } : {}),
         });
       }
 
@@ -447,6 +459,7 @@ export async function postInvoiceToLedger(
         debitMinor: 0n,
         creditMinor: inv.totalMinor,
         memo: `Utang ${inv.invoiceNumber}`,
+        subledgerLinks: [{ kind: "UTANG", refId: inv.contactId, amountMinor: inv.totalMinor }],
       });
 
       for (const m of barangIns) {
@@ -532,6 +545,16 @@ export async function voidInvoiceWithReversal(
       .where(eq(journalLines.entryId, fresh.journalEntryId));
     if (origLines.length === 0) throw new Error("JURNAL_TIDAK_DITEMUKAN: baris jurnal asal kosong");
 
+    const { listLinksForEntry } = await import("@/server/db/repos/subledger.repo");
+    const origLinkRows = await listLinksForEntry(tx, orgId, fresh.journalEntryId);
+    const origLinksByLine = new Map<string, Array<{ kind: "PIUTANG" | "UTANG" | "PERSEDIAAN"; refId: string; amountMinor: bigint }>>();
+    for (const r of origLinkRows) {
+      if (!r.linkId) continue;
+      const arr = origLinksByLine.get(r.lineId) ?? [];
+      arr.push({ kind: r.kind as "PIUTANG" | "UTANG" | "PERSEDIAAN", refId: r.refId!, amountMinor: r.amountMinor! });
+      origLinksByLine.set(r.lineId, arr);
+    }
+
     const todayISO = new Date().toISOString().slice(0, 10);
     const reversal = await postJournalEntry(
       tx,
@@ -546,6 +569,9 @@ export async function voidInvoiceWithReversal(
           debitMinor: toMinor(l.credit),
           creditMinor: toMinor(l.debit),
           memo: `Pembalik ${inv.invoiceNumber}`,
+          ...(origLinksByLine.get(l.id)?.length
+            ? { subledgerLinks: origLinksByLine.get(l.id)!.map((x) => ({ ...x })) }
+            : {}),
         })),
       },
       { reversalOfId: fresh.journalEntryId },
@@ -627,7 +653,7 @@ export async function postInvoicePaymentToLedger(
   }
 
   return db.transaction(async (tx) => {
-    const lines: Array<{ accountId: string; debitMinor: bigint; creditMinor: bigint; memo?: string }> = [];
+    const lines: JournalLineInput[] = [];
 
     if (inv.type === "INVOICE") {
       // Pelunasan Piutang: Dr Kas/Bank, Cr Piutang Usaha
@@ -645,6 +671,7 @@ export async function postInvoicePaymentToLedger(
         debitMinor: 0n,
         creditMinor: payment.amountMinor,
         memo: `Pelunasan Piutang ${inv.invoiceNumber}`,
+        subledgerLinks: [{ kind: "PIUTANG", refId: inv.contactId, amountMinor: payment.amountMinor }],
       });
     } else {
       // Pembayaran Utang: Dr Utang Usaha, Cr Kas/Bank
@@ -655,6 +682,7 @@ export async function postInvoicePaymentToLedger(
         debitMinor: payment.amountMinor,
         creditMinor: 0n,
         memo: `Pelunasan Utang ${inv.invoiceNumber}`,
+        subledgerLinks: [{ kind: "UTANG", refId: inv.contactId, amountMinor: payment.amountMinor }],
       });
 
       lines.push({
