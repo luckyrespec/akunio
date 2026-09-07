@@ -35,11 +35,13 @@ import { AkunioMark } from "@/components/brand/akunio-logo";
 type NavChild = {
   href: string;
   label: string;
+  desc: string;
 };
 
 type NavItem = {
   href: string;
   label: string;
+  desc: string;
   icon: typeof IconDashboard;
   match?: (p: string) => boolean;
   children?: NavChild[];
@@ -56,59 +58,62 @@ const NAVIGATION_GROUPS: NavGroup[] = [
     id: "operasional",
     title: "Operasional",
     items: [
-      { href: "/faktur", label: "Faktur & Tagihan", icon: IconReceipt },
+      { href: "/faktur", label: "Faktur & Tagihan", desc: "Buat, kirim, dan pantau piutang–utang usaha", icon: IconReceipt },
       {
         href: "/persediaan/daftar",
         label: "Persediaan & Stok",
+        desc: "Kelola barang, jasa, dan stok opname",
         icon: IconInventory,
         match: (p: string) => p.startsWith("/persediaan"),
         children: [
-          { href: "/persediaan/daftar", label: "Daftar Barang" },
-          { href: "/persediaan/jasa", label: "Jasa & Layanan" },
-          { href: "/persediaan/opname", label: "Stok Opname" },
+          { href: "/persediaan/daftar", label: "Daftar Barang", desc: "Katalog barang dagang dan stoknya" },
+          { href: "/persediaan/jasa", label: "Jasa & Layanan", desc: "Katalog jasa tanpa stok" },
+          { href: "/persediaan/opname", label: "Stok Opname", desc: "Hitung fisik dan selisihkan stok" },
         ],
       },
       {
         href: "/kas-bank/pembayaran",
         label: "Kas & Bank",
+        desc: "Catat kas masuk, keluar, dan transfer",
         icon: IconReconciliation,
         match: (p: string) => p.startsWith("/kas-bank") || p.startsWith("/rekonsiliasi"),
         children: [
-          { href: "/kas-bank/pembayaran", label: "Pembayaran" },
-          { href: "/kas-bank/penerimaan", label: "Penerimaan" },
-          { href: "/kas-bank/transfer", label: "Transfer Bank" },
-          { href: "/kas-bank/histori", label: "Histori Bank" },
-          { href: "/kas-bank/rekonsiliasi", label: "Rekonsiliasi Bank" },
+          { href: "/kas-bank/pembayaran", label: "Pembayaran", desc: "Catat uang keluar kas/bank" },
+          { href: "/kas-bank/penerimaan", label: "Penerimaan", desc: "Catat uang masuk kas/bank" },
+          { href: "/kas-bank/transfer", label: "Transfer Bank", desc: "Pindahkan dana antar rekening" },
+          { href: "/kas-bank/histori", label: "Histori Bank", desc: "Riwayat semua mutasi kas/bank" },
+          { href: "/kas-bank/rekonsiliasi", label: "Rekonsiliasi Bank", desc: "Cocokkan buku dengan mutasi bank" },
         ],
       },
-      { href: "/kontak", label: "Kontak", icon: IconContacts },
+      { href: "/kontak", label: "Kontak", desc: "Pelanggan, pemasok, dan info pembayarannya", icon: IconContacts },
     ],
   },
   {
     id: "akuntansi",
     title: "Akuntansi",
     items: [
-      { href: "/jurnal", label: "Jurnal Umum", icon: IconJournal, match: (p: string) => p === "/jurnal" || p === "/jurnal/baru" },
-      { href: "/buku-besar", label: "Buku Besar", icon: IconLedger },
-      { href: "/aset", label: "Aset Tetap", icon: IconAssets },
+      { href: "/jurnal", label: "Jurnal Umum", desc: "Catat transaksi debit–kredit manual", icon: IconJournal, match: (p: string) => p === "/jurnal" || p === "/jurnal/baru" },
+      { href: "/buku-besar", label: "Buku Besar", desc: "Mutasi dan saldo tiap akun", icon: IconLedger },
+      { href: "/buku-pembantu", label: "Buku Pembantu", desc: "Rincian piutang, utang, dan persediaan vs kontrol", icon: IconLedger },
+      { href: "/aset", label: "Aset Tetap", desc: "Daftar aset dan penyusutannya", icon: IconAssets },
     ],
   },
   {
     id: "laporan",
     title: "Laporan & Evaluasi",
     items: [
-      { href: "/laporan", label: "Laporan Keuangan", icon: IconReports },
-      { href: "/pajak", label: "Pajak & SPT", icon: IconTax, match: (p: string) => p.startsWith("/pajak") },
-      { href: "/tutup-buku", label: "Tutup Buku", icon: IconClosing },
-      { href: "/temuan", label: "Diagnosa & Anomali", icon: IconDoctor },
-      { href: "/aturan", label: "Standar SAK EMKM", icon: IconBookOpen, match: (p: string) => p.startsWith("/aturan") },
+      { href: "/laporan", label: "Laporan Keuangan", desc: "Neraca, laba rugi, arus kas, ekuitas", icon: IconReports },
+      { href: "/pajak", label: "Pajak & SPT", desc: "Hitung dan catat PPh final UMKM", icon: IconTax, match: (p: string) => p.startsWith("/pajak") },
+      { href: "/tutup-buku", label: "Tutup Buku", desc: "Kunci periode agar tak berubah", icon: IconClosing },
+      { href: "/temuan", label: "Diagnosa & Anomali", desc: "Temuan otomatis pembukuan bermasalah", icon: IconDoctor },
+      { href: "/aturan", label: "Standar SAK EMKM", desc: "Rujukan aturan akuntansi usaha", icon: IconBookOpen, match: (p: string) => p.startsWith("/aturan") },
     ],
   },
   {
     id: "lainnya",
     title: "Lainnya",
     items: [
-      { href: "/pengaturan", label: "Pengaturan", icon: IconSettings },
+      { href: "/pengaturan", label: "Pengaturan", desc: "Akun, periode, dan profil usaha", icon: IconSettings },
     ],
   },
 ];
@@ -156,7 +161,7 @@ function ParentNavItem({
           </Link>
         </TooltipTrigger>
         <TooltipContent side="right">
-          {(item.children ?? []).map((c) => c.label).join(" · ")}
+          {item.desc}
         </TooltipContent>
       </Tooltip>
     );
@@ -164,6 +169,8 @@ function ParentNavItem({
 
   return (
     <div className="flex flex-col gap-0.5">
+      <Tooltip>
+        <TooltipTrigger asChild>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -184,18 +191,30 @@ function ParentNavItem({
         <span className="truncate flex-1 text-left">{item.label}</span>
         <ChevronDown
           className={cn(
-            "size-3.5 shrink-0 transition-transform motion-safe:duration-200",
+            "size-3.5 shrink-0 transition-transform motion-safe:duration-200 motion-safe:ease-[var(--ease-in-out)]",
             expanded && "rotate-180"
           )}
         />
       </button>
-      {expanded && (
-        <div className="ml-4 flex flex-col gap-0.5 border-l border-rule/70 pl-2">
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {item.desc}
+        </TooltipContent>
+      </Tooltip>
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows] motion-safe:duration-240 motion-safe:ease-[var(--ease-out)]",
+          expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden" inert={!expanded}>
+          <div className="ml-4 flex flex-col gap-0.5 border-l border-rule/70 pl-2">
           {(item.children ?? []).map((child) => {
             const childActive = isActive(child.href);
             return (
+              <Tooltip key={child.href}>
+                <TooltipTrigger asChild>
               <Link
-                key={child.href}
                 href={child.href}
                 onClick={() => {
                   if (isDrawer && onCloseMobile) onCloseMobile();
@@ -209,10 +228,16 @@ function ParentNavItem({
               >
                 {child.label}
               </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {child.desc}
+                </TooltipContent>
+              </Tooltip>
             );
           })}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -331,7 +356,7 @@ export function SidebarNav({  collapsed,
               </Link>
             </TooltipTrigger>
             <TooltipContent side="right">
-              Dashboard
+              Ringkasan kas, laba, dan yang perlu perhatian
             </TooltipContent>
           </Tooltip>
         </div>
@@ -398,7 +423,7 @@ export function SidebarNav({  collapsed,
                         </Link>
                       </TooltipTrigger>
                       <TooltipContent side="right">
-                        {item.label}
+                        {item.desc}
                       </TooltipContent>
                     </Tooltip>
                   );
