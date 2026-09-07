@@ -428,6 +428,16 @@ export async function generateAdjustmentJournalDraft(
   const direction = isDeficit ? "DEFISIT" : "SURPLUS";
   const resolved = await resolveAdjustmentAccounts(q, orgId, direction);
 
+  const persediaanLinks: Array<{ kind: "PERSEDIAAN"; refId: string; amountMinor: bigint; qty: number }> =
+    opnameData.items
+      .filter((it) => it.differenceValueMinor !== 0n)
+      .map((it) => ({
+        kind: "PERSEDIAAN" as const,
+        refId: it.itemId,
+        amountMinor: it.differenceValueMinor < 0n ? -it.differenceValueMinor : it.differenceValueMinor,
+        qty: Number(it.differenceQty),
+      }));
+
   const lines = isDeficit
     ? [
         {
@@ -441,6 +451,7 @@ export async function generateAdjustmentJournalDraft(
           debitMinor: 0n,
           creditMinor: absValue,
           memo: `Pengurangan Persediaan Opname ${opnameData.number}`,
+          subledgerLinks: persediaanLinks,
         },
       ]
     : [
@@ -449,6 +460,7 @@ export async function generateAdjustmentJournalDraft(
           debitMinor: absValue,
           creditMinor: 0n,
           memo: `Penambahan Persediaan Opname ${opnameData.number}`,
+          subledgerLinks: persediaanLinks,
         },
         {
           accountId: (resolved.gainAccountId as string),

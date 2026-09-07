@@ -111,6 +111,19 @@ export async function createCashEntryRepo(
     counterIsCash: input.kind === "TRANSFER",
     memo: input.memo,
   });
+  const { getControlKindByAccount } = await import("./subledger.repo");
+  const controlByAccountId = await getControlKindByAccount(q, orgId);
+  const counterKind = controlByAccountId.get(input.counterAccountId);
+  if (counterKind === "PERSEDIAAN") {
+    throw new CashValidationError("AKUN_KONTROL_WAJIB_VIA_MODUL: mutasi Persediaan via kas-bank dilarang, gunakan menu Pembelian/Persediaan");
+  }
+  let counterLinks: Array<{ kind: "PIUTANG" | "UTANG"; refId: string; amountMinor: bigint }> | undefined;
+  if (counterKind === "PIUTANG" || counterKind === "UTANG") {
+    if (!input.contactId) {
+      throw new CashValidationError("KONTAK_WAJIB: lawan Piutang/Utang wajib pilih kontak");
+    }
+    counterLinks = [{ kind: counterKind, refId: input.contactId, amountMinor: input.amountMinor }];
+  }
   const journalInput = {
     dateISO: input.entryDate,
     memo: input.memo || `${input.kind} ${input.entryDate}`,
@@ -121,11 +134,13 @@ export async function createCashEntryRepo(
         accountId: plan.debitAccountId,
         debitMinor: input.amountMinor,
         creditMinor: 0n,
+        ...(plan.debitAccountId === input.counterAccountId && counterLinks ? { subledgerLinks: counterLinks } : {}),
       },
       {
         accountId: plan.creditAccountId,
         debitMinor: 0n,
         creditMinor: input.amountMinor,
+        ...(plan.creditAccountId === input.counterAccountId && counterLinks ? { subledgerLinks: counterLinks } : {}),
       },
     ],
   };
