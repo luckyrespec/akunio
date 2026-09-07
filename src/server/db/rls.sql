@@ -13,6 +13,7 @@ BEGIN
                            'contacts','invoices','bank_reconciliations','kas_bank_entries','kas_bank_seq_counters',
                            'fixed_assets','asset_depreciation_lines','asset_disposals',
                            'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames','inventory_sku_counters',
+                           'subledger_controls','subledger_journal_links',
                            'tax_summaries']
   LOOP
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN

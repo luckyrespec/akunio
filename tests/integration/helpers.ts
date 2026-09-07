@@ -21,11 +21,16 @@ export function getPool(): Pool {
 export async function truncateAll(): Promise<void> {
   const admin = new Pool({ connectionString: guardTestDb(process.env.DATABASE_URL!) });
   await admin.query(`
-    TRUNCATE tax_summaries, audit_log, journal_lines, journal_entries, journal_seq_counters,
+    TRUNCATE subledger_journal_links, subledger_controls,
+               tax_summaries, audit_log, journal_lines, journal_entries, journal_seq_counters,
               kas_bank_entries, kas_bank_seq_counters, inventory_sku_counters,
               bank_statement_lines, bank_reconciliations,
               journal_documents, documents,
-              accounts, fiscal_periods, memberships, organizations,
+              invoice_items, invoice_payments, invoices, contacts,
+               inventory_layers, inventory_transactions, stock_opname_items, stock_opnames,
+               inventory_settings, inventory_items,
+               asset_depreciation_lines, asset_disposals, fixed_assets,
+               accounts, fiscal_periods, memberships, organizations,
               org_profiles, onboarding_messages CASCADE
   `);
   await admin.end();
