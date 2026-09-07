@@ -195,6 +195,23 @@ async function getAccountByCode(q: Queryable, orgId: string, code: string) {
   return row;
 }
 
+/** Akun kontrol persediaan dari registry subledger; fallback kode untuk org lama. */
+async function resolveInventoryControlAccountId(tx: Queryable, orgId: string): Promise<string> {
+  const { getSubledgerControls } = await import("@/server/db/repos/subledger.repo");
+  const controls = await getSubledgerControls(tx, orgId);
+  const id = controls.find((c) => c.kind === "PERSEDIAAN")?.controlAccountId ?? null;
+  if (id) return id;
+  const fallback =
+    (await getAccountByCodeOrNull(tx, orgId, "1310"))?.id ??
+    (await getAccountByCodeOrNull(tx, orgId, "1300"))?.id;
+  if (!fallback) {
+    throw new Error(
+      "AKUN_PERSEDIAAN_BELUM_DIPETAKAN: registry subledger PERSEDIAAN belum di-seed (dijalankan otomatis saat onboarding)",
+    );
+  }
+  return fallback;
+}
+
 export async function postInvoiceToLedger(
   db: Db,
   orgId: string,
@@ -318,15 +335,7 @@ export async function postInvoiceToLedger(
 
       // Mutasi stok barang + HPP agregat (PERPETUAL saja).
       if (barangMutations.length > 0) {
-        const invAccId =
-          settings?.inventoryAccountId ??
-          (await getAccountByCodeOrNull(tx, orgId, "1310"))?.id ??
-          (await getAccountByCodeOrNull(tx, orgId, "1300"))?.id;
-        if (!invAccId) {
-          throw new Error(
-            "AKUN_PERSEDIAAN_BELUM_DIPETAKAN: pilih Akun Persediaan di Pengaturan > Persediaan sebelum memposting faktur barang",
-          );
-        }
+        const invAccId = await resolveInventoryControlAccountId(tx, orgId);
         const cogsAccId =
           settings?.cogsAccountId ?? (await getAccountByCode(tx, orgId, "5100")).id;
         let hppTotal = 0n;
@@ -369,18 +378,8 @@ export async function postInvoiceToLedger(
       const barangIns: Array<{ master: CatalogMaster; qty: number; unitCostMinor: bigint }> = [];
       let purchaseAccountId: string | null = null;
 
-      const resolveInventoryAccountId = async (): Promise<string> => {
-        const id =
-          settings?.inventoryAccountId ??
-          (await getAccountByCodeOrNull(tx, orgId, "1310"))?.id ??
-          (await getAccountByCodeOrNull(tx, orgId, "1300"))?.id;
-        if (!id) {
-          throw new Error(
-            "AKUN_PERSEDIAAN_BELUM_DIPETAKAN: pilih Akun Persediaan di Pengaturan > Persediaan sebelum memposting faktur barang",
-          );
-        }
-        return id;
-      };
+      const resolveInventoryAccountId = async (): Promise<string> =>
+        resolveInventoryControlAccountId(tx, orgId);
 
       for (const line of inv.items) {
         const calc = calculateItemTotal(

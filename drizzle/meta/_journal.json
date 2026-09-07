@@ -120,6 +120,13 @@
 			"when": 1788900000000,
 			"tag": "0016_subledger",
 			"breakpoints": true
+		},
+		{
+			"idx": 17,
+			"version": "7",
+			"when": 1788900001000,
+			"tag": "0017_subledger-drop-inventory-account",
+			"breakpoints": true
 		}
 	]
 }

@@ -24,6 +24,7 @@ import {
 import type { AccountDef } from "@/core/accounts/types";
 import { DEFAULT_NORMAL } from "@/core/accounts/types";
 import type { OnboardingStep } from "@/server/db/schema/onboarding";
+import { chatModel } from "@/server/ai/models";
 import type { Queryable } from "@/server/db/repos/queryable";
 import {
   parseBusinessType,
@@ -97,7 +98,7 @@ async function polish(template: string): Promise<string> {
     const { GoogleGenAI } = await import("@google/genai");
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const asked = ai.interactions.create({
-      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
+      model: chatModel(),
       input: [
         {
           type: "user_input",
@@ -511,10 +512,19 @@ export async function finalizeOnboarding(orgId: string, key: string): Promise<Fi
       orgId,
       valuationMethod: "WEIGHTED_AVERAGE",
       recordingMethod: type === "JASA" ? "PERIODIC" : "PERPETUAL",
-      inventoryAccountId: invAcc?.id ?? null,
       cogsAccountId: cogsAcc?.id ?? null,
       adjustmentLossAccountId: lossAcc?.id ?? null,
     }).onConflictDoNothing();
+    const { seedSubledgerControls } = await import("@/server/db/repos/subledger.repo");
+    const arAcc = orgAccounts.find((a) => a.code === "1200");
+    const apAcc = orgAccounts.find((a) => a.code === "2100");
+    if (invAcc && arAcc && apAcc) {
+      await seedSubledgerControls(tx, orgId, {
+        receivableAccountId: arAcc.id,
+        payableAccountId: apAcc.id,
+        inventoryAccountId: invAcc.id,
+      });
+    }
 
     await upsertProfile(tx, orgId, {
       status: "COMPLETED",

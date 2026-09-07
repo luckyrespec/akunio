@@ -30,7 +30,6 @@ export const inventorySettings = pgTable("inventory_settings", {
   })
     .notNull()
     .default("PERPETUAL"),
-  inventoryAccountId: uuid("inventory_account_id").references(() => accounts.id),
   cogsAccountId: uuid("cogs_account_id").references(() => accounts.id),
   adjustmentLossAccountId: uuid("adjustment_loss_account_id").references(() => accounts.id),
   adjustmentGainAccountId: uuid("adjustment_gain_account_id").references(() => accounts.id),

@@ -14,6 +14,7 @@ import { createDraftJournalEntry, toMinor } from "./journals.repo";
 import { nextSkuCodes } from "./inventory-sku";
 import { findPeriodByDate } from "./periods.repo";
 import { calculateStockDifference } from "@/core/inventory/valuation";
+import { isRagTenantIndexingEnabled } from "@/server/ai/rag-worker";
 
 export interface CreateItemInput {
   code?: string;
@@ -85,7 +86,6 @@ export async function upsertInventorySettings(
       orgId,
       valuationMethod: data.valuationMethod ?? "WEIGHTED_AVERAGE",
       recordingMethod: data.recordingMethod ?? "PERPETUAL",
-      inventoryAccountId: data.inventoryAccountId,
       cogsAccountId: data.cogsAccountId,
       adjustmentLossAccountId: data.adjustmentLossAccountId,
       adjustmentGainAccountId: data.adjustmentGainAccountId,
@@ -350,7 +350,8 @@ type ResolvedAccounts = {
 
 /**
  * Resolve akun penyesuaian secara fail-closed: tidak ada tebakan fuzzy.
- * settings.inventoryAccountId / adjustmentLoss/Gain wajib terisi (diatur di
+ * Akun persediaan dibaca dari registry subledger_controls (PERSEDIAAN),
+ * bukan lagi kolom inventory_settings. Akun selisih wajib terisi (diatur di
  * Pengaturan > Persediaan atau saat onboarding). Pesan error menyebut lokasi.
  */
 async function resolveAdjustmentAccounts(
@@ -362,14 +363,16 @@ async function resolveAdjustmentAccounts(
   const allAccounts = await q.select().from(accounts).where(eq(accounts.orgId, orgId));
   const byId = new Map(allAccounts.map((a) => [a.id, a]));
 
-  const inventoryId = settings?.inventoryAccountId ?? null;
+  const { getSubledgerControls } = await import("./subledger.repo");
+  const controls = await getSubledgerControls(q, orgId);
+  const inventoryId = controls.find((c) => c.kind === "PERSEDIAAN")?.controlAccountId ?? null;
   const lossId = settings?.adjustmentLossAccountId ?? null;
   const gainId = settings?.adjustmentGainAccountId ?? null;
 
   const inventoryOk = inventoryId && byId.has(inventoryId);
   if (!inventoryOk) {
     throw new Error(
-      "AKUN_PERSEDIAAN_BELUM_DIPETAKAN: pilih Akun Persediaan di Pengaturan > Persediaan sebelum membuat draf penyesuaian",
+      "AKUN_PERSEDIAAN_BELUM_DIPETAKAN: registry subledger PERSEDIAAN belum di-seed (dijalankan otomatis saat onboarding)",
     );
   }
   if (direction === "DEFISIT" && (!lossId || !byId.has(lossId))) {
@@ -618,7 +621,9 @@ export async function postOpnameAdjustment(
   if (posted.length === 0) throw new Error("JURNAL_SUDAH_DIPOSTING");
 
   try {
-    await q.execute(sql`INSERT INTO rag_queue (org_id, kind, ref_id) VALUES (${orgId}, 'JOURNAL', ${entry.id})`);
+    if (isRagTenantIndexingEnabled()) {
+      await q.execute(sql`INSERT INTO rag_queue (org_id, kind, ref_id) VALUES (${orgId}, 'JOURNAL', ${entry.id})`);
+    }
   } catch {
     // best-effort
   }
