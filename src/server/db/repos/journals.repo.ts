@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { journalEntries, journalLines } from "../schema/journal";
 import { accounts } from "../schema/org";
@@ -6,15 +6,66 @@ import { documents, journalDocuments } from "../schema/ai";
 import type { Queryable } from "./queryable";
 import { findPeriodByDate } from "./periods.repo";
 import { postingMetaMap } from "./accounts.repo";
+import { isRagTenantIndexingEnabled } from "@/server/ai/rag-worker";
 import {
   validateEntry, checkPostingAccounts, journalNumber,
 } from "@/core/journals/validate";
 import type { JournalEntryInput } from "@/core/journals/types";
+import { validateSubledgerControl, moduleLabelForKind } from "@/core/subledger/guard";
+import { getControlKindByAccount, insertSubledgerLinks, listLinksForEntry } from "./subledger.repo";
 
 export class PostingError extends Error {
   constructor(readonly issues: Array<Record<string, unknown>>) {
     super("VALIDASI_GAGAL");
   }
+}
+
+async function assertSubledgerControl(
+  q: Queryable,
+  orgId: string,
+  input: JournalEntryInput,
+  orgAccounts: Array<{ id: string; code: string }>,
+): Promise<void> {
+  const controlByAccountId = await getControlKindByAccount(q, orgId);
+  const issues = validateSubledgerControl({
+    lines: input.lines.map((l) => ({
+      accountId: l.accountId,
+      debitMinor: l.debitMinor,
+      creditMinor: l.creditMinor,
+      links: l.subledgerLinks,
+    })),
+    controlByAccountId,
+    source: input.source ?? "MANUAL",
+    isOpeningBalance: input.isOpeningBalance,
+  });
+  if (issues.length === 0) return;
+  const first = issues[0];
+  const code = orgAccounts.find((a) => a.id === input.lines[first.index].accountId)?.code ?? "?";
+  if (first.code === "AKUN_KONTROL_WAJIB_VIA_MODUL") {
+    throw new Error(`AKUN_KONTROL_WAJIB_VIA_MODUL: akun ${code} hanya boleh dimutasi via ${moduleLabelForKind(first.kind)}, bukan jurnal manual`);
+  }
+  if (first.code === "SUBLEDGER_REF_WAJIB") {
+    throw new Error(`SUBLEDGER_REF_WAJIB: baris ${code} wajib membawa rincian ${first.kind}`);
+  }
+  if (first.code === "SUBLEDGER_KIND_TIDAK_COCok") {
+    throw new Error(`SUBLEDGER_KIND_TIDAK_COCok: baris ${code} mengharapkan ${first.expected}, dapat ${first.actual}`);
+  }
+  throw new Error(`SUBLEDGER_TOTAL_TIDAK_COCok: total rincian tidak sama dengan nominal baris ${code}`);
+}
+
+async function persistSubledgerLinks(
+  q: Queryable,
+  orgId: string,
+  lineIdsByPosition: Map<number, string>,
+  input: JournalEntryInput,
+): Promise<void> {
+  const rows: Array<{ journalLineId: string; kind: "PIUTANG" | "UTANG" | "PERSEDIAAN"; refId: string; amountMinor: bigint; qty?: number }> = [];
+  input.lines.forEach((l, i) => {
+    for (const link of l.subledgerLinks ?? []) {
+      rows.push({ journalLineId: lineIdsByPosition.get(i)!, kind: link.kind, refId: link.refId, amountMinor: link.amountMinor, qty: link.qty });
+    }
+  });
+  await insertSubledgerLinks(q, orgId, rows);
 }
 
 // numeric(18,2) text form from minor units — no float math.
@@ -99,6 +150,52 @@ export async function listEntriesWithLines(
   q: Queryable, orgId: string, limit = 50, offset = 0,
 ): Promise<EntryView[]> {
   return assemble(q, eq(journalEntries.orgId, orgId), limit, offset);
+}
+
+export interface EntryListFilter {
+  dateFrom?: string;
+  dateTo?: string;
+  /** Kode akun COA persis (mis. "5-1010"): hanya entri yang menyentuh akun ini. */
+  accountCode?: string;
+  status?: "DRAFT" | "POSTED";
+}
+
+/** listEntriesWithLines + filter tanggal/akun/status untuk tool AI agregasi. */
+export async function listEntriesWithLinesFiltered(
+  q: Queryable, orgId: string, filter: EntryListFilter = {}, limit = 50, offset = 0,
+): Promise<EntryView[]> {
+  if (filter.accountCode) {
+    const ids = await q
+      .selectDistinct({ entryId: journalLines.entryId })
+      .from(journalLines)
+      .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+      .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+      .where(and(eq(journalEntries.orgId, orgId), eq(accounts.code, filter.accountCode)));
+    if (ids.length === 0) return [];
+    return assemble(
+      q,
+      and(
+        eq(journalEntries.orgId, orgId),
+        inArray(journalEntries.id, ids.map((r) => r.entryId)),
+        ...(filter.dateFrom ? [gte(journalEntries.entryDate, filter.dateFrom)] : []),
+        ...(filter.dateTo ? [lte(journalEntries.entryDate, filter.dateTo)] : []),
+        ...(filter.status ? [eq(journalEntries.status, filter.status)] : []),
+      ),
+      limit,
+      offset,
+    );
+  }
+  return assemble(
+    q,
+    and(
+      eq(journalEntries.orgId, orgId),
+      ...(filter.dateFrom ? [gte(journalEntries.entryDate, filter.dateFrom)] : []),
+      ...(filter.dateTo ? [lte(journalEntries.entryDate, filter.dateTo)] : []),
+      ...(filter.status ? [eq(journalEntries.status, filter.status)] : []),
+    ),
+    limit,
+    offset,
+  );
 }
 
 export async function countEntries(q: Queryable, orgId: string): Promise<number> {
@@ -280,6 +377,8 @@ export async function postJournalEntry(
   const acctIssues = checkPostingAccounts(input.lines, postingMetaMap(orgAccounts));
   if (acctIssues.length > 0) throw new PostingError(acctIssues);
 
+  await assertSubledgerControl(q, orgId, input, orgAccounts);
+
   // Numbers are year-scoped (JE-YYYY-NNNN unique per org) while counters are
   // stored per period; the xact lock makes the cross-period read-modify-write
   // atomic against other postings in the same org-year.
@@ -315,7 +414,7 @@ export async function postJournalEntry(
     idempotencyKey: input.idempotencyKey ?? null,
   }).returning({ id: journalEntries.id });
 
-  await q.insert(journalLines).values(input.lines.map((l, i) => ({
+  const insertedLines = await q.insert(journalLines).values(input.lines.map((l, i) => ({
     orgId,
     entryId: entry.id,
     accountId: l.accountId,
@@ -323,16 +422,19 @@ export async function postJournalEntry(
     debit: dec(l.debitMinor),
     credit: dec(l.creditMinor),
     memo: l.memo ?? null,
-  })));
+  }))).returning({ id: journalLines.id, position: journalLines.position });
+  await persistSubledgerLinks(q, orgId, new Map(insertedLines.map((r) => [r.position, r.id])), input);
 
   await q.update(journalEntries)
     .set({ status: "POSTED", postedAt: new Date(), postedBy: actorEmail })
     .where(and(eq(journalEntries.id, entry.id), eq(journalEntries.status, "DRAFT")));
 
-  // Enqueue for RAG indexing (real-time, best-effort)
-  try {
-    await q.execute(sql`INSERT INTO rag_queue (org_id, kind, ref_id) VALUES (${orgId}, 'JOURNAL', ${entry.id})`);
-  } catch {}
+  // Enqueue for RAG indexing (real-time, best-effort, kill-switch via env)
+  if (isRagTenantIndexingEnabled()) {
+    try {
+      await q.execute(sql`INSERT INTO rag_queue (org_id, kind, ref_id) VALUES (${orgId}, 'JOURNAL', ${entry.id})`);
+    } catch {}
+  }
 
   // Enqueue for Doctor scan (best-effort, never blocks posting)
   try {
@@ -358,6 +460,8 @@ export async function createDraftJournalEntry(
   const orgAccounts = await q.select().from(accounts).where(eq(accounts.orgId, orgId));
   const acctIssues = checkPostingAccounts(input.lines, postingMetaMap(orgAccounts));
   if (acctIssues.length > 0) throw new PostingError(acctIssues);
+
+  await assertSubledgerControl(q, orgId, input, orgAccounts);
 
   const year = period.name.slice(0, 4);
   await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:${year}`}))`);
@@ -391,7 +495,7 @@ export async function createDraftJournalEntry(
     idempotencyKey: input.idempotencyKey ?? null,
   }).returning({ id: journalEntries.id });
 
-  await q.insert(journalLines).values(input.lines.map((l, i) => ({
+  const insertedDraftLines = await q.insert(journalLines).values(input.lines.map((l, i) => ({
     orgId,
     entryId: entry.id,
     accountId: l.accountId,
@@ -399,7 +503,8 @@ export async function createDraftJournalEntry(
     debit: dec(l.debitMinor),
     credit: dec(l.creditMinor),
     memo: l.memo ?? null,
-  })));
+  }))).returning({ id: journalLines.id, position: journalLines.position });
+  await persistSubledgerLinks(q, orgId, new Map(insertedDraftLines.map((r) => [r.position, r.id])), input);
 
   return { id: entry.id, number };
 }
@@ -418,6 +523,27 @@ export async function postDraftEntry(
   if (entry.status === "POSTED") return { id: entry.id, number: entry.number };
   const period = await findPeriodByDate(q, orgId, entry.entryDate);
   if (!period || period.status !== "OPEN") throw new PostingError([{ code: "PERIODE_TUTUP" }]);
+  const draftLineRows = await q.select().from(journalLines).where(eq(journalLines.entryId, entry.id));
+  const draftLinkRows = await listLinksForEntry(q, orgId, entry.id);
+  const draftLinksByLine = new Map<string, Array<{ kind: "PIUTANG" | "UTANG" | "PERSEDIAAN"; refId: string; amountMinor: bigint }>>();
+  for (const r of draftLinkRows) {
+    if (!r.linkId) continue;
+    const arr = draftLinksByLine.get(r.lineId) ?? [];
+    arr.push({ kind: r.kind as "PIUTANG" | "UTANG" | "PERSEDIAAN", refId: r.refId!, amountMinor: r.amountMinor! });
+    draftLinksByLine.set(r.lineId, arr);
+  }
+  const draftOrgAccounts = await q.select().from(accounts).where(eq(accounts.orgId, orgId));
+  await assertSubledgerControl(q, orgId, {
+    dateISO: entry.entryDate,
+    memo: entry.memo,
+    source: (entry.source ?? "MANUAL") as JournalEntryInput["source"],
+    lines: draftLineRows.map((l) => ({
+      accountId: l.accountId,
+      debitMinor: toMinor(l.debit),
+      creditMinor: toMinor(l.credit),
+      subledgerLinks: draftLinksByLine.get(l.id) ?? [],
+    })),
+  }, draftOrgAccounts);
   const [updated] = await q.update(journalEntries)
     .set({ status: "POSTED", postedAt: new Date(), postedBy: actorEmail })
     .where(and(eq(journalEntries.id, entry.id), eq(journalEntries.status, "DRAFT")))
