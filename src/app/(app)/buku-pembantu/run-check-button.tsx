@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { runSubledgerCheckAction } from "@/server/actions/subledger.actions";
 
@@ -14,6 +15,7 @@ export function RunCheckButton() {
     <div className="flex flex-col items-end gap-1">
       <Button
         data-testid="subledger-run-check"
+        size="sm"
         disabled={pending}
         onClick={() => {
           setResult(null);
@@ -31,8 +33,10 @@ export function RunCheckButton() {
             router.refresh();
           });
         }}
+        className="bg-terra text-white hover:bg-terra/90 text-xs gap-1.5 shadow-xs"
       >
-        {pending ? "Memeriksa…" : "Jalankan Pemeriksaan"}
+        <RefreshCw className="size-3.5" />
+        <span>{pending ? "Memeriksa…" : "Jalankan Pemeriksaan"}</span>
       </Button>
       {result && <p className="text-xs text-ink-soft">{result}</p>}
     </div>

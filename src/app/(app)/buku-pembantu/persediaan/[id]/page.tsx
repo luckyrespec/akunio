@@ -17,6 +17,7 @@ interface ItemCardPageProps {
 
 export default async function ItemCardPage({ params }: ItemCardPageProps) {
   const { id } = await params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) notFound();
   const ctx = await requireContext();
   const card = await getItemCard(db, ctx.orgId, id);
   if (!card) notFound();
@@ -85,7 +86,7 @@ export default async function ItemCardPage({ params }: ItemCardPageProps) {
       <Reveal delay={0.1}>
         <div className="rounded-xl border border-rule overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left tnum">
+            <table className="w-full text-xs text-left tnum" aria-label="Kartu mutasi persediaan">
               <thead>
                 <tr className="border-b border-rule bg-canvas/80 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
                   <th className="px-4 py-3">Tanggal</th>
@@ -119,9 +120,9 @@ export default async function ItemCardPage({ params }: ItemCardPageProps) {
                       <td className="px-4 py-2.5 whitespace-nowrap text-ink-soft">{r.date}</td>
                       <td className="px-4 py-2.5 text-ink max-w-60 truncate" title={r.desc}>{r.desc}</td>
                       <td className="px-4 py-2.5 font-mono text-ink-soft whitespace-nowrap">{r.ref}</td>
-                      <td className="px-4 py-2.5 text-right font-mono">{r.inQty !== "0" ? formatQty(r.inQty) : <span className="text-ink-soft/30">—</span>}</td>
+                      <td className="px-4 py-2.5 text-right font-mono">{r.inQty !== "0" ? <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatQty(r.inQty)}</span> : <span className="text-ink-soft/30">—</span>}</td>
                       <td className="px-4 py-2.5 text-right font-mono">{r.inQty !== "0" ? Money.formatIdr(r.unitCostMinor) : <span className="text-ink-soft/30">—</span>}</td>
-                      <td className="px-4 py-2.5 text-right font-mono">{r.outQty !== "0" ? formatQty(r.outQty) : <span className="text-ink-soft/30">—</span>}</td>
+                      <td className="px-4 py-2.5 text-right font-mono">{r.outQty !== "0" ? <span className="font-medium text-terra">{formatQty(r.outQty)}</span> : <span className="text-ink-soft/30">—</span>}</td>
                       <td className="px-4 py-2.5 text-right font-mono">{r.outQty !== "0" ? Money.formatIdr(r.unitCostMinor) : <span className="text-ink-soft/30">—</span>}</td>
                       <td className="px-4 py-2.5 text-right font-mono">{formatQty(r.resultingQty)}</td>
                       <td className="px-4 py-2.5 text-right font-mono">{Money.formatIdr(avgCost(r.resultingTotalCostMinor, r.resultingQty))}</td>

@@ -15,6 +15,7 @@ interface UtangCardPageProps {
 
 export default async function UtangCardPage({ params }: UtangCardPageProps) {
   const { contactId } = await params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contactId)) notFound();
   const ctx = await requireContext();
   const card = await getContactCard(db, ctx.orgId, contactId, "BILL");
   if (!card) notFound();
