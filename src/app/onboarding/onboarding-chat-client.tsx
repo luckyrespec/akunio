@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
+import Image from "next/image";
 import type { AccountDef } from "@/core/accounts/types";
 import {
   PromptInput,
@@ -12,6 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { CoaPreview } from "./coa-preview";
 import { PreparingOverlay } from "./preparing-overlay";
+import { AkunioStage, type StageStatus } from "./akunio-stage";
+import { usePrefersReducedMotion } from "./use-reduced-motion";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -179,12 +183,26 @@ export function OnboardingChatClient({
 
   const stepIndex = STEP_ORDER.indexOf(step as (typeof STEP_ORDER)[number]);
   const busy = streaming || preparing;
+  const reduced = usePrefersReducedMotion();
+  const stageStatus: StageStatus = preparing ? "done" : streaming ? "typing" : "idle";
+  const stageStepLabel =
+    stepIndex >= 0 ? `Langkah ${stepIndex + 1} dari ${STEP_ORDER.length}` : null;
 
   return (
     <div className="flex h-dvh flex-col bg-canvas">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-col px-4">
-        <header className="shrink-0 border-b border-rule/60 bg-canvas/95 py-4 backdrop-blur-xs">
-          <p className="font-display text-lg font-semibold text-ink">Kenalan dengan Akunio</p>
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl gap-8 px-4">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-col lg:mx-0">
+          <header className="shrink-0 border-b border-rule/60 bg-canvas/95 py-4 backdrop-blur-xs">
+            <div className="flex items-center gap-2.5">
+              <Image
+                src="/brand/akunio-logo-mark.svg"
+                alt="Akunio"
+                width={32}
+                height={32}
+                className="size-8 shrink-0 rounded-lg shadow-xs lg:hidden"
+              />
+              <div>
+                <p className="font-display text-lg font-semibold text-ink">Kenalan dengan Akunio</p>
           <p className="text-xs text-ink-soft">
             {stepIndex >= 0 ? (
               <>Langkah {stepIndex + 1} dari {STEP_ORDER.length} · Penyiapan awal usaha Anda</>
@@ -201,17 +219,27 @@ export function OnboardingChatClient({
               aria-valuemax={STEP_ORDER.length}
               className="mt-2 h-0.5 overflow-hidden rounded-full bg-rule"
             >
-              <div
-                className="h-full origin-left rounded-full bg-terra transition-transform duration-300 ease-out"
-                style={{ transform: `scaleX(${(stepIndex + 1) / STEP_ORDER.length})` }}
+              <motion.div
+                className="h-full origin-left rounded-full bg-terra"
+                initial={false}
+                animate={{ scaleX: (stepIndex + 1) / STEP_ORDER.length }}
+                transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 120, damping: 20 }}
               />
             </div>
           )}
+              </div>
+            </div>
         </header>
 
         <div ref={scrollRef} className="paper-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto py-5">
           {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <motion.div
+              key={i}
+              initial={reduced ? false : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: Math.min(i, 4) * 0.06, ease: "easeOut" }}
+              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+            >
               <div
                 className={`max-w-[85%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-xs ${
                   m.role === "user"
@@ -221,13 +249,22 @@ export function OnboardingChatClient({
               >
                 {m.content}
               </div>
-            </div>
+            </motion.div>
           ))}
           {streaming && (
             <div className="flex justify-start">
               <div className="max-w-[85%] rounded-2xl rounded-bl-md border border-rule bg-paper px-4 py-2.5 text-sm leading-relaxed whitespace-pre-line text-ink shadow-xs">
                 {streamText || (
-                  <span className="animate-pulse text-ink-soft">Akunio mengetik…</span>
+                  <span className="inline-flex items-center gap-1 py-1" aria-label="Akunio mengetik">
+                    {[0, 1, 2].map((d) => (
+                      <motion.span
+                        key={d}
+                        animate={reduced ? undefined : { y: [0, -4, 0] }}
+                        transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut", delay: d * 0.15 }}
+                        className="size-1.5 rounded-full bg-terra"
+                      />
+                    ))}
+                  </span>
                 )}
                 {streamText && (
                   <span aria-hidden className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-terra" />
@@ -250,19 +287,25 @@ export function OnboardingChatClient({
           <div className="shrink-0 space-y-2 pt-2 pb-6">
             {chips.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {chips.map((c) => (
-                  <Button
+                {chips.map((c, ci) => (
+                  <motion.span
                     key={c}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    data-testid="onboarding-chip"
-                    disabled={busy}
-                    onClick={() => send(c)}
-                    className="rounded-full border-rule bg-paper text-xs shadow-xs hover:border-terra/50 hover:text-terra"
+                    initial={reduced ? false : { opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2, delay: Math.min(ci, 5) * 0.05 }}
                   >
-                    {c}
-                  </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      data-testid="onboarding-chip"
+                      disabled={busy}
+                      onClick={() => send(c)}
+                      className="rounded-full border-rule bg-paper text-xs shadow-xs hover:border-terra/50 hover:text-terra"
+                    >
+                      {c}
+                    </Button>
+                  </motion.span>
                 ))}
               </div>
             )}
@@ -291,6 +334,9 @@ export function OnboardingChatClient({
             </PromptInput>
           </div>
         )}
+        </div>
+
+        <AkunioStage status={stageStatus} stepLabel={stageStepLabel} />
       </div>
 
       {preparing && (
