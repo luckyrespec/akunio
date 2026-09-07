@@ -1,6 +1,31 @@
 /** Pure helpers kartu buku pembantu — tanpa DB, gampang di-unit-test. */
 
+/** Harga rata-rata implisit dari total & qty saldo (display kartu). */
+export function avgCost(totalMinor: bigint, qtyStr: string): bigint {
+  const q = Math.round(Number(qtyStr) * 10000);
+  if (!Number.isFinite(q) || q <= 0 || totalMinor <= 0n) return 0n;
+  return (totalMinor * 10000n) / BigInt(q);
+}
+
 export type StockStatus = "AMAN" | "MENIPIS" | "HABIS";
+
+/** "8.0000" → "8", "2.5000" → "2.5" — display only, bukan uang. */
+export function formatQty(raw: string): string {
+  const n = Number(raw);
+  return Number.isFinite(n) ? String(n) : raw;
+}
+
+export const SUBLEDGER_LIST_ROUTE: Record<"PERSEDIAAN" | "PIUTANG" | "UTANG", string> = {
+  PERSEDIAAN: "/buku-pembantu/persediaan",
+  PIUTANG: "/buku-pembantu/piutang",
+  UTANG: "/buku-pembantu/utang",
+};
+
+export const SUBLEDGER_KIND_LABEL: Record<"PERSEDIAAN" | "PIUTANG" | "UTANG", string> = {
+  PERSEDIAAN: "Persediaan per SKU",
+  PIUTANG: "Piutang Usaha per Pelanggan",
+  UTANG: "Utang Usaha per Pemasok",
+};
 
 export function stockStatus(currentQty: number, minAlert: number): StockStatus {
   if (currentQty <= 0) return "HABIS";

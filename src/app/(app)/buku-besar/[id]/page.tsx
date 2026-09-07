@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { getLedger } from "@/server/db/repos/ledger.repo";
+import { getControlForAccount } from "@/server/db/repos/subsidiary.repo";
+import { SUBLEDGER_LIST_ROUTE } from "@/core/subledger/cards";
 import { Money } from "@/core/money/money";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -45,6 +47,7 @@ export default async function AccountLedgerDetailPage({
   }
 
   const { account, rows } = ledgerData;
+  const controlKind = await getControlForAccount(db, ctx.orgId, id);
   const isDebitNormal = account.normal === "D";
   const Icon = TYPE_ICONS[account.type] || FileText;
 
@@ -80,6 +83,17 @@ export default async function AccountLedgerDetailPage({
                 <span>Jurnal Umum</span>
               </Button>
             </Link>
+            {controlKind && (
+              <Link href={SUBLEDGER_LIST_ROUTE[controlKind]}>
+                <Button
+                  size="sm"
+                  className="bg-terra text-white hover:bg-terra/90 text-xs gap-1.5 shadow-xs"
+                >
+                  <FileText className="size-3.5" />
+                  <span>Buku Pembantu</span>
+                </Button>
+              </Link>
+            )}
           </div>
         }
       />

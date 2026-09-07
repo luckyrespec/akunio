@@ -1,20 +1,23 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Money } from "@/core/money/money";
+import { SUBLEDGER_KIND_LABEL, SUBLEDGER_LIST_ROUTE } from "@/core/subledger/cards";
 import { getSubledgerReconAction } from "@/server/actions/subledger.actions";
 import { RunCheckButton } from "./run-check-button";
+import { Package, Users, Store, ChevronRight } from "lucide-react";
 
-const KIND_LABEL: Record<string, string> = {
-  PIUTANG: "Piutang Usaha per Pelanggan",
-  UTANG: "Utang Usaha per Pemasok",
-  PERSEDIAAN: "Persediaan per SKU",
-};
+const NAV_ROWS = [
+  { kind: "PERSEDIAAN" as const, icon: Package, title: "Kartu Persediaan per SKU", desc: "Mutasi masuk, keluar, dan saldo tiap barang" },
+  { kind: "PIUTANG" as const, icon: Users, title: "Kartu Piutang per Pelanggan", desc: "Tagihan, pembayaran, dan sisa tiap pelanggan" },
+  { kind: "UTANG" as const, icon: Store, title: "Kartu Utang per Pemasok", desc: "Tagihan, pelunasan, dan sisa tiap pemasok" },
+];
 
 export default async function BukuPembantuPage() {
   const rows = await getSubledgerReconAction();
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Buku Pembantu"
         eyebrow="Total rincian vs saldo akun kontrol — harus nol selisih"
@@ -36,7 +39,7 @@ export default async function BukuPembantuPage() {
               const ok = r.differenceMinor === "0";
               return (
                 <tr key={r.kind} data-testid="subledger-row" className="border-b border-rule/60 last:border-0">
-                  <td className="px-4 py-2.5 font-medium text-ink">{KIND_LABEL[r.kind] ?? r.kind}</td>
+                  <td className="px-4 py-2.5 font-medium text-ink">{SUBLEDGER_KIND_LABEL[r.kind as keyof typeof SUBLEDGER_KIND_LABEL] ?? r.kind}</td>
                   <td className="px-4 py-2.5 text-right tnum">{Money.formatIdr(r.controlBalanceMinor)}</td>
                   <td className="px-4 py-2.5 text-right tnum">{Money.formatIdr(r.subledgerTotalMinor)}</td>
                   <td className="px-4 py-2.5 text-right tnum">{Money.formatIdr(r.differenceMinor)}</td>
@@ -55,6 +58,32 @@ export default async function BukuPembantuPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-soft pt-2">
+          Rincian per Akun
+        </h2>
+        {NAV_ROWS.map((n) => {
+          const Icon = n.icon;
+          return (
+            <Link
+              key={n.kind}
+              href={SUBLEDGER_LIST_ROUTE[n.kind]}
+              data-testid={`subledger-nav-${n.kind.toLowerCase()}`}
+              className="flex items-center gap-3 rounded-xl border border-rule bg-paper px-4 py-3 transition-colors hover:border-terra/40"
+            >
+              <span className="flex size-8 items-center justify-center rounded-lg bg-canvas border border-rule text-terra">
+                <Icon className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ink">{n.title}</span>
+                <span className="block text-xs text-ink-soft truncate">{n.desc}</span>
+              </span>
+              <ChevronRight className="size-4 ml-auto shrink-0 text-ink-soft" />
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

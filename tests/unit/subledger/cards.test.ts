@@ -1,5 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { stockStatus, buildContactCard } from "@/core/subledger/cards";
+import { stockStatus, buildContactCard, formatQty, avgCost } from "@/core/subledger/cards";
+
+describe("formatQty", () => {
+  it("memangkas nol desimal", () => {
+    expect(formatQty("8.0000")).toBe("8");
+    expect(formatQty("2.5000")).toBe("2.5");
+    expect(formatQty("0")).toBe("0");
+  });
+});
+
+describe("avgCost", () => {
+  it("total/qty dibulatkan ke bawah", () => {
+    expect(avgCost(400_000n, "8.0000")).toBe(50_000n);
+    expect(avgCost(0n, "8.0000")).toBe(0n);
+    expect(avgCost(100n, "0.0000")).toBe(0n);
+  });
+});
 
 describe("stockStatus", () => {
   it("habis saat nol", () => {
