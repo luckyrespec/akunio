@@ -11,7 +11,14 @@ export interface FindingView {
   createdAt: string;
 }
 
-export function typeMetadata(t: string): { label: string; desc: string; standard: string; bab: number; babTitle: string } {
+export function typeMetadata(t: string): {
+  label: string;
+  desc: string;
+  standard: string;
+  bab: number;
+  babTitle: string;
+  paragraph?: string;
+} {
   switch (t) {
     case "abnormalBalances":
       return {
@@ -20,6 +27,7 @@ export function typeMetadata(t: string): { label: string; desc: string; standard
         standard: "SAK EMKM Bab 2 & 3 (Konsep Pengakuan & Penyajian Saldo Wajar)",
         bab: 2,
         babTitle: "Konsep dan Prinsip Pervasif",
+        paragraph: "2.5",
       };
     case "duplicates":
       return {
@@ -28,6 +36,7 @@ export function typeMetadata(t: string): { label: string; desc: string; standard
         standard: "SAK EMKM Bab 7 Paragraf 7.16 (Koreksi Kesalahan Pencatatan Periode Berjalan)",
         bab: 7,
         babTitle: "Kebijakan Akuntansi, Estimasi, dan Kesalahan",
+        paragraph: "7.16",
       };
     case "missingReceipts":
       return {
@@ -36,6 +45,7 @@ export function typeMetadata(t: string): { label: string; desc: string; standard
         standard: "SAK EMKM Bab 2 Paragraf 2.14 & Bab 6 (Keandalan Bukti Transaksi & CALK)",
         bab: 2,
         babTitle: "Konsep dan Prinsip Pervasif",
+        paragraph: "2.14",
       };
     case "oddDates":
       return {
@@ -44,6 +54,7 @@ export function typeMetadata(t: string): { label: string; desc: string; standard
         standard: "SAK EMKM Bab 2 Paragraf 2.19 (Asumsi Dasar Akrual & Pisah Batas Periode)",
         bab: 2,
         babTitle: "Konsep dan Prinsip Pervasif",
+        paragraph: "2.19",
       };
     case "ratioAnomalies":
       return {
@@ -52,6 +63,7 @@ export function typeMetadata(t: string): { label: string; desc: string; standard
         standard: "SAK EMKM Bab 2 Paragraf 2.17 (Materialitas & Signifikansi Transaksi)",
         bab: 2,
         babTitle: "Konsep dan Prinsip Pervasif",
+        paragraph: "2.17",
       };
     default:
       return {

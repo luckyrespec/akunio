@@ -492,7 +492,7 @@ export function AuthBrandPanel({ mode }: { mode: Mode }) {
   return (
     <div className="relative z-10 mx-auto flex min-h-full w-full max-w-2xl flex-col px-6 py-8 xl:px-10">
       <motion.div {...enter(0.02)} className="mb-6">
-        <AkunioLogoLockup markClassName="size-10 shadow-sm" showTagline />
+        <AkunioLogoLockup markClassName="size-10 shadow-sm" />
       </motion.div>
 
       <motion.h1

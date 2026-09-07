@@ -5,6 +5,12 @@
 /.impeccable
 /.opencode
 /.vscode
+/landing-video
+/videos
+/~
+/.copilot
+/.opencode
+/docker
 
 # dependencies
 /node_modules

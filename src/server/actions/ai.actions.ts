@@ -8,6 +8,7 @@ import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import { accounts as accountsTable } from "@/server/db/schema/org";
+import { aiDrafts } from "@/server/db/schema/ai";
 import { getDocumentRow, setDocumentStatus } from "@/server/db/repos/documents.repo";
 import {
   createDraft, getDraft, setDraftStatus, linkPostedEntry,
@@ -78,8 +79,25 @@ export async function createDraftAction(
       if (!promptText) promptText = "Buat jurnal dari dokumen terlampir.";
       await db.transaction((tx) => setDocumentStatus(tx, ctx.orgId, row.id, "EXTRACTED"));
     }
-
     if (!promptText) return { ok: false, error: "Deskripsi tidak boleh kosong." };
+
+    // Cegah duplikasi draf jika dokumen yang sama sudah pernah diekstrak dan masih PENDING
+    if (documentId) {
+      const [existing] = await db
+        .select({ id: aiDrafts.id })
+        .from(aiDrafts)
+        .where(
+          and(
+            eq(aiDrafts.orgId, ctx.orgId),
+            eq(aiDrafts.documentId, documentId),
+            eq(aiDrafts.status, "PENDING"),
+          ),
+        )
+        .limit(1);
+      if (existing?.id) {
+        return { ok: true, draftId: existing.id };
+      }
+    }
 
     const leaves = await leafAccounts(ctx.orgId);
     const draft = await generateJournalDraft({
@@ -125,6 +143,30 @@ export async function rejectDraftAction(draftId: string): Promise<ActionResult> 
       await appendAudit(tx, {
         orgId: ctx.orgId, actor: ctx.userEmail, action: "AI_DRAFT_REJECT",
         subjectType: "ai_draft", subjectId: draftId, data: {},
+      });
+    });
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function bulkRejectDraftsAction(draftIds: string[]): Promise<ActionResult> {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    if (!draftIds.length) return { ok: true };
+
+    await db.transaction(async (tx) => {
+      for (const id of draftIds) {
+        await setDraftStatus(tx, ctx.orgId, id, "REJECTED");
+      }
+      await appendAudit(tx, {
+        orgId: ctx.orgId,
+        actor: ctx.userEmail,
+        action: "AI_DRAFT_BULK_REJECT",
+        subjectType: "ai_draft",
+        subjectId: draftIds[0] ?? "",
+        data: { count: draftIds.length, draftIds },
       });
     });
     return { ok: true };

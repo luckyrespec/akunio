@@ -7,13 +7,13 @@ import { LandingPage } from "@/components/landing/landing-page";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Akunio — Foto Nota Jadi Jurnal Seimbang | Pembukuan UKM",
+  title: "Akunio | Pembukuan Double-Entry untuk UKM",
   description:
-    "Pembukuan double-entry untuk UKM: foto nota jadi draf jurnal seimbang, posting terkunci anti-utak-atik, laporan standar siap real-time.",
+    "Foto nota atau ketik pengeluaran — Akunio menyusun draf jurnal yang seimbang. Debit selalu sama dengan kredit, laporan standar siap kapan pun dibutuhkan.",
   openGraph: {
-    title: "Akunio — Pembukuan beres sebelum sempat menumpuk",
+    title: "Akunio: Pembukuan Beres Sebelum Sempat Menumpuk",
     description:
-      "Foto nota jadi jurnal seimbang. Posting terkunci. Laporan standar siap kapan pun.",
+      "Foto nota jadi draf jurnal seimbang. Jurnal terkunci anti-utak-atik, laporan standar siap untuk bank dan pajak.",
     type: "website",
     locale: "id_ID",
   },

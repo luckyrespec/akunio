@@ -333,10 +333,31 @@ export async function proposeCorrectionAction(findingId: string) {
         buildRatioSummary,
       } = await import("@/server/doctor/builders");
       const { accounts: accountsTable } = await import("@/server/db/schema/org");
-      const { eq: eqAcc, sql: drizzleSql } = await import("drizzle-orm");
+      const { eq: eqAcc, sql: drizzleSql, and, eq, desc } = await import("drizzle-orm");
 
       const finding = await getFinding(tx, ctx.orgId, findingId);
       if (!finding) throw new Error("TEMUAN_TIDAK_DITEMUKAN");
+
+      // Cek apakah temuan ini sudah memiliki proposal / draf AI yang masih PENDING
+      const { aiDrafts } = await import("@/server/db/schema/ai");
+
+      const existingDrafts = await tx
+        .select({ id: aiDrafts.id })
+        .from(aiDrafts)
+        .where(
+          and(
+            eq(aiDrafts.orgId, ctx.orgId),
+            eq(aiDrafts.status, "PENDING"),
+            drizzleSql`${aiDrafts.draft}->>'findingId' = ${findingId}`,
+          ),
+        )
+        .orderBy(desc(aiDrafts.createdAt))
+        .limit(1);
+
+      if (existingDrafts.length > 0 && existingDrafts[0]?.id) {
+        return { existingDraftId: existingDrafts[0].id };
+      }
+
       const ev = (finding.evidence as Record<string, unknown> | null) ?? {};
       const findingType = finding.type;
       const todayISO = new Date().toISOString().slice(0, 10);
@@ -611,7 +632,13 @@ export async function proposeCorrectionAction(findingId: string) {
     try {
       revalidatePath("/temuan");
     } catch {}
-    return { ok: true, draftId: result.aiDraft.id };
+    if ("existingDraftId" in result && result.existingDraftId) {
+      return { ok: true, draftId: result.existingDraftId };
+    }
+    if ("aiDraft" in result && result.aiDraft) {
+      return { ok: true, draftId: result.aiDraft.id };
+    }
+    return { ok: false, error: "Gagal membuat draf usulan" };
   } catch (e) {
     if (isRedirectError(e)) throw e;
     return { ok: false, error: e instanceof Error ? e.message : "Gagal membuat draf usulan" };

@@ -18,6 +18,7 @@ import {
   Loader2,
   Calendar,
 } from "lucide-react";
+import { IconReview } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Money } from "@/core/money/money";
@@ -358,10 +359,10 @@ export function TaxDashboard({
                               type="button"
                               size="sm"
                               variant="outline"
-                              className="h-7 px-2.5 text-[11px] font-bold border-amber-400 text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg shadow-2xs"
+                              className="h-7 px-2.5 text-[11px] font-bold border-amber-400 text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg shadow-2xs gap-1"
                             >
-                              <FileText className="size-3 mr-1" />
-                              Review Draf
+                              <IconReview className="size-3" />
+                              <span>Tinjau Draf</span>
                             </Button>
                           </Link>
                         ) : null}

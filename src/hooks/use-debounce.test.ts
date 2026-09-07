@@ -1,9 +1,9 @@
-﻿import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { DEFAULT_SEARCH_DEBOUNCE_MS } from "@/lib/constants";
 
 describe("useDebounce logic", () => {
-  it("defaults to 500ms debounce constant", () => {
-    expect(DEFAULT_SEARCH_DEBOUNCE_MS).toBe(500);
+  it("defaults to 300ms debounce constant", () => {
+    expect(DEFAULT_SEARCH_DEBOUNCE_MS).toBe(300);
   });
 
   it("handles debounce timer delay accurately", async () => {

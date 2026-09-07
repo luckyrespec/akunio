@@ -1,9 +1,12 @@
-﻿/**
+/**
  * Global Constants & Configurations for Selectors and Search Components
  */
 
+/** Default debounce time for search inputs across the app (300ms) */
+export const DEFAULT_DEBOUNCE_MS = 300;
+
 /** Default debounce time for search inputs across all searchable selectors */
-export const DEFAULT_SEARCH_DEBOUNCE_MS = 500;
+export const DEFAULT_SEARCH_DEBOUNCE_MS = 300;
 
 /** Default maximum number of items displayed in selector dropdowns */
 export const DEFAULT_SEARCH_VIEW_LIMIT = 5;

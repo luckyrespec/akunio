@@ -8,11 +8,12 @@ export interface AkunioLogoProps extends SVGProps<SVGSVGElement> {
 }
 
 /**
- * AkunioMark - Identitas Visual Resmi Akunio
- * 1. Monogram 'A': Dua kaki diagonal melambangkan Debit & Kredit.
- * 2. Mistar Ganda (Double Rule): Simbol otentik akuntansi untuk saldo seimbang.
- * 3. Titik Puncak (Apex Node): Presisi AI dalam pencatatan ledger.
- * 4. Squircle Matte: Sesuai tema Paper & Ink Matte.
+ * AkunioMark - Identitas Visual Resmi Akunio: The Modern Precision 'A' Book Ledger
+ * 1. Monogram 'A' dari sampul luar buku akuntansi berdiri kokoh.
+ * 2. Tulang punggung buku (spine) di tengah memisahkan Debit & Kredit.
+ * 3. Kelengkungan daun halaman buku (page arch) dan lapisan kertas arsip di bagian bawah.
+ * 4. Mistar Ganda (Double Rule): Simbol otentik akuntansi untuk saldo seimbang.
+ * 5. Titik Keseimbangan Emerald & Mahkota Berlian di puncak.
  */
 export function AkunioMark({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
@@ -28,67 +29,96 @@ export function AkunioMark({ className, ...props }: SVGProps<SVGSVGElement>) {
       <defs>
         <linearGradient id="akunio-mark-gradient" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="var(--color-terra, #b66035)" />
-          <stop offset="100%" stopColor="#914522" />
+          <stop offset="100%" stopColor="#8a3c1a" />
         </linearGradient>
-        <linearGradient id="akunio-inner-white" x1="12" y1="10" x2="36" y2="38" gradientUnits="userSpaceOnUse">
+        <linearGradient id="akunio-stroke-grad" x1="12" y1="8" x2="36" y2="40" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="var(--color-paper, #ffffff)" />
-          <stop offset="100%" stopColor="#fdf9f2" />
+          <stop offset="100%" stopColor="#fdf8f0" />
         </linearGradient>
         <filter id="akunio-mark-shadow" x="0" y="2" width="48" height="48" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-          <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#351608" floodOpacity="0.22" />
+          <feDropShadow dx="0" dy="2.2" stdDeviation="2.2" floodColor="#240c03" floodOpacity="0.32" />
         </filter>
       </defs>
 
-      {/* Squircle Background */}
+      {/* Squircle Background Matte */}
       <rect x="3" y="3" width="42" height="42" rx="12" fill="url(#akunio-mark-gradient)" />
       <rect x="3.5" y="3.5" width="41" height="41" rx="11.5" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
 
-      {/* Mark Geometri: Huruf A Ledger & Balance Bars */}
+      {/* Mark Geometri: Buku Akuntansi Presisi 'A' & Mistar Ganda */}
       <g filter="url(#akunio-mark-shadow)">
-        {/* Kaki Kiri & Kanan (Debit & Kredit) */}
+        {/* Kaki Kiri & Kanan (Sampul Buku Luar Hardcover) */}
         <path
-          d="M24 10.5L13 36.5"
-          stroke="url(#akunio-inner-white)"
-          strokeWidth="3.4"
+          d="M24 8.5L9.5 35.5"
+          stroke="url(#akunio-stroke-grad)"
+          strokeWidth="3.6"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         <path
-          d="M24 10.5L35 36.5"
-          stroke="url(#akunio-inner-white)"
-          strokeWidth="3.4"
+          d="M24 8.5L38.5 35.5"
+          stroke="url(#akunio-stroke-grad)"
+          strokeWidth="3.6"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
 
-        {/* Mistar Ganda Pembukuan (Double Rule) */}
+        {/* Tulang Belakang Buku Tengah (Center Spine Gutter) */}
         <path
-          d="M17.5 25.5H30.5"
-          stroke="url(#akunio-inner-white)"
+          d="M24 10.5V36"
+          stroke="url(#akunio-stroke-grad)"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        />
+
+        {/* Lengkungan Daun Halaman Buku Terbuka Bawah (Book Page Arches) */}
+        <path
+          d="M9.5 35.5C14 32.5 19 33 24 36C29 33 34 32.5 38.5 35.5"
+          stroke="url(#akunio-stroke-grad)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Lapisan Kertas Buku Kedua (Multi-page Archive Edge) */}
+        <path
+          d="M12.5 38.2C16 36.2 19.8 36.8 24 39C28.2 36.8 32 36.2 35.5 38.2"
+          stroke="url(#akunio-stroke-grad)"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          opacity="0.65"
+        />
+
+        {/* Mistar Ganda Pembukuan (Accounting Double Rule Crossbars) */}
+        <path
+          d="M15 24.5H33"
+          stroke="url(#akunio-stroke-grad)"
           strokeWidth="2.6"
           strokeLinecap="round"
         />
         <path
-          d="M16 29.8H32"
-          stroke="url(#akunio-inner-white)"
+          d="M13.5 29.5H34.5"
+          stroke="url(#akunio-stroke-grad)"
           strokeWidth="2.6"
           strokeLinecap="round"
         />
 
-        {/* Puncak AI Apex Node */}
-        <circle cx="24" cy="10.5" r="2.2" fill="var(--color-paper, #ffffff)" />
+        {/* Titik Saldo Seimbang Emerald */}
+        <circle cx="24" cy="24.5" r="2.2" fill="#4ade80" />
+
+        {/* Mahkota Berlian Puncak Buku */}
+        <path d="M24 6L26.5 8.5L24 11L21.5 8.5Z" fill="#ffffff" />
       </g>
     </svg>
   );
 }
 
 /**
- * AkunioLogoLockup - Logo lengkap (Icon Mark + Wordmark Tipografi)
+ * AkunioLogoLockup - Logo lengkap (Icon Mark + Wordmark Tipografi Akunio, tanpa tag AI)
  */
 export function AkunioLogoLockup({
   className,
   markClassName,
-  showTagline = true,
+  showTagline = false,
 }: {
   className?: string;
   markClassName?: string;
@@ -98,14 +128,9 @@ export function AkunioLogoLockup({
     <div className={cn("flex items-center gap-3 select-none", className)}>
       <AkunioMark className={markClassName} />
       <div className="flex items-center gap-1.5 min-w-0">
-        <span className="font-display text-xl font-bold tracking-tight">
+        <span className="font-display text-xl font-bold tracking-tight text-ink">
           Akunio
         </span>
-        {showTagline && (
-          <span className="rounded-md bg-terra/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-terra">
-            AI
-          </span>
-        )}
       </div>
     </div>
   );

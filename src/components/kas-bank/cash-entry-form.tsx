@@ -2,13 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { SplitButton } from "@/components/ui/split-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,9 +12,7 @@ import { AccountSelect } from "@/components/account-select";
 import {
   BookOpen,
   Calendar,
-  ChevronDown,
   FileText,
-  Loader2,
   Paperclip,
   UploadCloud,
   X,
@@ -256,46 +249,18 @@ export function CashEntryForm({
             >
               Batal
             </Button>
-            <div className="flex items-stretch shadow-xs rounded-xl overflow-hidden">
-              <Button
-                type="button"
-                size="sm"
-                disabled={loading}
-                data-testid="kas-bank-submit-post"
-                onClick={() => doSubmit(true)}
-                className="h-9 rounded-l-xl rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-none"
-              >
-                {loading && (
-                  <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                )}
-                Simpan & Posting
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={loading}
-                    aria-label="Opsi simpan lain"
-                    className="h-9 rounded-l-none rounded-r-xl border-l border-l-white/25 px-2.5 bg-terra text-white hover:bg-terra/90 shadow-none disabled:transform-none"
-                  >
-                    <ChevronDown className="size-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="min-w-48 rounded-xl border-rule bg-paper shadow-md"
-                >
-                  <DropdownMenuItem
-                    data-testid="kas-bank-submit-draft"
-                    onSelect={() => doSubmit(false)}
-                    className="text-xs font-medium cursor-pointer py-2"
-                  >
-                    Simpan sebagai Draft
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <SplitButton
+              onPrimary={() => doSubmit(true)}
+              disabled={loading}
+              loading={loading}
+              menuLabel="Opsi simpan lain"
+              primaryTestId="kas-bank-submit-post"
+              items={[
+                { label: "Simpan sebagai Draft", onSelect: () => doSubmit(false), testId: "kas-bank-submit-draft" },
+              ]}
+            >
+              Simpan &amp; Posting
+            </SplitButton>
           </div>
         }
       />

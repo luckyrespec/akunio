@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Calendar,
   CheckCircle2,
-  ChevronDown,
   FileText,
-  Loader2,
   Maximize2,
   Minimize2,
   Paperclip,
@@ -16,18 +14,13 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
-import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { createAndPostAction } from "@/server/actions/journal.actions";
 import { uploadDocumentAction } from "@/server/actions/upload.actions";
 import { Money } from "@/core/money/money";
 import { todayISO } from "@/lib/date";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { SplitButton } from "@/components/ui/split-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -249,50 +242,18 @@ export function NewEntryForm({
               Batal
             </Button>
 
-            <div className="flex items-stretch shadow-xs rounded-xl overflow-hidden">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={!totals.balanced || pending}
-                className="h-9 rounded-l-xl rounded-r-none px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-none"
-              >
-                {pending ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                    Memposting...
-                  </>
-                ) : (
-                  "Posting Jurnal"
-                )}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!totals.balanced || pending}
-                    aria-label="Opsi posting lainnya"
-                    className="h-9 rounded-l-none rounded-r-xl border-l border-l-white/25 px-2.5 bg-terra text-white hover:bg-terra/90 shadow-none disabled:transform-none"
-                  >
-                    <ChevronDown className="size-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-48 rounded-xl border-rule bg-paper shadow-md">
-                  <DropdownMenuItem
-                    onClick={() => submitWithMode("post")}
-                    className="text-xs font-medium cursor-pointer py-2"
-                  >
-                    Posting Jurnal
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => submitWithMode("post-new")}
-                    className="text-xs font-medium cursor-pointer py-2"
-                  >
-                    Posting &amp; Tulis Lagi
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <SplitButton
+              primaryType="submit"
+              disabled={!totals.balanced || pending}
+              loading={pending}
+              menuLabel="Opsi posting lainnya"
+              items={[
+                { label: "Posting Jurnal", onSelect: () => submitWithMode("post") },
+                { label: "Posting & Tulis Lagi", onSelect: () => submitWithMode("post-new") },
+              ]}
+            >
+              {pending ? "Memposting..." : "Posting Jurnal"}
+            </SplitButton>
           </div>
         }
       />

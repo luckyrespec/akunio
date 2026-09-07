@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { BookOpen, FileText, Library, LayoutDashboard, Package, Receipt, Search, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useDebounce } from "@/hooks/use-debounce";
+import { DEFAULT_DEBOUNCE_MS } from "@/lib/constants";
 import { searchGlobalAction, type GlobalSearchResult } from "@/server/actions/search.actions";
 import { Input } from "@/components/ui/input";
 
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const debouncedQuery = useDebounce(query, 500);
+  const debouncedQuery = useDebounce(query, DEFAULT_DEBOUNCE_MS);
   const [results, setResults] = useState<GlobalSearchResult>({ pages: [], journals: [], accounts: [], invoices: [], assets: [], rules: [] });
   const [pending, startTransition] = useTransition();
   const [activeIndex, setActiveIndex] = useState(0);

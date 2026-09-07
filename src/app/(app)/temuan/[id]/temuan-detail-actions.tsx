@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PageActionButton, PageActions } from "@/components/page-actions";
+import { IconReview, IconSparkles } from "@/components/icons";
 import { findingErrorMessage } from "@/app/(app)/jurnal/ai/[id]/proposal-labels";
 import {
   dismissFindingAction,
@@ -14,6 +15,7 @@ interface TemuanDetailActionsProps {
   findingId: string;
   findingType?: string;
   status: string;
+  pendingDraftId?: string;
   onTriggerUpload?: () => void;
 }
 
@@ -22,6 +24,7 @@ export function TemuanDetailActions({
   findingId,
   findingType,
   status,
+  pendingDraftId,
   onTriggerUpload,
 }: TemuanDetailActionsProps) {
   const router = useRouter();
@@ -52,9 +55,15 @@ export function TemuanDetailActions({
   if (status !== "open") return null;
 
   // Konfigurasi tombol utama sesuai jenis permasalahan
-  let primaryLabel = "Buat Draf Koreksi Jurnal";
-  let primaryPendingLabel = "Menyiapkan Draf...";
-  let primaryAction = () => run(() => proposeCorrectionAction(findingId));
+  let primaryLabel = pendingDraftId ? "Tinjau Draf Koreksi" : "Buat Draf Koreksi Jurnal";
+  let primaryPendingLabel = pendingDraftId ? "Membuka Draf..." : "Menyiapkan Draf...";
+  let primaryAction = () => {
+    if (pendingDraftId) {
+      window.location.href = `/jurnal/ai/${pendingDraftId}`;
+      return;
+    }
+    run(() => proposeCorrectionAction(findingId));
+  };
 
   if (findingType === "missingReceipts") {
     primaryLabel = "Unggah Dokumen Lampiran";
@@ -67,14 +76,14 @@ export function TemuanDetailActions({
       }
     };
   } else if (findingType === "duplicates") {
-    primaryLabel = "Buat Draf Jurnal Pembalik";
-    primaryPendingLabel = "Menyiapkan Pembalik...";
+    primaryLabel = pendingDraftId ? "Tinjau Draf Pembalik" : "Buat Draf Jurnal Pembalik";
+    primaryPendingLabel = pendingDraftId ? "Membuka Pembalik..." : "Menyiapkan Pembalik...";
   } else if (findingType === "abnormalBalances") {
-    primaryLabel = "Buat Jurnal Penyesuaian";
-    primaryPendingLabel = "Menyiapkan Reklasifikasi...";
+    primaryLabel = pendingDraftId ? "Tinjau Draf Penyesuaian" : "Buat Jurnal Penyesuaian";
+    primaryPendingLabel = pendingDraftId ? "Membuka Penyesuaian..." : "Menyiapkan Reklasifikasi...";
   } else if (findingType === "oddDates") {
-    primaryLabel = "Buat Draf Pisah Batas";
-    primaryPendingLabel = "Menyiapkan Pisah Batas...";
+    primaryLabel = pendingDraftId ? "Tinjau Draf Pisah Batas" : "Buat Draf Pisah Batas";
+    primaryPendingLabel = pendingDraftId ? "Membuka Pisah Batas..." : "Menyiapkan Pisah Batas...";
   } else if (findingType === "ratioAnomalies") {
     primaryLabel = "Konfirmasi & Selesaikan";
     primaryPendingLabel = "Menyelesaikan...";
@@ -98,6 +107,7 @@ export function TemuanDetailActions({
       <PageActionButton
         variant="primary"
         loading={pending}
+        icon={pendingDraftId ? <IconReview className="size-3.5" /> : <IconSparkles className="size-3.5" />}
         onClick={primaryAction}
       >
         {pending ? primaryPendingLabel : primaryLabel}

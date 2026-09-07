@@ -1,15 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Akunio Monogram">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="Akunio Monogram Standalone">
   <!-- Monogram Transparan untuk Penggunaan di Atas Background Apapun -->
   <g>
-    <!-- Kaki Kiri & Kanan Huruf A (Debit & Kredit) -->
-    <path d="M32 12 L16 52" stroke="#b66035" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M32 12 L48 52" stroke="#b66035" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Kaki Kiri & Kanan Huruf A (Sampul Luar Buku Akuntansi) -->
+    <path d="M24 8.5L9.5 35.5" stroke="#b66035" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M24 8.5L38.5 35.5" stroke="#b66035" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
 
-    <!-- Mistar Ganda Pembukuan (Double-Rule Ledger) -->
-    <path d="M22.5 35 H41.5" stroke="#b66035" stroke-width="3.6" stroke-linecap="round"/>
-    <path d="M20.5 41.5 H43.5" stroke="#b66035" stroke-width="3.6" stroke-linecap="round"/>
+    <!-- Tulang Belakang Buku Tengah -->
+    <path d="M24 10.5V36" stroke="#b66035" stroke-width="2.2" stroke-linecap="round"/>
 
-    <!-- Puncak Akurasi AI (Diamond Node) -->
-    <circle cx="32" cy="12" r="3.2" fill="#914522"/>
+    <!-- Kelengkungan Daun Halaman Buku Bawah (Book Page Arches) -->
+    <path d="M9.5 35.5C14 32.5 19 33 24 36C29 33 34 32.5 38.5 35.5" stroke="#b66035" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Lapisan Kertas Buku Arsip Kedua (Multi-page Archive Edge) -->
+    <path d="M12.5 38.2C16 36.2 19.8 36.8 24 39C28.2 36.8 32 36.2 35.5 38.2" stroke="#b66035" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+
+    <!-- Mistar Ganda Pembukuan (Accounting Double Rule Balance Crossbars) -->
+    <path d="M15 24.5H33" stroke="#b66035" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M13.5 29.5H34.5" stroke="#b66035" stroke-width="2.6" stroke-linecap="round"/>
+
+    <!-- Titik Saldo Seimbang Emerald -->
+    <circle cx="24" cy="24.5" r="2.2" fill="#22c55e"/>
+
+    <!-- Mahkota Berlian Puncak Buku -->
+    <path d="M24 6L26.5 8.5L24 11L21.5 8.5Z" fill="#8a3c1a"/>
   </g>
 </svg>

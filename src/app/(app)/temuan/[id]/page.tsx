@@ -30,6 +30,21 @@ export default async function TemuanDetailPage({ params }: Props) {
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
   };
 
+  // Cek apakah temuan ini sudah memiliki draf koreksi yang masih PENDING
+  const { aiDrafts } = await import("@/server/db/schema/ai");
+  const { and, eq, sql } = await import("drizzle-orm");
+  const [pendingDraft] = await db
+    .select({ id: aiDrafts.id })
+    .from(aiDrafts)
+    .where(
+      and(
+        eq(aiDrafts.orgId, ctx.orgId),
+        eq(aiDrafts.status, "PENDING"),
+        sql`${aiDrafts.draft}->>'findingId' = ${finding.id}`,
+      ),
+    )
+    .limit(1);
+
   return (
     <section className="space-y-6">
       <div className="mb-2">
@@ -50,6 +65,7 @@ export default async function TemuanDetailPage({ params }: Props) {
               findingId={finding.id}
               findingType={finding.type}
               status={finding.status}
+              pendingDraftId={pendingDraft?.id}
             />
           ) : (
             <div className="flex items-center gap-2">

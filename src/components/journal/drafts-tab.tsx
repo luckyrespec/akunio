@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition, Fragment } from "react";
+import { useState, useEffect, useRef, useTransition, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -16,14 +16,19 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IconReview } from "@/components/icons";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Money } from "@/core/money/money";
 import { Reveal } from "@/components/motion";
 import { GlowCard } from "@/components/aceternity/glow-card";
 import { cn } from "@/lib/utils";
-import { rejectDraftAction } from "@/server/actions/ai.actions";
+import { useDebounce } from "@/hooks/use-debounce";
+import { DEFAULT_DEBOUNCE_MS } from "@/lib/constants";
+import { rejectDraftAction, bulkRejectDraftsAction } from "@/server/actions/ai.actions";
 
 export interface SerializedDraft {
   id: string;
@@ -148,13 +153,34 @@ export function DraftsTab({
 }: DraftsTabProps) {
   const router = useRouter();
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [isBulkRejecting, setIsBulkRejecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(currentQuery);
+  const debouncedDraftQ = useDebounce(searchQuery, DEFAULT_DEBOUNCE_MS);
+  const isFirstMount = useRef(true);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     setSearchQuery(currentQuery);
   }, [currentQuery]);
+
+  // Auto-search when debounced search query changes
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    if (debouncedDraftQ.trim() !== currentQuery.trim()) {
+      router.push(makeUrl({ q: debouncedDraftQ, page: 1 }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedDraftQ]);
+
+  // Clear selection when filters or page change
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [currentStatus, currentQuery, page]);
 
   function makeUrl(overrides: { status?: string; q?: string; limit?: number; page?: number }) {
     const params = new URLSearchParams();
@@ -189,11 +215,36 @@ export function DraftsTab({
   }
 
   function handleStatusChange(statusKey: "PENDING" | "ACCEPTED" | "REJECTED" | "ALL") {
+    setSelectedIds([]);
     router.push(makeUrl({ status: statusKey, page: 1 }));
   }
 
   function handleLimitChange(newLimit: number) {
+    setSelectedIds([]);
     router.push(makeUrl({ limit: newLimit, page: 1 }));
+  }
+
+  // Identifikasi pending drafts di halaman saat ini
+  const pendingDrafts = drafts.filter((d) => d.status === "PENDING");
+  const isAllPendingSelected =
+    pendingDrafts.length > 0 && pendingDrafts.every((d) => selectedIds.includes(d.id));
+
+  function handleToggleSelectAll() {
+    if (isAllPendingSelected) {
+      // Unselect all pending drafts on this page
+      const pendingSet = new Set(pendingDrafts.map((d) => d.id));
+      setSelectedIds((prev) => prev.filter((id) => !pendingSet.has(id)));
+    } else {
+      // Select all pending drafts on this page
+      const newSet = new Set([...selectedIds, ...pendingDrafts.map((d) => d.id)]);
+      setSelectedIds(Array.from(newSet));
+    }
+  }
+
+  function handleToggleSelect(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
   }
 
   async function handleReject(id: string) {
@@ -203,6 +254,7 @@ export function DraftsTab({
       try {
         const res = await rejectDraftAction(id);
         if (res.ok) {
+          setSelectedIds((prev) => prev.filter((item) => item !== id));
           router.refresh();
         } else {
           alert(res.error || "Gagal membatalkan draf.");
@@ -211,6 +263,34 @@ export function DraftsTab({
         alert("Terjadi kesalahan jaringan.");
       } finally {
         setRejectingId(null);
+      }
+    });
+  }
+
+  async function handleBulkReject() {
+    if (!selectedIds.length) return;
+    if (
+      !confirm(
+        `Apakah Anda yakin ingin membatalkan & menghapus ${selectedIds.length} draf yang dipilih?`,
+      )
+    ) {
+      return;
+    }
+
+    setIsBulkRejecting(true);
+    startTransition(async () => {
+      try {
+        const res = await bulkRejectDraftsAction(selectedIds);
+        if (res.ok) {
+          setSelectedIds([]);
+          router.refresh();
+        } else {
+          alert(res.error || "Gagal membatalkan beberapa draf.");
+        }
+      } catch {
+        alert("Terjadi kesalahan jaringan saat memproses pembatalan draf.");
+      } finally {
+        setIsBulkRejecting(false);
       }
     });
   }
@@ -338,6 +418,47 @@ export function DraftsTab({
         </div>
       </div>
 
+      {/* Bulk Action Bar (Visible when items are selected) */}
+      {selectedIds.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-terra/30 bg-terra/5 px-4 py-3 shadow-xs animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2">
+            <span className="flex size-6 items-center justify-center rounded-full bg-terra text-white text-xs font-bold">
+              {selectedIds.length}
+            </span>
+            <span className="text-xs font-medium text-ink">
+              <span className="font-semibold">{selectedIds.length}</span> draf dipilih
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedIds([])}
+              className="h-8 text-xs text-ink-soft hover:text-ink cursor-pointer"
+            >
+              Batalkan Pilihan
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={isPending || isBulkRejecting}
+              onClick={handleBulkReject}
+              className="h-8 text-xs bg-terra text-white hover:bg-terra/90 cursor-pointer shadow-2xs flex items-center gap-1.5"
+            >
+              {isBulkRejecting ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="size-3.5" />
+              )}
+              Hapus / Batalkan Terpilih ({selectedIds.length})
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Drafts Content */}
       {drafts.length === 0 ? (
         <Reveal>
@@ -397,11 +518,26 @@ export function DraftsTab({
                 const isDoctor = summary.isDoctor || d.model === "doctor-sak";
                 const memoDisplay = summary.memo || d.inputText || "Draf Transaksi Jurnal";
                 const isExpanded = expandedId === d.id;
+                const isSelected = selectedIds.includes(d.id);
 
                 return (
-                  <div key={d.id} className="rounded-xl border border-rule bg-paper p-4 shadow-xs space-y-3">
+                  <div
+                    key={d.id}
+                    className={cn(
+                      "rounded-xl border bg-paper p-4 shadow-xs space-y-3 transition-colors",
+                      isSelected ? "border-terra/40 bg-terra/5" : "border-rule",
+                    )}
+                  >
                     <div className="flex items-center justify-between border-b border-rule/50 pb-2.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
+                        {d.status === "PENDING" && (
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => handleToggleSelect(d.id)}
+                            aria-label={`Pilih draf ${d.id}`}
+                            className="cursor-pointer"
+                          />
+                        )}
                         <span
                           className={cn(
                             "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
@@ -500,7 +636,7 @@ export function DraftsTab({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            disabled={isPending && rejectingId === d.id}
+                            disabled={(isPending && rejectingId === d.id) || isBulkRejecting}
                             onClick={() => handleReject(d.id)}
                             className="h-8 text-xs text-ink-soft hover:text-terra hover:bg-terra/5 cursor-pointer"
                           >
@@ -510,10 +646,11 @@ export function DraftsTab({
                           <Link href={`/jurnal/ai/${d.id}`}>
                             <Button
                               size="sm"
-                              className="h-8 bg-terra text-white hover:bg-terra/90 text-xs px-3 shadow-2xs cursor-pointer"
+                              className="h-8 bg-terra text-white hover:bg-terra/90 text-xs px-3 shadow-2xs cursor-pointer gap-1.5"
                             >
-                              Tinjau & Posting
-                              <ArrowRight className="size-3.5 ml-1" />
+                              <IconReview className="size-3.5" />
+                              <span>Tinjau & Posting</span>
+                              <ArrowRight className="size-3.5 ml-0.5" />
                             </Button>
                           </Link>
                         </>
@@ -544,6 +681,16 @@ export function DraftsTab({
                   <table className="w-full tnum text-sm">
                     <thead>
                       <tr className="border-b border-rule bg-canvas/70 text-left text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                        <th className="w-10 px-3 py-3 text-center">
+                          {pendingDrafts.length > 0 && (
+                            <Checkbox
+                              checked={isAllPendingSelected}
+                              onCheckedChange={handleToggleSelectAll}
+                              aria-label="Pilih semua draf yang menunggu review"
+                              className="cursor-pointer"
+                            />
+                          )}
+                        </th>
                         <th className="px-4 py-3">Tanggal &amp; Sumber</th>
                         <th className="px-4 py-3">Keterangan / Memo</th>
                         <th className="px-4 py-3 text-center">Status</th>
@@ -563,10 +710,30 @@ export function DraftsTab({
                         const isDoctor = summary.isDoctor || d.model === "doctor-sak";
                         const memoDisplay = summary.memo || d.inputText || "Draf Transaksi Jurnal";
                         const isExpanded = expandedId === d.id;
+                        const isSelected = selectedIds.includes(d.id);
 
                         return (
                           <Fragment key={d.id}>
-                            <tr className="transition-colors hover:bg-canvas/30 group">
+                            <tr
+                              className={cn(
+                                "transition-colors group",
+                                isSelected ? "bg-terra/5" : "hover:bg-canvas/30",
+                              )}
+                            >
+                              {/* Selection Checkbox */}
+                              <td className="px-3 py-3 align-top text-center">
+                                {d.status === "PENDING" ? (
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={() => handleToggleSelect(d.id)}
+                                    aria-label={`Pilih draf ${d.id}`}
+                                    className="cursor-pointer mt-0.5"
+                                  />
+                                ) : (
+                                  <span className="inline-block size-4" />
+                                )}
+                              </td>
+
                               {/* Tanggal & Sumber */}
                               <td className="px-4 py-3 align-top whitespace-nowrap">
                                 <div className="space-y-1">
@@ -665,17 +832,18 @@ export function DraftsTab({
                                       <Link href={`/jurnal/ai/${d.id}`}>
                                         <Button
                                           size="sm"
-                                          className="h-7 bg-terra text-white hover:bg-terra/90 text-xs px-2.5 shadow-2xs cursor-pointer"
+                                          className="h-7 bg-terra text-white hover:bg-terra/90 text-xs px-2.5 shadow-2xs cursor-pointer gap-1"
                                         >
-                                          Tinjau
-                                          <ArrowRight className="size-3 ml-1" />
+                                          <IconReview className="size-3" />
+                                          <span>Tinjau</span>
+                                          <ArrowRight className="size-3 ml-0.5" />
                                         </Button>
                                       </Link>
                                       <Button
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        disabled={isPending && rejectingId === d.id}
+                                        disabled={(isPending && rejectingId === d.id) || isBulkRejecting}
                                         onClick={() => handleReject(d.id)}
                                         className="h-7 w-7 p-0 text-ink-soft hover:text-terra hover:bg-terra/5 cursor-pointer"
                                         title="Batalkan draf"
@@ -704,7 +872,7 @@ export function DraftsTab({
                             {/* Sub-rows for expanded account breakdown */}
                             {isExpanded && summary.lines.length > 0 && (
                               <tr className="bg-canvas/40 border-b border-rule/40">
-                                <td colSpan={6} className="px-6 py-3">
+                                <td colSpan={7} className="px-6 py-3">
                                   <div className="space-y-1.5 rounded-lg border border-rule/60 bg-paper/80 p-3 shadow-2xs">
                                     <div className="text-[11px] font-semibold text-ink-soft uppercase tracking-wider mb-1">
                                       Rincian Akun yang Diusulkan:

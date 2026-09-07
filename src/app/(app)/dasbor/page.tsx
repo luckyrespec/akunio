@@ -24,6 +24,7 @@ import {
   Receipt,
   Wallet,
 } from "lucide-react";
+import { IconReview } from "@/components/icons";
 import Link from "next/link";
 
 const MONTH_FMT = new Intl.DateTimeFormat("id-ID", { month: "short" });
@@ -108,7 +109,7 @@ export default async function DasborPage() {
 
   const tasks = [
     pendingDrafts.length > 0 && {
-      icon: FileText,
+      icon: IconReview,
       tint: "bg-terra/10 text-terra",
       title: `${pendingDrafts.length} draf menunggu review`,
       desc: "Periksa akun sebelum posting ke buku besar.",

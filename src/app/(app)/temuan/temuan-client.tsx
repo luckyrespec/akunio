@@ -17,9 +17,12 @@ import {
   IconShieldCheck,
   IconSparkles,
   IconRefresh,
+  IconReview,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Reveal, Stagger, staggerItem } from "@/components/motion";
+import { GlowCard } from "@/components/aceternity/glow-card";
+import { BookOpen } from "lucide-react";
 import { motion } from "motion/react";
 import { triggerDoctorScanAction } from "./actions";
 import { useRouter } from "next/navigation";
@@ -410,7 +413,7 @@ export function TemuanClient({ initialFindings, stats }: TemuanClientProps) {
         </div>
       </div>
 
-      {/* 3. DAFTAR KARTU TEMUAN ATAU SKELETON LOADER SAAT MEMINDAI */}
+      {/* 3. DAFTAR TEMUAN: TABEL UTAMA (DESKTOP) & KARTU RESPONSIVE (MOBILE) */}
       {isScanning ? (
         /* SKELETON LOADER SELAMA PROSES PINDAI ULANG */
         <div className="space-y-3" aria-label="Memindai buku besar...">
@@ -475,109 +478,220 @@ export function TemuanClient({ initialFindings, stats }: TemuanClientProps) {
           </div>
         </Reveal>
       ) : (
-        <Stagger className="space-y-3">
-          {visibleFindings.map((f) => {
-            const meta = typeMetadata(f.type);
-            const Icon = TYPE_ICONS[f.type] ?? IconInfo;
-            const sev = severityMeta(f.severity);
-            const dateFormatted = formatFindingDate(f.createdAt);
-            const summary = summarizeEvidenceDetailed(f.type, f.evidence);
-            const isResolved = f.status === "resolved";
-            const isDismissed = f.status === "dismissed";
+        <Reveal>
+          <div className="space-y-4">
+            {/* Tampilan Kartu Mobile (< sm) */}
+            <div className="space-y-3 sm:hidden">
+              {visibleFindings.map((f) => {
+                const meta = typeMetadata(f.type);
+                const Icon = TYPE_ICONS[f.type] ?? IconInfo;
+                const sev = severityMeta(f.severity);
+                const dateFormatted = formatFindingDate(f.createdAt);
+                const summary = summarizeEvidenceDetailed(f.type, f.evidence);
+                const isResolved = f.status === "resolved";
+                const isDismissed = f.status === "dismissed";
 
-            return (
-              <motion.div key={f.id} variants={staggerItem}>
-                <div
-                  role="article"
-                  aria-label={`${meta.label}, ${sev.label}`}
-                  onClick={() => router.push(`/temuan/${f.id}`)}
-                  className={cn(
-                    "matte-card group flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border p-4 text-left transition-all duration-200 hover:shadow-xs cursor-pointer focus-ring",
-                    isResolved
-                      ? "border-rule/70 bg-paper/70 hover:border-debit/40 hover:bg-canvas/40"
-                      : isDismissed
-                      ? "border-rule/60 bg-canvas/30 opacity-75 hover:opacity-100"
-                      : "border-rule bg-paper hover:border-terra/40 hover:bg-canvas/50",
-                  )}
-                >
-                  {/* Kolom Kiri: Ikon & Deskripsi Inti */}
-                  <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                    <div
-                      className={cn(
-                        "flex size-9 shrink-0 items-center justify-center rounded-lg border shadow-2xs mt-0.5",
-                        isResolved
-                          ? "border-debit/20 bg-debit/10 text-debit"
-                          : "border-rule/80 bg-canvas text-terra",
-                      )}
-                    >
-                      {isResolved ? <IconCircleCheck className="size-4 text-debit" /> : <Icon className="size-4" />}
-                    </div>
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold text-ink tracking-tight">
-                          {meta.label}
+                return (
+                  <div
+                    key={f.id}
+                    onClick={() => router.push(`/temuan/${f.id}`)}
+                    className={cn(
+                      "rounded-xl border p-4 text-left transition-colors space-y-3 cursor-pointer",
+                      isResolved
+                        ? "border-rule/70 bg-paper/80"
+                        : isDismissed
+                        ? "border-rule/60 bg-canvas/30 opacity-75"
+                        : "border-rule bg-paper hover:border-terra/40",
+                    )}
+                  >
+                    <div className="flex items-center justify-between border-b border-rule/50 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                            isResolved
+                              ? "bg-debit/10 text-debit border-debit/30"
+                              : isDismissed
+                              ? "bg-canvas text-ink-soft border-rule"
+                              : sev.badgeClass,
+                          )}
+                        >
+                          <span className={cn("size-1.5 rounded-full", isResolved ? "bg-debit" : sev.dot)} />
+                          {isResolved ? "Terselesaikan" : isDismissed ? "Diabaikan" : sev.label}
                         </span>
+                        <span className="text-[11px] text-ink-soft">{dateFormatted}</span>
+                      </div>
+                      <IconArrowRight className="size-3.5 text-ink-soft" />
+                    </div>
 
-                        {isResolved ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-debit/30 bg-debit/10 px-2 py-0.5 text-[10px] font-semibold text-debit">
-                            <span className="size-1.5 rounded-full bg-debit" />
-                            Terselesaikan
-                          </span>
-                        ) : isDismissed ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-rule bg-canvas px-2 py-0.5 text-[10px] font-medium text-ink-soft">
-                            Diabaikan
-                          </span>
-                        ) : (
-                          <span
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Icon className="size-4 text-terra shrink-0" />
+                        <h4 className="font-semibold text-sm text-ink">{meta.label}</h4>
+                      </div>
+                      <p className="mt-1 text-xs text-ink-soft line-clamp-2 leading-relaxed">{summary}</p>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] pt-1 text-ink-soft">
+                      <span className="font-mono bg-canvas px-2 py-0.5 rounded border border-rule/70 truncate max-w-[200px]">
+                        Ref: {meta.standard}
+                      </span>
+                      <span className="font-semibold text-terra inline-flex items-center gap-1">
+                        <IconReview className="size-3" />
+                        <span>Tinjau</span>
+                        <IconArrowRight className="size-2.5" />
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tampilan Tabel Utama Impeccable (>= sm) */}
+            <div className="hidden sm:block">
+              <GlowCard>
+                <div className="overflow-x-auto rounded-2xl border border-rule bg-paper shadow-xs">
+                  <table className="w-full tnum text-sm">
+                    <thead>
+                      <tr className="border-b border-rule bg-canvas/80 text-left text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                        <th className="px-4 py-3.5 w-36 whitespace-nowrap">Tingkat &amp; Status</th>
+                        <th className="px-4 py-3.5 min-w-[280px]">Diagnosa &amp; Temuan</th>
+                        <th className="px-4 py-3.5 hidden md:table-cell max-w-[220px]">Rujukan Standar</th>
+                        <th className="px-4 py-3.5 w-28 whitespace-nowrap text-right">Tanggal</th>
+                        <th className="px-4 py-3.5 w-28 text-center whitespace-nowrap">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-rule/60">
+                      {visibleFindings.map((f) => {
+                        const meta = typeMetadata(f.type);
+                        const Icon = TYPE_ICONS[f.type] ?? IconInfo;
+                        const sev = severityMeta(f.severity);
+                        const dateFormatted = formatFindingDate(f.createdAt);
+                        const summary = summarizeEvidenceDetailed(f.type, f.evidence);
+                        const isResolved = f.status === "resolved";
+                        const isDismissed = f.status === "dismissed";
+
+                        return (
+                          <tr
+                            key={f.id}
+                            onClick={() => router.push(`/temuan/${f.id}`)}
                             className={cn(
-                              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                              sev.badgeClass,
+                              "group transition-colors cursor-pointer",
+                              isResolved
+                                ? "hover:bg-canvas/30"
+                                : isDismissed
+                                ? "opacity-75 hover:opacity-100 hover:bg-canvas/30"
+                                : "hover:bg-terra/[0.03]",
                             )}
                           >
-                            <span className={cn("size-1.5 rounded-full", sev.dot)} />
-                            {sev.label}
-                          </span>
-                        )}
+                            {/* Tingkat Keparahan & Status */}
+                            <td className="px-4 py-3.5 align-top whitespace-nowrap">
+                              <div className="space-y-1.5">
+                                <div>
+                                  {isResolved ? (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-debit/30 bg-debit/10 px-2.5 py-0.5 text-[11px] font-semibold text-debit shadow-2xs">
+                                      <span className="size-1.5 rounded-full bg-debit" />
+                                      Terselesaikan
+                                    </span>
+                                  ) : isDismissed ? (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-canvas px-2.5 py-0.5 text-[11px] font-medium text-ink-soft">
+                                      Diabaikan
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={cn(
+                                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold shadow-2xs",
+                                        sev.badgeClass,
+                                      )}
+                                    >
+                                      <span className={cn("size-1.5 rounded-full", sev.dot)} />
+                                      {sev.label}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-ink-soft/70 font-mono">
+                                  #{f.id.slice(0, 8)}
+                                </div>
+                              </div>
+                            </td>
 
-                        <span className="text-[11px] text-ink-soft/70">
-                          {dateFormatted}
-                        </span>
-                      </div>
-                      <p className="text-xs text-ink-soft line-clamp-1 leading-normal" title={summary}>
-                        {summary}
-                      </p>
-                      <div className="pt-0.5">
-                        <Link
-                          href={`/aturan?bab=${meta.bab}`}
-                          title={`Buka SAK EMKM ${meta.babTitle} di Aturan Akunio`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1.5 text-[10px] font-medium text-ink-soft/90 bg-canvas hover:bg-paper-raised px-2.5 py-0.5 rounded-md border border-rule hover:border-terra/40 hover:text-terra transition-colors"
-                        >
-                          <span className="font-semibold text-terra">Standar:</span>
-                          <span>{meta.standard}</span>
-                          <span className="text-terra">↗</span>
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
+                            {/* Diagnosa & Deskripsi Temuan */}
+                            <td className="px-4 py-3.5 align-top">
+                              <div className="flex items-start gap-3">
+                                <div
+                                  className={cn(
+                                    "flex size-8 shrink-0 items-center justify-center rounded-lg border shadow-2xs mt-0.5",
+                                    isResolved
+                                      ? "border-debit/20 bg-debit/10 text-debit"
+                                      : "border-rule/80 bg-canvas text-terra",
+                                  )}
+                                >
+                                  {isResolved ? (
+                                    <IconCircleCheck className="size-4 text-debit" />
+                                  ) : (
+                                    <Icon className="size-4" />
+                                  )}
+                                </div>
+                                <div className="space-y-1 min-w-0 flex-1">
+                                  <div className="font-semibold text-sm text-ink group-hover:text-terra transition-colors leading-snug">
+                                    {meta.label}
+                                  </div>
+                                  <p className="text-xs text-ink-soft line-clamp-2 leading-relaxed" title={summary}>
+                                    {summary}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
 
-                  {/* Kolom Kanan: Aksi Cepat / Preview */}
-                  <div className="flex items-center justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-rule/40">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 text-xs font-semibold group-hover:underline",
-                        isResolved ? "text-ink hover:text-terra" : "text-terra",
-                      )}
-                    >
-                      {isResolved ? "Lihat Rincian Selesai" : isDismissed ? "Lihat Rincian" : "Periksa & Koreksi"}
-                      <IconArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-                    </span>
-                  </div>
+                            {/* Rujukan Standar */}
+                            <td className="px-4 py-3.5 align-top hidden md:table-cell">
+                              <div className="space-y-1">
+                                <span className="inline-flex items-center gap-1 rounded-md border border-rule bg-canvas/60 px-2 py-0.5 text-[10px] font-mono text-ink-soft group-hover:border-terra/30 transition-colors">
+                                  <BookOpen className="size-2.5 text-terra shrink-0" />
+                                  <span className="truncate max-w-[180px]" title={meta.standard}>
+                                    {meta.standard}
+                                  </span>
+                                </span>
+                                <div className="text-[10px] text-ink-soft/70 truncate">
+                                  Bab {meta.bab}: {meta.babTitle}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Tanggal */}
+                            <td className="px-4 py-3.5 align-top text-right whitespace-nowrap">
+                              <span className="text-xs text-ink-soft font-mono">
+                                {dateFormatted}
+                              </span>
+                            </td>
+
+                            {/* Aksi */}
+                              <td className="px-4 py-3.5 align-top text-center whitespace-nowrap">
+                                <Button
+                                  size="sm"
+                                  variant={isResolved ? "outline" : "default"}
+                                  className={cn(
+                                    "h-7 text-xs px-3 shadow-2xs transition-all duration-150 cursor-pointer gap-1.5",
+                                    isResolved
+                                      ? "border-rule text-ink hover:border-terra/40 hover:text-terra"
+                                      : "bg-terra text-white hover:bg-terra/90",
+                                  )}
+                                >
+                                  <IconReview className="size-3.5" />
+                                  <span>{isResolved ? "Detail" : "Tinjau"}</span>
+                                  <IconArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" />
+                                </Button>
+                              </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              </motion.div>
-            );
-          })}
-        </Stagger>
+              </GlowCard>
+            </div>
+          </div>
+        </Reveal>
       )}
 
       {/* 4. MODAL HASIL PEMINDAIAN AKUNIO DOCTOR */}

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useDebounce } from "@/hooks/use-debounce";
+import { DEFAULT_DEBOUNCE_MS } from "@/lib/constants";
 
 const LIMITS = [10, 25, 50];
 
@@ -19,6 +21,8 @@ export function JournalToolbar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(defaultQuery);
+  const debouncedQuery = useDebounce(query, DEFAULT_DEBOUNCE_MS);
+  const isFirstMount = useRef(true);
 
   function apply(next: { q?: string; limit?: number }) {
     const params = new URLSearchParams(searchParams.toString());
@@ -30,6 +34,24 @@ export function JournalToolbar({
     params.delete("page");
     router.push(`${pathname}?${params.toString()}`);
   }
+
+  // Update query state when defaultQuery from URL changes
+  useEffect(() => {
+    setQuery(defaultQuery);
+  }, [defaultQuery]);
+
+  // Trigger search on debounced query change
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    const currentQ = searchParams.get("q") ?? "";
+    if (debouncedQuery.trim() !== currentQ.trim()) {
+      apply({ q: debouncedQuery });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQuery]);
 
   return (
     <form

@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   DEFAULT_SEARCH_DEBOUNCE_MS,
   DEFAULT_SEARCH_VIEW_LIMIT,
@@ -7,8 +7,8 @@ import {
 } from "./constants";
 
 describe("Selector Constants & Helpers", () => {
-  it("has default values: 500ms debounce and 5 view limit", () => {
-    expect(DEFAULT_SEARCH_DEBOUNCE_MS).toBe(500);
+  it("has default values: 300ms debounce and 5 view limit", () => {
+    expect(DEFAULT_SEARCH_DEBOUNCE_MS).toBe(300);
     expect(DEFAULT_SEARCH_VIEW_LIMIT).toBe(5);
   });
 
