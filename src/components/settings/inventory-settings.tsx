@@ -30,7 +30,6 @@ import { cn } from "@/lib/utils";
 export interface InventorySettingsData {
   valuationMethod: "WEIGHTED_AVERAGE" | "FIFO";
   recordingMethod: "PERPETUAL" | "PERIODIC";
-  inventoryAccountId?: string | null;
   cogsAccountId?: string | null;
   adjustmentLossAccountId?: string | null;
   adjustmentGainAccountId?: string | null;
@@ -61,9 +60,6 @@ export function InventorySettingsTab({
   const [recordingMethod, setRecordingMethod] = useState<"PERPETUAL" | "PERIODIC">(
     settings?.recordingMethod ?? "PERPETUAL"
   );
-  const [inventoryAccountId, setInventoryAccountId] = useState<string>(
-    settings?.inventoryAccountId ?? accounts.find((a) => a.code === "1300")?.id ?? ""
-  );
   const [cogsAccountId, setCogsAccountId] = useState<string>(
     settings?.cogsAccountId ?? accounts.find((a) => a.code === "5100")?.id ?? ""
   );
@@ -90,7 +86,6 @@ export function InventorySettingsTab({
       const res = await updateInventorySettingsAction({
         valuationMethod,
         recordingMethod,
-        inventoryAccountId: inventoryAccountId || null,
         cogsAccountId: cogsAccountId || null,
         adjustmentLossAccountId: adjustmentLossAccountId || null,
         adjustmentGainAccountId: adjustmentGainAccountId || null,
@@ -118,7 +113,6 @@ export function InventorySettingsTab({
     }
   };
 
-  const assetAccounts = accounts.filter((a) => a.type === "ASET");
   const expenseAccounts = accounts.filter((a) => a.type === "BEBAN");
   const revenueAccounts = accounts.filter((a) => a.type === "PENDAPATAN");
 
@@ -434,31 +428,6 @@ export function InventorySettingsTab({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Akun Persediaan */}
-          <div className="space-y-1.5">
-            <label htmlFor="inv-acc" className="text-xs font-semibold text-ink flex items-center justify-between">
-              <span>Akun Persediaan Barang Dagang</span>
-              <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 h-4 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
-                ASET LANCAR (D)
-              </Badge>
-            </label>
-            <select
-              id="inv-acc"
-              value={inventoryAccountId}
-              onChange={(e) => setInventoryAccountId(e.target.value)}
-              disabled={!canEdit}
-              className="w-full h-9.5 rounded-xl border border-rule bg-paper px-3 text-xs font-medium text-ink focus:outline-none focus:ring-2 focus:ring-terra/30 focus:border-terra transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <option value="">-- Pilih Akun Persediaan --</option>
-              {assetAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.code} - {a.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-ink-soft">Menampung saldo aktiva barang di neraca (default akun: 1300).</p>
-          </div>
-
           {/* Akun HPP */}
           <div className="space-y-1.5">
             <label htmlFor="cogs-acc" className="text-xs font-semibold text-ink flex items-center justify-between">

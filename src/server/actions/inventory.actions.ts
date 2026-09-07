@@ -334,7 +334,6 @@ export async function postOpnameAdjustmentAction(opnameId: string) {
 export async function updateInventorySettingsAction(payload: {
   valuationMethod?: "WEIGHTED_AVERAGE" | "FIFO";
   recordingMethod?: "PERPETUAL" | "PERIODIC";
-  inventoryAccountId?: string | null;
   cogsAccountId?: string | null;
   adjustmentLossAccountId?: string | null;
   adjustmentGainAccountId?: string | null;
@@ -345,7 +344,6 @@ export async function updateInventorySettingsAction(payload: {
       upsertInventorySettings(tx, ctx.orgId, {
         valuationMethod: payload.valuationMethod,
         recordingMethod: payload.recordingMethod,
-        inventoryAccountId: payload.inventoryAccountId || undefined,
         cogsAccountId: payload.cogsAccountId || undefined,
         adjustmentLossAccountId: payload.adjustmentLossAccountId || undefined,
         adjustmentGainAccountId: payload.adjustmentGainAccountId || undefined,

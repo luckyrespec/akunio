@@ -93,8 +93,15 @@ describe("posting jual campur", () => {
       upsertInventorySettings(tx, orgId, {
         valuationMethod: "WEIGHTED_AVERAGE",
         recordingMethod: "PERPETUAL",
-        inventoryAccountId: byCode("1300").id,
         cogsAccountId: byCode("5100").id,
+      }),
+    );
+    const { seedSubledgerControls } = await import("@/server/db/repos/subledger.repo");
+    await withOrg(orgId, (tx) =>
+      seedSubledgerControls(tx, orgId, {
+        receivableAccountId: byCode("1200").id,
+        payableAccountId: byCode("2100").id,
+        inventoryAccountId: byCode("1300").id,
       }),
     );
 
@@ -177,8 +184,15 @@ describe("posting beli + periodic + void", () => {  beforeEach(async () => {
       upsertInventorySettings(tx, orgId, {
         valuationMethod: "WEIGHTED_AVERAGE",
         recordingMethod: recording,
-        inventoryAccountId: byCode("1300").id,
         cogsAccountId: byCode("5100").id,
+      }),
+    );
+    const { seedSubledgerControls } = await import("@/server/db/repos/subledger.repo");
+    await withOrg(orgId, (tx) =>
+      seedSubledgerControls(tx, orgId, {
+        receivableAccountId: byCode("1200").id,
+        payableAccountId: byCode("2100").id,
+        inventoryAccountId: byCode("1300").id,
       }),
     );
     const contact = await createContactRepo(db, orgId, { name: "Supplier", type: "VENDOR" });

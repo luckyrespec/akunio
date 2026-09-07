@@ -63,7 +63,6 @@ export default async function PengaturanPage() {
           ? {
               valuationMethod: data.invSettings.valuationMethod as "WEIGHTED_AVERAGE" | "FIFO",
               recordingMethod: data.invSettings.recordingMethod as "PERPETUAL" | "PERIODIC",
-              inventoryAccountId: data.invSettings.inventoryAccountId,
               cogsAccountId: data.invSettings.cogsAccountId,
               adjustmentLossAccountId: data.invSettings.adjustmentLossAccountId,
               adjustmentGainAccountId: data.invSettings.adjustmentGainAccountId,

@@ -47,9 +47,14 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("inventory opname -> adjustme
 
     await db.transaction(async (tx) => {
       await inv.upsertInventorySettings(tx as never, orgId, {
-        inventoryAccountId: invAcc,
         adjustmentLossAccountId: lossAcc,
         adjustmentGainAccountId: gainAcc,
+      });
+      const { seedSubledgerControls } = await import("@/server/db/repos/subledger.repo");
+      await seedSubledgerControls(tx as never, orgId, {
+        receivableAccountId: await accountId("1200"),
+        payableAccountId: await accountId("2100"),
+        inventoryAccountId: invAcc,
       });
     });
 
