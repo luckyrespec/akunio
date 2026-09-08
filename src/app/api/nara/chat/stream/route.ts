@@ -25,6 +25,8 @@ import { getDocument } from "@/server/storage/storage";
 import { hybridSearch } from "@/server/db/repos/rag-search";
 import { embed } from "@/server/ai/embeddings";
 import { accounts, organizations } from "@/server/db/schema/org";
+import { orgProfiles } from "@/server/db/schema/onboarding";
+import { buildAkunioSystemPrompt } from "@/server/ai/persona";
 import { eq } from "drizzle-orm";
 import { postedLinesThrough } from "@/server/reports/build";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
@@ -138,6 +140,13 @@ function generateSmartTitle(prompt: string): string {
     const orgSettings = (orgRow?.settings ?? {}) as { aiHitlPolicy?: "smart" | "strict" | "autonomous" };
     const hitlPolicy = orgSettings.aiHitlPolicy ?? "smart";
 
+    // Profil usaha untuk sudut persona (read-only, bukan tool).
+    let businessType: string | null = null;
+    try {
+      const [prof] = await db.select().from(orgProfiles).where(eq(orgProfiles.orgId, ctx.orgId));
+      businessType = prof?.businessType ?? null;
+    } catch {}
+
     // Setup Gemini Client
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -174,15 +183,14 @@ function generateSmartTitle(prompt: string): string {
       .map((a) => `${a.code}: ${a.name} (${a.type}, normal ${a.normal})`)
       .join(", ");
 
-    const systemInstruction = `Anda adalah Akunio, Asisten Akuntansi AI Cerdas untuk UMKM Indonesia (berdasarkan standar IFRS/SAK EMKM).
-- Nama kamu adalah Akunio. Jika pengguna bertanya siapa namamu, siapa kamu, atau menyebut nama "Nara", tegaskan bahwa namamu adalah Akunio dan jangan pernah mengaku bernama Nara.
-- Anda ramah, solutif, teliti, dan selalu memberikan jawaban serta analisis pembukuan yang tuntas dalam Bahasa Indonesia.
-- Gaya Percakapan:
-  * Berkomunikasilah secara natural, hangat, dan mengalir seperti percakapan dengan rekan kerja akuntan pribadi.
-  * Gunakan kalimat singkat, to the point, dan mudah dipahami.
-  * HINDARI penggunaan heading besar (#/##) berlebihan.
-  * Jangan gunakan tanda bintang tunggal (*kata*) secara berlebihan untuk kata biasa seperti kata benda atau kata kerja (misalnya jangan menulis *flat*, *draft*, dll dengan bintang). Tulis saja kata tersebut secara wajar, atau gunakan **teks tebal** hanya untuk judul poin utama.
-  * Jika menyajikan daftar poin/fitur/bantuan, WAJIB tuliskan setiap poin di baris baru terpisah menggunakan tanda strip (- item) dengan pemisah baris (newline), jangan disambung dalam satu paragraf horizontal.
+    // Task 7 menghubungkan reader assistant_memories ke sini
+    const memoryBlock = "";
+    const personaHeader = buildAkunioSystemPrompt({
+      businessType,
+      pageLabel: pageContext?.pathname ?? pageContext?.title ?? null,
+      memoryBlock,
+    });
+    const systemInstruction = `${personaHeader}
 - Anda memiliki akses ke berbagai Tool Akuntansi untuk membaca dan mengubah data.
 - Daftar Tool yang tersedia:
   * Pembukuan Jurnal:

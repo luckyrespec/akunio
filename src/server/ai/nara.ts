@@ -6,6 +6,7 @@ import { aggregateFromLines, signed } from "@/core/reports/aggregates";
 import { incomeStatement } from "@/core/reports/statements";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { embed } from "./embeddings";
+import { buildAkunioSystemPrompt } from "./persona";
 import { hybridSearch } from "@/server/db/repos/rag-search";
 import { addMessage, listMessages, checkAssistantQuota, getThread } from "@/server/db/repos/chat.repo";
 import { GoogleGenAI } from "@google/genai";
@@ -248,10 +249,10 @@ export async function askNara(
   if (!apiKey) throw new Error("AI_TIDAK_TERSEDIA");
   const ai = new GoogleGenAI({ apiKey });
 
-  // Build system instruction + user prompt
-  const systemInstruction = `Anda adalah ${ASSISTANT_NAME}, Asisten Akuntansi AI untuk UMKM Indonesia (IFRS untuk SME).
-- Nama kamu adalah ${ASSISTANT_NAME}. Jika pengguna bertanya siapa namamu, siapa kamu, atau menyebut nama "Nara", tegaskan bahwa namamu adalah ${ASSISTANT_NAME} dan jangan pernah mengaku bernama Nara.
-- Jawab singkat dalam Bahasa Indonesia, ramah, tuntas.
+  // Build system instruction + user prompt (satu suara dengan jalur streaming)
+  // Task 7 menghubungkan reader assistant_memories ke sini
+  const memoryBlock = "";
+  const systemInstruction = `${buildAkunioSystemPrompt({ memoryBlock })}
 - Selalu kutip sumber [IFRS §…] untuk aturan dan [Jurnal JE-…] untuk angka bila relevan.
 - Jangan halusinasi angka — gunakan live numbers dan hasil tool.
 - ATURAN KONTEKS (ANTI-LUPA, WAJIB): jika pesan user singkat/konfirmasi ("ok", "ya", "catatkan ya", "lanjutkan") tanpa nominal,
