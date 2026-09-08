@@ -6,13 +6,19 @@ const LAST_THREAD_KEY = "neraca:last_thread_id";
 
 export function useNaraThreads(opts: { initialThreads?: ThreadItem[]; initialActiveId?: string | null } = {}) {
   const [threads, setThreads] = React.useState<ThreadItem[]>(opts.initialThreads ?? []);
-  const [activeThreadId, setActiveThreadIdState] = React.useState<string | null>(() => {
+  // Render pertama harus sama dengan SSR (anti hydration mismatch):
+  // jangan baca localStorage di initializer. Sinkron di effect bawah.
+  const [activeThreadId, setActiveThreadIdState] = React.useState<string | null>(
+    () => opts.initialActiveId ?? null,
+  );
+
+  // Sinkron id tersimpan (client-only) setelah mount.
+  React.useEffect(() => {
     try {
-      return localStorage.getItem(LAST_THREAD_KEY) ?? opts.initialActiveId ?? null;
-    } catch {
-      return opts.initialActiveId ?? null;
-    }
-  });
+      const stored = localStorage.getItem(LAST_THREAD_KEY);
+      if (stored) setActiveThreadIdState(stored);
+    } catch {}
+  }, []);
 
   const setActiveThreadId = React.useCallback((id: string | null) => {
     setActiveThreadIdState(id);
