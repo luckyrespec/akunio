@@ -8,6 +8,9 @@ import { listPeriods } from "@/server/db/repos/periods.repo";
 import { getInventorySettings } from "@/server/db/repos/inventory.repo";
 import { getTaxSettings } from "@/server/db/repos/tax.repo";
 import { getProfile } from "@/server/db/repos/onboarding.repo";
+import { withOrg } from "@/server/db/repos/with-org";
+import { listMemories } from "@/server/db/repos/assistant-memory.repo";
+import type { MemoryItemDTO } from "@/server/actions/settings.actions";
 import { PageHeader } from "@/components/page-header";
 import { SettingsClient } from "@/components/settings/settings-client";
 
@@ -15,7 +18,21 @@ export default async function PengaturanPage() {
   const ctx = await requireContext();
 
   const [org] = await db.select().from(organizations).where(eq(organizations.id, ctx.orgId));
-  const orgSettings = (org?.settings ?? {}) as { aiHitlPolicy?: "smart" | "strict" | "autonomous" };
+  const orgSettings = (org?.settings ?? {}) as {
+    aiHitlPolicy?: "smart" | "strict" | "autonomous";
+    aiMemoryEnabled?: boolean;
+  };
+  const memories: MemoryItemDTO[] = await withOrg(ctx.orgId, (tx) => listMemories(tx, ctx.orgId)).then(
+    (rows) =>
+      rows.map((m) => ({
+        id: m.id,
+        kind: m.kind,
+        content: m.content,
+        source: m.source,
+        updatedAt: m.updatedAt.toISOString(),
+      })),
+    () => [],
+  );
 
   const data = await db.transaction(async (tx) => {
     const accounts = await listAccounts(tx, ctx.orgId);
@@ -40,7 +57,9 @@ export default async function PengaturanPage() {
         baseCurrency: org?.baseCurrency ?? "IDR",
         fiscalYearStartMonth: org?.fiscalYearStartMonth ?? 1,
         aiHitlPolicy: orgSettings.aiHitlPolicy,
+        aiMemoryEnabled: orgSettings.aiMemoryEnabled !== false,
       }}
+      memories={memories}
       accounts={data.accounts.map((a) => ({
         id: a.id,
         code: a.code,

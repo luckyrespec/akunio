@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { CoaManager, type AccountItem } from "@/components/settings/coa-manager";
 import { HitlPolicySelector } from "@/components/settings/hitl-policy-selector";
+import { MemoryManager } from "@/components/settings/memory-manager";
+import type { MemoryItemDTO } from "@/server/actions/settings.actions";
 import { PeriodRowMenu } from "@/components/settings/period-row-menu";
 import { InventorySettingsTab, type InventorySettingsData } from "@/components/settings/inventory-settings";
 import { OrganizationProfileTab, type OrganizationProfileData } from "@/components/settings/organization-profile";
@@ -49,6 +51,7 @@ interface OrganizationInfo {
   baseCurrency: string;
   fiscalYearStartMonth: number;
   aiHitlPolicy?: "smart" | "strict" | "autonomous";
+  aiMemoryEnabled?: boolean;
 }
 
 interface SettingsClientProps {
@@ -59,6 +62,7 @@ interface SettingsClientProps {
   inventorySettings?: InventorySettingsData | null;
   taxSettings?: TaxSettings | null;
   members: MemberItem[];
+  memories?: MemoryItemDTO[];
   userRole?: string;
 }
 
@@ -117,6 +121,7 @@ export function SettingsClient({
   inventorySettings,
   taxSettings,
   members,
+  memories = [],
   userRole,
 }: SettingsClientProps) {
   const searchParams = useSearchParams();
@@ -330,6 +335,12 @@ export function SettingsClient({
             </div>
 
             <HitlPolicySelector currentPolicy={organization.aiHitlPolicy ?? "smart"} />
+
+            <MemoryManager
+              initialMemories={memories}
+              memoryEnabled={organization.aiMemoryEnabled !== false}
+              canEdit={canEdit}
+            />
           </div>
         )}
 
