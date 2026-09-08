@@ -1,5 +1,6 @@
 import * as React from "react";
 import type { Attachment } from "@/components/ai-elements/attachments";
+import { friendlyToolLabel } from "@/components/ai-elements/tool-labels";
 import type { ModelPreset } from "@/components/ai-elements/model-selector";
 
 export interface BatchItemData {
@@ -491,7 +492,7 @@ export function useNaraStreamChat({
               {
                 id: `rej-${Date.now()}`,
                 role: "assistant",
-                content: `Tindakan ${pendingApproval.toolName} dibatalkan.`,
+                content: `Baik, ${friendlyToolLabel(pendingApproval.toolName)} dibatalkan atas permintaan Anda. Tidak ada perubahan di pembukuan.`,
                 createdAt: new Date().toISOString(),
               },
             ]);

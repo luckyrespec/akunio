@@ -4,6 +4,7 @@ import * as React from "react";
 import { ThreeDots } from "react-loader-spinner";
 import { FileText, Image as ImageIcon, FileSpreadsheet } from "lucide-react";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import { MessageCopyButton } from "@/components/ai-elements/message-copy-button";
 import { ThinkingTrace } from "@/components/ai-elements/thinking-trace";
 import { CitationSheetProvider } from "@/components/ai-elements/citation-sheet";
 import { postingStampFor } from "@/components/ai-elements/journal-stamp";
@@ -157,6 +158,17 @@ export function NaraMessageFeed({
                       title="Akunio menggunakan ingatan tersimpan Anda untuk jawaban ini"
                     >
                       <span>menggunakan {m.memoryUsed} ingatan</span>
+                    </div>
+                  )}
+
+                  {/* Aksi pesan: salin isi */}
+                  {m.content && m.content.trim().length > 0 && (
+                    <div
+                      className={
+                        m.role === "user" ? "mt-1 flex justify-end" : "mt-1 flex justify-start"
+                      }
+                    >
+                      <MessageCopyButton text={m.content} />
                     </div>
                   )}
                 </MessageContent>

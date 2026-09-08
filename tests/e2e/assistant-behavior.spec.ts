@@ -57,4 +57,5 @@ test("history sinkron antara /asisten dan quick access", async ({ page }) => {
   await page.getByRole("button", { name: /Buka Asisten Akunio/i }).click();
   await expect(page.getByTestId("assistant-prompt-input")).toBeVisible({ timeout: 15000 });
   await expect(page.getByText(threadTitle as string).first()).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("message-copy").first()).toBeVisible({ timeout: 15000 });
 });

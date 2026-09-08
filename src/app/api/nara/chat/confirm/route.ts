@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { executeNaraTool } from "@/server/ai/nara-tools";
+import { friendlyToolLabel } from "@/components/ai-elements/tool-labels";
 import { addMessage, getThread } from "@/server/db/repos/chat.repo";
 
 export async function POST(req: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     if (!approved) {
       // User rejected the action
       await db.transaction((tx) =>
-        addMessage(tx, threadId, "assistant", `Tindakan ${toolName} dibatalkan atas permintaan Anda. Silakan beri tahu jika ada perubahan atau hal lain yang perlu dibantu.`, {
+        addMessage(tx, threadId, "assistant", `Baik, ${friendlyToolLabel(toolName)} dibatalkan atas permintaan Anda. Tidak ada perubahan di pembukuan — silakan beri tahu jika ada hal lain yang perlu dibantu.`, {
           toolInvocations: [{ callId, toolName, status: "rejected", args }],
         }),
       );
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
     const execution = await executeNaraTool(ctx.orgId, ctx.userEmail, toolName, args);
     if (!execution.success) {
       await db.transaction((tx) =>
-        addMessage(tx, threadId, "assistant", `Gagal mengeksekusi ${toolName}: ${execution.error}`, {
+        addMessage(tx, threadId, "assistant", `Maaf, ${friendlyToolLabel(toolName)} gagal: ${execution.error}`, {
           toolInvocations: [{ callId, toolName, status: "failed", args, error: execution.error }],
         }),
       );
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Success response synthesis
-    let confirmationText = `Tindakan ${toolName} berhasil dieksekusi.`;
+    let confirmationText = `${friendlyToolLabel(toolName)} selesai.`;
     if (toolName === "post_journal") {
       const jData = execution.data as { number?: string; memo?: string };
       confirmationText = `Jurnal transaksi ${jData?.number ?? ""} ("${jData?.memo ?? ""}") berhasil diposting ke buku besar dengan status POSTED.`;
