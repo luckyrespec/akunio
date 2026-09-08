@@ -21,20 +21,22 @@ export function EditAccountDialog({
   accountId,
   accountCode,
   currentName,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   accountId: string;
   accountCode: string;
   currentName: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [name, setName] = React.useState(currentName);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    setName(currentName);
-  }, [currentName]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +61,7 @@ export function EditAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {onOpenChange === undefined && (
       <DialogTrigger asChild>
         <button
           type="button"
@@ -68,6 +71,7 @@ export function EditAccountDialog({
           <Edit2 className="size-3" />
         </button>
       </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-md p-6">
         <DialogHeader className="space-y-1">
@@ -129,13 +133,19 @@ export function DeleteAccountDialog({
   accountId,
   accountCode,
   accountName,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   accountId: string;
   accountCode: string;
   accountName: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -156,6 +166,7 @@ export function DeleteAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {onOpenChange === undefined && (
       <DialogTrigger asChild>
         <button
           type="button"
@@ -165,6 +176,7 @@ export function DeleteAccountDialog({
           <Trash2 className="size-3" />
         </button>
       </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-md p-6">
         <DialogHeader className="space-y-1">

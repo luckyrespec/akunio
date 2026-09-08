@@ -17,9 +17,8 @@ import {
   Layers,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ArchiveToggle } from "@/components/settings/archive-toggle";
 import { CreateAccountDialog } from "@/components/settings/create-account-dialog";
-import { EditAccountDialog, DeleteAccountDialog } from "@/components/settings/account-actions-dialog";
+import { AccountRowMenu } from "@/components/settings/account-row-menu";
 import { cn } from "@/lib/utils";
 
 export interface AccountItem {
@@ -461,8 +460,8 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
                             className={cn(
                               "text-[11px] font-mono font-semibold px-2 py-0.5 border",
                               a.normal === "D"
-                                ? "border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-500/15"
-                                : "border-purple-500/40 text-purple-700 dark:text-purple-300 bg-purple-500/15",
+                                ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15"
+                                : "border-terra/40 text-terra bg-terra/10",
                             )}
                           >
                             {a.normal === "D" ? "Debit (D)" : "Kredit (K)"}
@@ -497,26 +496,13 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
                           )}
                         </td>
 
-                        {/* Aksi: Edit Nama, Hapus Akun, & Arsipkan */}
+                        {/* Aksi: menu dropdown */}
                         <td className="px-4 py-2.5 text-center whitespace-nowrap">
                           {canEdit && (
-                            <div className="flex items-center justify-center gap-1.5">
-                              {/* Edit Nama Akun */}
-                              <EditAccountDialog
-                                accountId={a.id}
-                                accountCode={a.code}
-                                currentName={a.name}
+                            <div className="flex items-center justify-center">
+                              <AccountRowMenu
+                                account={{ id: a.id, code: a.code, name: a.name, archivedAt: a.archivedAt }}
                               />
-
-                              {/* Hapus Akun (validasi tidak ada saldo/mutasi) */}
-                              <DeleteAccountDialog
-                                accountId={a.id}
-                                accountCode={a.code}
-                                accountName={a.name}
-                              />
-
-                              {/* Toggle Arsipkan */}
-                              <ArchiveToggle accountId={a.id} archived={isArchived} />
                             </div>
                           )}
                         </td>
