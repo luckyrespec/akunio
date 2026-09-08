@@ -67,6 +67,7 @@ export default function AsistenClient({
   const [libraryFiles, setLibraryFiles] = React.useState<LibraryFile[]>([]);
   const [libraryLoading, setLibraryLoading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const promptInputRef = React.useRef<HTMLTextAreaElement>(null);
 
   const {
     messages,
@@ -398,7 +399,7 @@ export default function AsistenClient({
                 streamingSuggestions={streamingSuggestions}
                 onSelectSuggestion={(val) => {
                   setInput(val);
-                  handleSendMessage(val);
+                  promptInputRef.current?.focus();
                 }}
                 emptyState={
                   <ConversationEmptyState
@@ -424,7 +425,7 @@ export default function AsistenClient({
                         suggestion="Tampilkan ringkasan laporan laba rugi bulan ini"
                         onClick={(prompt) => {
                           setInput(prompt);
-                          handleSendMessage(prompt);
+                          promptInputRef.current?.focus();
                         }}
                       />
 
@@ -435,7 +436,7 @@ export default function AsistenClient({
                         suggestion="Berapa saldo kas dan performa laba tahun berjalan?"
                         onClick={(prompt) => {
                           setInput(prompt);
-                          handleSendMessage(prompt);
+                          promptInputRef.current?.focus();
                         }}
                       />
 
@@ -446,7 +447,7 @@ export default function AsistenClient({
                         suggestion="Cek kepatuhan dan diagnosa kesehatan pembukuan."
                         onClick={(prompt) => {
                           setInput(prompt);
-                          handleSendMessage(prompt);
+                          promptInputRef.current?.focus();
                         }}
                       />
                     </Suggestions>
@@ -497,6 +498,7 @@ export default function AsistenClient({
 
                 <PromptInputBody>
                   <PromptInputTextarea
+                    ref={promptInputRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder="Tanyakan hal akuntansi, minta laporan, atau ketik transaksi..."

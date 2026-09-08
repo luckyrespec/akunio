@@ -41,6 +41,7 @@ import {
 import { Attachments, AttachmentItem } from "@/components/ai-elements/attachments";
 import { HitlTool } from "@/components/ai-elements/hitl-tool";
 import { getActivePageContext, type PageContext } from "@/lib/assistant-context";
+import { parseThreadsResponse } from "@/lib/parse-threads";
 import { useNaraStreamChat, type BatchItemData, type MessageItem } from "@/hooks/use-nara-stream-chat";
 import { NaraHitlApprovalCard } from "@/components/ai-elements/nara-hitl-approval-card";
 import { NaraMessageFeed } from "@/components/ai-elements/nara-message-feed";
@@ -67,6 +68,7 @@ export function AssistantWidget() {
   });
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const promptInputRef = React.useRef<HTMLTextAreaElement>(null);
 
   const {
     messages,
@@ -123,6 +125,18 @@ export function AssistantWidget() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
+  // Dibuka dari dasbor (akunio-briefing-card): isi prompt saja, jangan kirim.
+  React.useEffect(() => {
+    const onOpen = (e: Event) => {
+      const prompt = (e as CustomEvent<{ prompt?: string }>).detail?.prompt ?? "";
+      setOpen(true);
+      setPageContext(getActivePageContext());
+      if (prompt) setInput(prompt);
+    };
+    window.addEventListener("akunio:open-assistant", onOpen);
+    return () => window.removeEventListener("akunio:open-assistant", onOpen);
+  }, []);
+
   // Fetch threads list when opened
   React.useEffect(() => {
     if (!open) return;
@@ -130,10 +144,10 @@ export function AssistantWidget() {
       try {
         const res = await fetch("/api/nara/threads");
         if (res.ok) {
-          const data = await res.json();
-          setThreads(data.threads ?? []);
-          if (!activeThreadId && data.threads?.length > 0) {
-            setActiveThreadId(data.threads[0].id);
+          const list = parseThreadsResponse(await res.json());
+          setThreads(list);
+          if (!activeThreadId && list.length > 0) {
+            setActiveThreadId(list[0].id);
           }
         }
       } catch (e) {
@@ -142,6 +156,9 @@ export function AssistantWidget() {
     }
     loadThreads();
   }, [open, activeThreadId]);
+
+  // NOTE: quick access diam total — tidak ada auto-kirim briefing.
+  // Ringkasan hanya dikirim bila user menekan kirim / memilih chip suggest.
 
   // Load messages for active thread
   React.useEffect(() => {
@@ -165,18 +182,9 @@ export function AssistantWidget() {
     loadThread();
   }, [activeThreadId, open, setMessages, restorePendingFromMessages]);
 
-  // Proactive Daily Briefing on first daily open
-  React.useEffect(() => {
-    if (!open) return;
-    try {
-      const todayISO = new Date().toISOString().slice(0, 10);
-      const lastBriefing = localStorage.getItem("neraca:last_briefing_date");
-      if (lastBriefing !== todayISO && messages.length === 0 && !isStreaming) {
-        localStorage.setItem("neraca:last_briefing_date", todayISO);
-        handleSendMessage("☀️ Berikan ringkasan briefing keuangan hari ini.");
-      }
-    } catch {}
-  }, [open, messages.length, isStreaming, handleSendMessage]);
+  // Proactive Daily Briefing dimatikan (desain diam total):
+  // widget tidak pernah mengirim pesan otomatis saat dibuka.
+  // Lihat NOTE di atas.
 
   const handleNewChat = () => {
     setActiveThreadId(null);
@@ -359,7 +367,7 @@ export function AssistantWidget() {
               streamingSuggestions={streamingSuggestions}
               onSelectSuggestion={(val) => {
                 setInput(val);
-                handleSendMessage(val);
+                promptInputRef.current?.focus();
               }}
               emptyState={
                 <ConversationEmptyState
@@ -385,7 +393,7 @@ export function AssistantWidget() {
                           suggestion="Tampilkan daftar barang persediaan yang ada saat ini."
                           onClick={(val) => {
                             setInput(val);
-                            handleSendMessage(val);
+                            promptInputRef.current?.focus();
                           }}
                         />
                       </>
@@ -397,7 +405,7 @@ export function AssistantWidget() {
                           suggestion={pageContext.summary ? `Bagaimana contoh penerapan dan pencatatan jurnal untuk ${pageContext.summary} di usaha saya?` : "Bagaimana contoh pencatatan jurnal untuk aturan ini di usaha saya?"}
                           onClick={(val) => {
                             setInput(val);
-                            handleSendMessage(val);
+                            promptInputRef.current?.focus();
                           }}
                         />
                         <Suggestion
@@ -406,7 +414,7 @@ export function AssistantWidget() {
                           suggestion={`Apa perbedaan perlakuan akuntansi pada ${pageContext.summary || "bab ini"} dibandingkan SAK Umum / PSAK?`}
                           onClick={(val) => {
                             setInput(val);
-                            handleSendMessage(val);
+                            promptInputRef.current?.focus();
                           }}
                         />
                         <Suggestion
@@ -415,7 +423,7 @@ export function AssistantWidget() {
                           suggestion={`Jelaskan syarat pengakuan dan pengukuran transaksi menurut ${pageContext.summary || "standar ini"}.`}
                           onClick={(val) => {
                             setInput(val);
-                            handleSendMessage(val);
+                            promptInputRef.current?.focus();
                           }}
                         />
                       </>
@@ -427,7 +435,7 @@ export function AssistantWidget() {
                           suggestion="Berikan ringkasan briefing keuangan hari ini."
                           onClick={(val) => {
                             setInput(val);
-                            handleSendMessage(val);
+                            promptInputRef.current?.focus();
                           }}
                         />
 
@@ -437,7 +445,7 @@ export function AssistantWidget() {
                           suggestion="Berapa saldo kas/bank dan laba bersih bulan berjalan?"
                           onClick={(val) => {
                             setInput(val);
-                            handleSendMessage(val);
+                            promptInputRef.current?.focus();
                           }}
                         />
                       </>
@@ -489,6 +497,7 @@ export function AssistantWidget() {
 
             <PromptInputBody>
               <PromptInputTextarea
+                ref={promptInputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Tanyakan hal akuntansi atau ketik perintah..."
