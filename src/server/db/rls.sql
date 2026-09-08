@@ -131,6 +131,20 @@ BEGIN
   END IF;
 END $$;
 
+-- assistant_memories: ingatan lintas sesi, isolasi per org_id.
+ALTER TABLE assistant_memories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assistant_memories FORCE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'assistant_memories' AND policyname = 'tenant_isolation_assistant_memories') THEN
+    EXECUTE $p$
+      CREATE POLICY tenant_isolation_assistant_memories ON assistant_memories
+      USING (org_id = current_setting('app.current_org', true)::uuid)
+      WITH CHECK (org_id = current_setting('app.current_org', true)::uuid)
+    $p$;
+  END IF;
+END $$;
+
 -- stock_opname_items is isolated via stock_opnames.org_id:
 ALTER TABLE stock_opname_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_opname_items FORCE ROW LEVEL SECURITY;

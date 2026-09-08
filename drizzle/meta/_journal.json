@@ -127,6 +127,13 @@
 			"when": 1788900001000,
 			"tag": "0017_subledger-drop-inventory-account",
 			"breakpoints": true
+		},
+		{
+			"idx": 18,
+			"version": "7",
+			"when": 1788900002000,
+			"tag": "0018_assistant_memories",
+			"breakpoints": true
 		}
 	]
 }
