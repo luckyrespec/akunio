@@ -4,8 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Sparkles, FileText, Image as ImageIcon, FileSpreadsheet, RotateCcw, BookOpen } from "lucide-react";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
-import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ai-elements/reasoning";
-import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
+import { ThinkingTrace } from "@/components/ai-elements/thinking-trace";
 import { postingStampFor } from "@/components/ai-elements/journal-stamp";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import {
@@ -51,38 +50,19 @@ export function NaraMessageFeed({
       ) : (
         messages.map((m) => (
           <React.Fragment key={m.id}>
-            {/* Tool Invocations rendered as standalone full-width widgets */}
-            {m.toolInvocations && m.toolInvocations.length > 0 && (
-              <div className="w-full max-w-[88%] md:max-w-[80%] space-y-2 mb-1">
-                {m.toolInvocations.map((ti, i) => {
-                  const toolState =
-                    ti.status === "running"
-                      ? "running"
-                      : ti.status === "error"
-                        ? "error"
-                        : "completed";
-                  return (
-                    <Tool key={i} defaultOpen={false} state={toolState}>
-                      <ToolHeader
-                        title={ti.toolName}
-                        type={`tool-${ti.toolName}`}
-                        state={toolState}
-                      />
-                      <ToolContent>
-                        {ti.args && typeof ti.args === "object" && Object.keys(ti.args as object).length > 0 ? (
-                          <ToolInput input={ti.args} />
-                        ) : null}
-                        {ti.result ? (
-                          postingStampFor(ti.toolName, ti.result) ?? (
-                            <ToolOutput output={ti.result as React.ReactNode} />
-                          )
-                        ) : ti.error ? (
-                          <ToolOutput errorText={ti.error} />
-                        ) : null}
-                      </ToolContent>
-                    </Tool>
-                  );
-                })}
+            {/* Thinking trace: chain-of-thought + pemakaian tool dalam satu dropdown */}
+            {(m.reasoning || (m.toolInvocations && m.toolInvocations.length > 0)) && (
+              <div className="w-full max-w-[88%] md:max-w-[80%] mb-1">
+                <ThinkingTrace
+                  reasoning={m.reasoning}
+                  tools={(m.toolInvocations ?? []).map((ti) => ({
+                    toolName: ti.toolName,
+                    status: ti.status,
+                    result: ti.result,
+                    error: typeof ti.error === "string" ? ti.error : null,
+                  }))}
+                  renderToolExtra={(name, result) => postingStampFor(name, result) ?? null}
+                />
               </div>
             )}
 
@@ -123,13 +103,6 @@ export function NaraMessageFeed({
                     </>
                   ) : (
                     <>
-                      {m.reasoning && (
-                        <Reasoning isStreaming={false}>
-                          <ReasoningTrigger>Alur Pemikiran</ReasoningTrigger>
-                          <ReasoningContent>{m.reasoning}</ReasoningContent>
-                        </Reasoning>
-                      )}
-
                       {m.content && <MessageResponse>{m.content}</MessageResponse>}
                     </>
                   )}
@@ -247,34 +220,20 @@ export function NaraMessageFeed({
         ))
       )}
 
-      {/* LIVE STREAMING TOOLS (Standalone outside message bubble) */}
-      {isStreaming && streamingTools.length > 0 && (
-        <div className="w-full max-w-[88%] md:max-w-[80%] space-y-2 mb-1">
-          {streamingTools.map((st, i) => (
-            <Tool
-              key={i}
-              defaultOpen={st.status === "awaiting-approval"}
-              state={st.status}
-            >
-              <ToolHeader
-                title={st.toolName}
-                type={`tool-${st.toolName}`}
-                state={st.status}
-              />
-              <ToolContent>
-                {st.args && typeof st.args === "object" && Object.keys(st.args as object).length > 0 ? (
-                  <ToolInput input={st.args} />
-                ) : null}
-                {st.result ? (
-                  postingStampFor(st.toolName, st.result) ?? (
-                    <ToolOutput output={st.result as React.ReactNode} />
-                  )
-                ) : st.error ? (
-                  <ToolOutput errorText={st.error} />
-                ) : null}
-              </ToolContent>
-            </Tool>
-          ))}
+      {/* LIVE THINKING TRACE (chain-of-thought + tool berjalan, satu dropdown) */}
+      {isStreaming && (streamingReasoning.trim().length > 0 || streamingTools.length > 0) && (
+        <div className="w-full max-w-[88%] md:max-w-[80%] mb-1">
+          <ThinkingTrace
+            reasoning={streamingReasoning}
+            tools={streamingTools.map((st) => ({
+              toolName: st.toolName,
+              status: st.status,
+              result: st.result,
+              error: st.error ?? null,
+            }))}
+            isStreaming
+            renderToolExtra={(name, result) => postingStampFor(name, result) ?? null}
+          />
         </div>
       )}
 
@@ -284,7 +243,7 @@ export function NaraMessageFeed({
           <MessageContent from="assistant">
 
             {streamingText ? (
-              <MessageResponse>
+              <MessageResponse isAnimating>
                 {streamingText}
                 <span className="inline-block w-1.5 h-3.5 bg-terra/70 ml-1 animate-pulse align-middle rounded-xs" />
               </MessageResponse>
@@ -295,13 +254,6 @@ export function NaraMessageFeed({
                   <span className="size-1.5 rounded-full bg-terra animate-pulse" />
                 </span>
               </div>
-            )}
-
-            {streamingReasoning && streamingText && (
-              <Reasoning isStreaming={false}>
-                <ReasoningTrigger>Alur Pemikiran</ReasoningTrigger>
-                <ReasoningContent>{streamingReasoning}</ReasoningContent>
-              </Reasoning>
             )}
 
             {streamingQueue && streamingQueue.length > 0 && (

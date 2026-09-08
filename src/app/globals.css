@@ -2,6 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Streamdown (markdown streaming asisten): pastikan utilitas di outputnya ikut ter-compile. */
+@source "../../node_modules/streamdown/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -368,6 +371,41 @@ html { background-color: var(--color-canvas); }
   }
   .rule-double {
     border-bottom: 3px double #000000 !important;
+  }
+}
+
+/* Skin Streamdown (jawaban asisten) ke token Paper & Ink. */
+[data-streamdown="table-wrapper"] {
+  margin-block: 0.75rem;
+}
+[data-streamdown="table-wrapper"] [data-streamdown="table"] {
+  border-color: var(--color-rule);
+}
+[data-streamdown="table-header"] {
+  background: color-mix(in oklab, var(--color-terra) 8%, transparent);
+}
+[data-streamdown="table-header-cell"] {
+  color: var(--color-ink);
+}
+[data-streamdown="table-cell"] {
+  color: var(--color-ink);
+  border-color: var(--color-rule);
+}
+[data-streamdown="code-block"] {
+  border: 1px solid var(--color-rule);
+}
+[data-streamdown="blockquote"] {
+  border-left-color: var(--color-terra);
+  color: var(--color-ink-soft);
+}
+[data-streamdown="link"] {
+  color: var(--color-terra);
+}
+
+/* Hormati pengurangan gerak: matikan animasi token streaming. */
+@media (prefers-reduced-motion: reduce) {
+  [data-sd-animate] {
+    animation: none;
   }
 }
 

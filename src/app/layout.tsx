@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
+import "streamdown/styles.css";
 
 const display = Fraunces({ subsets: ["latin"], variable: "--font-fraunces" });
 const body = Plus_Jakarta_Sans({
