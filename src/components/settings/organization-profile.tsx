@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,18 @@ export function OrganizationProfileTab({
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const initial = (name.trim() || "O").charAt(0).toUpperCase();
+  // Sinkron ulang saat server mengirim props baru (mis. setelah router.refresh()).
+  useEffect(() => {
+    setName(organization.name);
+  }, [organization.name]);
+  useEffect(() => {
+    setBusinessName(profile?.businessName ?? "");
+    setCity(profile?.city ?? "");
+    setAddress(profile?.address ?? "");
+  }, [profile?.businessName, profile?.city, profile?.address]);
+
+  const displayName = name.trim() || organization.name;
+  const initial = (displayName || "O").charAt(0).toUpperCase();
   const fiscalMonth = MONTHS[organization.fiscalYearStartMonth - 1] ?? `Bulan ${organization.fiscalYearStartMonth}`;
 
   const handleSave = async (e: React.FormEvent) => {
@@ -71,8 +82,8 @@ export function OrganizationProfileTab({
           {initial}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="font-display text-xl font-semibold tracking-tight text-ink truncate" title={organization.name}>
-            {organization.name}
+          <p className="font-display text-xl font-semibold tracking-tight text-ink truncate" title={displayName}>
+            {displayName}
           </p>
           <p className="mt-0.5 font-mono text-[11px] text-ink-soft">ID {organization.id}</p>
         </div>

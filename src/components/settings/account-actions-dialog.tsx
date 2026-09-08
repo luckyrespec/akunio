@@ -38,6 +38,14 @@ export function EditAccountDialog({
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Sinkron ulang saat dialog dibuka (props baru setelah router.refresh()).
+  React.useEffect(() => {
+    if (open) {
+      setName(currentName);
+      setError(null);
+    }
+  }, [currentName, open]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);

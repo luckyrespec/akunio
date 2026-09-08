@@ -14,9 +14,16 @@ export async function updateOrganizationProfileAction(payload: {
 }) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    if (typeof payload.name !== "string") {
+      return { ok: false as const, error: "Nama organisasi wajib diisi." };
+    }
     const name = payload.name.trim();
     if (!name) return { ok: false as const, error: "Nama organisasi wajib diisi." };
     if (name.length > 120) return { ok: false as const, error: "Nama organisasi maksimal 120 karakter." };
+    const businessName = (payload.businessName ?? "").trim();
+    if (businessName.length > 120) return { ok: false as const, error: "Nama bisnis maksimal 120 karakter." };
+    const city = (payload.city ?? "").trim();
+    if (city.length > 120) return { ok: false as const, error: "Kota maksimal 120 karakter." };
     const address = (payload.address ?? "").trim();
     if (address.length > 500) return { ok: false as const, error: "Alamat maksimal 500 karakter." };
 
@@ -26,12 +33,16 @@ export async function updateOrganizationProfileAction(payload: {
         .set({ name })
         .where(eq(organizations.id, ctx.orgId));
       await upsertProfile(tx, ctx.orgId, {
-        businessName: (payload.businessName ?? "").trim() || null,
-        city: (payload.city ?? "").trim() || null,
+        businessName: businessName || null,
+        city: city || null,
         address: address || null,
       });
     });
-    revalidatePath("/pengaturan");
+    try {
+      revalidatePath("/pengaturan");
+    } catch {
+      // Revalidasi gagal bukan kegagalan tulis — abaikan agar UX tidak mengira gagal simpan.
+    }
     return { ok: true as const };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memperbarui profil organisasi";

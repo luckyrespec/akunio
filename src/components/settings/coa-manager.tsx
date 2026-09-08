@@ -460,8 +460,8 @@ export function CoaManager({ accounts, userRole }: CoaManagerProps) {
                             className={cn(
                               "text-[11px] font-mono font-semibold px-2 py-0.5 border",
                               a.normal === "D"
-                                ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/15"
-                                : "border-terra/40 text-terra bg-terra/10",
+                                ? "border-debit/40 text-debit bg-debit/10"
+                                : "border-rule text-ink-soft bg-canvas/40",
                             )}
                           >
                             {a.normal === "D" ? "Debit (D)" : "Kredit (K)"}

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { truncateAll, makeOrg } from "./helpers";
@@ -22,5 +22,52 @@ describe("profil organisasi", () => {
     expect(profile?.businessName).toBe("Brand X");
     expect(profile?.city).toBe("Yogyakarta");
     expect(profile?.address).toBe("Jl. Malioboro 1");
+  });
+});
+
+describe("profil organisasi via action", () => {
+  let orgId: string;
+
+  beforeEach(async () => {
+    await truncateAll();
+    orgId = (await makeOrg("Nama Lama")).orgId;
+    process.env.TEST_CTX_ORG = orgId;
+  });
+
+  afterEach(async () => {
+    delete process.env.TEST_CTX_ORG;
+  });
+
+  it("happy path: nama + profil tersimpan lewat server action", async () => {
+    const { updateOrganizationProfileAction } = await import(
+      "@/server/actions/organization.actions"
+    );
+    const res = await updateOrganizationProfileAction({
+      name: "Nama Baru",
+      businessName: "Brand X",
+      city: "Yogyakarta",
+      address: "Jl. Malioboro 1",
+    });
+    expect(res.ok).toBe(true);
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
+    expect(org.name).toBe("Nama Baru");
+    const profile = await withOrg(orgId, (tx) => getProfile(tx, orgId));
+    expect(profile?.businessName).toBe("Brand X");
+    expect(profile?.city).toBe("Yogyakarta");
+  });
+
+  it("validasi: nama kosong dan field kepanjangan ditolak", async () => {
+    const { updateOrganizationProfileAction } = await import(
+      "@/server/actions/organization.actions"
+    );
+    await expect(updateOrganizationProfileAction({ name: "   " })).resolves.toMatchObject({
+      ok: false,
+    });
+    await expect(
+      updateOrganizationProfileAction({ name: "A", businessName: "x".repeat(121) }),
+    ).resolves.toMatchObject({ ok: false });
+    await expect(
+      updateOrganizationProfileAction({ name: "A", city: "y".repeat(121) }),
+    ).resolves.toMatchObject({ ok: false });
   });
 });
