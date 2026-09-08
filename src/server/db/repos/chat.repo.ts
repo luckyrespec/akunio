@@ -1,5 +1,6 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import { chatThreads, chatMessages } from "../schema/rag";
+import { saveMemory } from "./assistant-memory.repo";
 import type { Queryable } from "./queryable";
 
 export type ChatThread = typeof chatThreads.$inferSelect;
@@ -111,6 +112,45 @@ export async function addMessage(
     .update(chatThreads)
     .set({ updatedAt: new Date() })
     .where(eq(chatThreads.id, threadId));
+
+  // Ringkas otomatis thread panjang → 1 baris THREAD_SUMMARY per thread
+  // (upsert di saveMemory). MVP deterministik tanpa LLM, fail-silent.
+  if (role === "assistant") {
+    try {
+      const [{ n }] = await q
+        .select({ n: count() })
+        .from(chatMessages)
+        .where(eq(chatMessages.threadId, threadId));
+      if (Number(n) > 20) {
+        const [t] = await q
+          .select({ orgId: chatThreads.orgId })
+          .from(chatThreads)
+          .where(eq(chatThreads.id, threadId))
+          .limit(1);
+        if (t) {
+          const recent = await q
+            .select({ role: chatMessages.role, content: chatMessages.content })
+            .from(chatMessages)
+            .where(eq(chatMessages.threadId, threadId))
+            .orderBy(desc(chatMessages.createdAt))
+            .limit(6);
+          const topics = recent
+            .filter((m) => m.role === "user")
+            .slice(0, 3)
+            .map((m) => m.content.slice(0, 80))
+            .join(" | ");
+          await saveMemory(q, t.orgId, {
+            kind: "THREAD_SUMMARY",
+            content: `Ringkasan ${String(n)} pesan: ${topics}`.slice(0, 500),
+            source: "auto",
+            sourceThreadId: threadId,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("auto thread summary skipped", e instanceof Error ? e.message : e);
+    }
+  }
 
   return row;
 }

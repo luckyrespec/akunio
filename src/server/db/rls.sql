@@ -14,7 +14,7 @@ BEGIN
                            'fixed_assets','asset_depreciation_lines','asset_disposals',
                            'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames','inventory_sku_counters',
                            'subledger_controls','subledger_journal_links',
-                           'tax_summaries']
+                           'tax_summaries','assistant_memories']
   LOOP
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
       EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
@@ -127,20 +127,6 @@ BEGIN
         WHERE ct.id = chat_messages.thread_id
           AND ct.org_id = current_setting('app.current_org', true)::uuid
       ))
-    $p$;
-  END IF;
-END $$;
-
--- assistant_memories: ingatan lintas sesi, isolasi per org_id.
-ALTER TABLE assistant_memories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE assistant_memories FORCE ROW LEVEL SECURITY;
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'assistant_memories' AND policyname = 'tenant_isolation_assistant_memories') THEN
-    EXECUTE $p$
-      CREATE POLICY tenant_isolation_assistant_memories ON assistant_memories
-      USING (org_id = current_setting('app.current_org', true)::uuid)
-      WITH CHECK (org_id = current_setting('app.current_org', true)::uuid)
     $p$;
   END IF;
 END $$;

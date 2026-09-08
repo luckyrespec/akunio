@@ -7,6 +7,9 @@ import { incomeStatement } from "@/core/reports/statements";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { embed } from "./embeddings";
 import { buildAkunioSystemPrompt } from "./persona";
+import { formatMemoriesForPrompt } from "./memory-extractor";
+import { listMemories } from "@/server/db/repos/assistant-memory.repo";
+import { withOrg } from "@/server/db/repos/with-org";
 import { hybridSearch } from "@/server/db/repos/rag-search";
 import { addMessage, listMessages, checkAssistantQuota, getThread } from "@/server/db/repos/chat.repo";
 import { GoogleGenAI } from "@google/genai";
@@ -250,8 +253,14 @@ export async function askNara(
   const ai = new GoogleGenAI({ apiKey });
 
   // Build system instruction + user prompt (satu suara dengan jalur streaming)
-  // Task 7 menghubungkan reader assistant_memories ke sini
-  const memoryBlock = "";
+  // Ingatan lintas sesi, fail-silent agar chat tak mati bila RLS/memory gagal.
+  let memoryBlock = "";
+  try {
+    const mems = await withOrg(orgId, (tx) => listMemories(tx, orgId));
+    memoryBlock = formatMemoriesForPrompt(mems);
+  } catch (e) {
+    console.warn("memory read skipped", e instanceof Error ? e.message : e);
+  }
   const systemInstruction = `${buildAkunioSystemPrompt({ memoryBlock })}
 - Selalu kutip sumber [IFRS §…] untuk aturan dan [Jurnal JE-…] untuk angka bila relevan.
 - Jangan halusinasi angka — gunakan live numbers dan hasil tool.

@@ -27,6 +27,9 @@ import { embed } from "@/server/ai/embeddings";
 import { accounts, organizations } from "@/server/db/schema/org";
 import { orgProfiles } from "@/server/db/schema/onboarding";
 import { buildAkunioSystemPrompt } from "@/server/ai/persona";
+import { formatMemoriesForPrompt } from "@/server/ai/memory-extractor";
+import { listMemories } from "@/server/db/repos/assistant-memory.repo";
+import { withOrg } from "@/server/db/repos/with-org";
 import { eq } from "drizzle-orm";
 import { postedLinesThrough } from "@/server/reports/build";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
@@ -137,7 +140,10 @@ function generateSmartTitle(prompt: string): string {
 
     // Check organization HITL policy
     const [orgRow] = await db.select().from(organizations).where(eq(organizations.id, ctx.orgId));
-    const orgSettings = (orgRow?.settings ?? {}) as { aiHitlPolicy?: "smart" | "strict" | "autonomous" };
+    const orgSettings = (orgRow?.settings ?? {}) as {
+      aiHitlPolicy?: "smart" | "strict" | "autonomous";
+      aiMemoryEnabled?: boolean;
+    };
     const hitlPolicy = orgSettings.aiHitlPolicy ?? "smart";
 
     // Profil usaha untuk sudut persona (read-only, bukan tool).
@@ -183,8 +189,16 @@ function generateSmartTitle(prompt: string): string {
       .map((a) => `${a.code}: ${a.name} (${a.type}, normal ${a.normal})`)
       .join(", ");
 
-    // Task 7 menghubungkan reader assistant_memories ke sini
-    const memoryBlock = "";
+    // Ingatan lintas sesi (Task 7): dibaca via withOrg agar lolos RLS app_user.
+    let memoryBlock = "";
+    try {
+      if (orgSettings.aiMemoryEnabled !== false) {
+        const mems = await withOrg(ctx.orgId, (tx) => listMemories(tx, ctx.orgId));
+        memoryBlock = formatMemoriesForPrompt(mems);
+      }
+    } catch (e) {
+      console.warn("memory read skipped", e instanceof Error ? e.message : e);
+    }
     const personaHeader = buildAkunioSystemPrompt({
       businessType,
       pageLabel: pageContext?.pathname ?? pageContext?.title ?? null,
