@@ -7,13 +7,14 @@ export async function GET(req: NextRequest) {
     const ctx = await requireContext();
     const url = new URL(req.url);
     const excludeParam = url.searchParams.get("exclude") ?? "";
+    const pagePath = url.searchParams.get("pagePath") ?? "";
     const excludeLabels = excludeParam
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean)
       .slice(0, 8);
 
-    const suggestions = await generatePersonalSuggestions(ctx.orgId, { excludeLabels });
+    const suggestions = await generatePersonalSuggestions(ctx.orgId, { excludeLabels, pagePath });
 
     return NextResponse.json({ suggestions }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {

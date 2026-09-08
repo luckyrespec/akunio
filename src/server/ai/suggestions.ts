@@ -20,7 +20,7 @@ export type NaraSuggestion = {
 };
 
 const FALLBACK_SUGGESTIONS: NaraSuggestion[] = [
-  { label: "Beli perlengkapan 500rb tunai", prompt: "Buat jurnal beli perlengkapan kantor tunai Rp 500.000", icon: "Receipt" },
+  { label: "Beli perlengkapan 500rb", prompt: "Buat jurnal beli perlengkapan kantor tunai Rp 500.000", icon: "Receipt" },
   { label: "Bayar sewa 15jt via BCA", prompt: "Bayar sewa kantor 3 bulan 15 juta via BCA", icon: "Wallet" },
   { label: "Cek saldo kas & bank", prompt: "Berapa saldo kas dan bank hari ini?", icon: "Wallet" },
   { label: "Laporan laba rugi", prompt: "Tampilkan laba rugi bulan ini", icon: "BarChart3" },
@@ -72,6 +72,25 @@ function setCache(orgId: string, data: NaraSuggestion[]) {
 // Clear for tests
 export function clearSuggestionsCache() {
   cache.clear();
+}
+
+// Naikkan saran yang relevan dengan halaman aktif ke depan (stabil, tanpa LLM).
+function boostByPage(list: NaraSuggestion[], pagePath?: string): NaraSuggestion[] {
+  const p = (pagePath ?? "").toLowerCase();
+  let re: RegExp | null = null;
+  if (p.includes("jurnal")) re = /jurnal|draft|catat|posting/i;
+  else if (p.includes("kas") || p.includes("bank")) re = /kas|bank|saldo|bayar/i;
+  else if (p.includes("aturan")) re = /sak|bab|aturan|standar/i;
+  else if (p.includes("persediaan")) re = /stok|barang|persediaan/i;
+  else if (p.includes("faktur")) re = /faktur|tagihan|invoice|piutang|utang/i;
+  else if (p.includes("aset")) re = /aset|susut|depresiasi/i;
+  else if (p.includes("dasbor")) re = /briefing|laba|rugi|kas/i;
+  if (!re) return list;
+  const pattern = re;
+  const hit = list.filter((s) => pattern.test(`${s.label} ${s.prompt}`));
+  if (hit.length === 0) return list;
+  const rest = list.filter((s) => !pattern.test(`${s.label} ${s.prompt}`));
+  return [...hit, ...rest];
 }
 
 async function collectSignals(orgId: string) {
@@ -127,14 +146,14 @@ async function collectSignals(orgId: string) {
 
 export async function generatePersonalSuggestions(
   orgId: string,
-  opts?: { excludeLabels?: string[] }
+  opts?: { excludeLabels?: string[]; pagePath?: string }
 ): Promise<NaraSuggestion[]> {
   const cached = getCache(orgId);
-  if (cached) return cached;
+  if (cached) return boostByPage(cached, opts?.pagePath);
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return FALLBACK_SUGGESTIONS;
+    return boostByPage(FALLBACK_SUGGESTIONS, opts?.pagePath);
   }
 
   const signals = await collectSignals(orgId);
@@ -206,7 +225,7 @@ Aturan:
     }
 
     setCache(orgId, suggestions);
-    return suggestions;
+    return boostByPage(suggestions, opts?.pagePath);
   } catch (e) {
     console.warn("generatePersonalSuggestions fallback", (e as Error).message);
     return FALLBACK_SUGGESTIONS;
