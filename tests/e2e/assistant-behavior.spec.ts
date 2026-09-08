@@ -38,8 +38,7 @@ test("suggest mengisi prompt tanpa mengirim", async ({ page }) => {
   expect(streamPosts).toBe(0);
 });
 
-test("history sinkron antara /asisten dan quick access", async ({ page }) => {
-  test.setTimeout(180_000);
+test("history sinkron antara /asisten dan quick access", async ({ page }) => {  test.setTimeout(180_000);
   await signup(page);
   await page.goto("/asisten");
   await page.waitForLoadState("networkidle");
@@ -58,4 +57,24 @@ test("history sinkron antara /asisten dan quick access", async ({ page }) => {
   await expect(page.getByTestId("assistant-prompt-input")).toBeVisible({ timeout: 15000 });
   await expect(page.getByText(threadTitle as string).first()).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("message-copy").first()).toBeVisible({ timeout: 15000 });
+});
+
+test("prompt box floating menindih area gulir (bukan mendorong konten)", async ({ page }) => {
+  await signup(page);
+  await page.goto("/asisten");
+  await page.waitForLoadState("networkidle");
+  const input = page.getByTestId("assistant-prompt-input");
+  await expect(input).toBeVisible({ timeout: 30000 });
+  const floatBar = page.getByTestId("assistant-input-float");
+  await expect(floatBar).toBeVisible();
+  const pos = await floatBar.evaluate((el) => getComputedStyle(el).position);
+  expect(pos).toBe("absolute");
+  const box = await floatBar.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box).toBeTruthy();
+  expect(viewport).toBeTruthy();
+  if (box && viewport) {
+    // Menempel di bawah viewport area chat.
+    expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThan(4);
+  }
 });

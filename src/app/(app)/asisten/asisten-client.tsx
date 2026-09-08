@@ -403,7 +403,7 @@ export default function AsistenClient({
           )}
 
           {/* Conversation Feed */}
-          <Conversation autoScroll={isStreaming} onDropFiles={handleAttachFiles}>
+          <Conversation autoScroll={isStreaming} onDropFiles={handleAttachFiles} className="pb-44">
             <ConversationContent>
               <NaraMessageFeed
                 messages={messages}
@@ -483,9 +483,12 @@ export default function AsistenClient({
             <ConversationScrollButton />
           </Conversation>
 
-          {/* Prompt Input Bar */}
-          <div className="border-t border-rule bg-paper/80 p-3 md:p-5 backdrop-blur-md shrink-0">
-            <div className="mx-auto max-w-4xl lg:max-w-5xl">
+          {/* Floating Prompt Input Bar — teks percakapan tergulir di belakangnya */}
+          <div
+            data-testid="assistant-input-float"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-canvas via-canvas/85 to-transparent p-3 pt-10 md:p-5 md:pt-12"
+          >
+            <div className="pointer-events-auto mx-auto max-w-4xl lg:max-w-5xl">
               <PromptInput
                 onSubmit={() => handleSendMessage()}
                 onDropFiles={(files) => handleAttachFiles(files)}

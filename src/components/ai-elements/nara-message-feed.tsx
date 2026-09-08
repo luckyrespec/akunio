@@ -51,7 +51,7 @@ export function NaraMessageFeed({
         emptyState ?? null
       ) : (
         messages.map((m) => (
-          <React.Fragment key={m.id}>
+          <div key={m.id} className="group flex w-full flex-col">
             {/* Thinking trace: chain-of-thought + pemakaian tool dalam satu dropdown */}
             {(m.reasoning || (m.toolInvocations && m.toolInvocations.length > 0)) && (
               <div className="w-full max-w-[88%] md:max-w-[80%] mb-1">
@@ -161,20 +161,23 @@ export function NaraMessageFeed({
                     </div>
                   )}
 
-                  {/* Aksi pesan: salin isi */}
-                  {m.content && m.content.trim().length > 0 && (
-                    <div
-                      className={
-                        m.role === "user" ? "mt-1 flex justify-end" : "mt-1 flex justify-start"
-                      }
-                    >
+                  {/* Aksi pesan asisten: salin di dalam bubble */}
+                  {m.role !== "user" && m.content && m.content.trim().length > 0 && (
+                    <div className="mt-1 flex justify-start">
                       <MessageCopyButton text={m.content} />
                     </div>
                   )}
                 </MessageContent>
               </Message>
             )}
-          </React.Fragment>
+
+            {/* Aksi pesan user: salin di bawah bubble (gaya ChatGPT) */}
+            {m.role === "user" && m.content && m.content.trim().length > 0 && (
+              <div className="mt-1 flex justify-end pr-1">
+                <MessageCopyButton text={m.content} />
+              </div>
+            )}
+          </div>
         ))
       )}
 

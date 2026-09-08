@@ -229,6 +229,7 @@ export function AssistantWidget() {
         className={cn(
           "fixed inset-y-0 right-0 z-50 flex h-full w-full sm:w-[420px] md:w-[460px] max-w-full flex-col border-l border-rule bg-paper shadow-2xl transition-transform duration-300 [transition-timing-function:var(--ease-drawer,cubic-bezier(0.32,0.72,0,1))]",
           open ? "translate-x-0" : "translate-x-full pointer-events-none",
+          "relative",
         )}
       >
         {/* Panel Header */}
@@ -336,7 +337,7 @@ export function AssistantWidget() {
         )}
 
         {/* Conversation Feed */}
-        <Conversation autoScroll={isStreaming} onDropFiles={handleAttachFiles}>
+        <Conversation autoScroll={isStreaming} onDropFiles={handleAttachFiles} className="pb-44">
           <ConversationContent className="p-4 space-y-4">
             <NaraMessageFeed
               messages={messages}
@@ -448,8 +449,12 @@ export function AssistantWidget() {
           <ConversationScrollButton />
         </Conversation>
 
-        {/* Input Bar */}
-        <div className="p-3 border-t border-rule bg-paper shrink-0">
+        {/* Floating Input Bar — teks percakapan tergulir di belakangnya */}
+        <div
+          data-testid="assistant-input-float"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-paper via-paper/85 to-transparent px-3 pb-3 pt-10"
+        >
+          <div className="pointer-events-auto">
           <PromptInput
             onSubmit={() => handleSendMessage()}
             onDropFiles={(files) => handleAttachFiles(files)}
@@ -532,6 +537,7 @@ export function AssistantWidget() {
               />
             </PromptInputFooter>
           </PromptInput>
+          </div>
         </div>
       </aside>
     </>
