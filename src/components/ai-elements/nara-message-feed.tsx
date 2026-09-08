@@ -204,10 +204,7 @@ export function NaraMessageFeed({
           <MessageContent from="assistant">
 
             {streamingText ? (
-              <MessageResponse isAnimating>
-                {streamingText}
-                <span className="inline-block w-1.5 h-3.5 bg-terra/70 ml-1 animate-pulse align-middle rounded-xs" />
-              </MessageResponse>
+              <MessageResponse isAnimating>{`${streamingText}▍`}</MessageResponse>
             ) : (
               <span
                 className="inline-flex items-center gap-1.5 py-2 px-1 text-terra"

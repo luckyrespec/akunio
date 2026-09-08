@@ -8,6 +8,11 @@ function render(md: string, isAnimating = false): string {
 }
 
 describe("streamdown assistant markdown", () => {
+  it("teks streaming + kursor tetap terformat hidup", () => {
+    const html = render("**Laba** bulan ini:\n\n- Kas naik▍", true);
+    expect(html).toContain('data-streamdown="strong"');
+    expect(html).toContain("▍");
+  });
   it("render bold, list, dan tabel GFM", () => {
     const html = render("**Laba** bulan ini:\n\n- Kas naik\n\n| Metrik | Nilai |\n|---|---|\n| ROA | 12% |\n");
     expect(html).toContain('data-streamdown="strong"');
