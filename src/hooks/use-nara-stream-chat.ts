@@ -39,6 +39,7 @@ export interface MessageItem {
     error?: string;
   }> | null;
   citations?: Array<{ kind: string; ref: string; excerpt: string; section?: string }> | null;
+  memoryUsed?: number | null;
   createdAt?: string | Date;
 }
 
@@ -411,6 +412,7 @@ export function useNaraStreamChat({
                     suggestions: accumulatedSuggestions.length > 0 ? accumulatedSuggestions : undefined,
                     batchQueue: accumulatedQueue.length > 0 ? accumulatedQueue : undefined,
                     citations: data.citations,
+                    memoryUsed: typeof data.memoryUsed === "number" ? data.memoryUsed : undefined,
                     createdAt: new Date().toISOString(),
                   },
                 ]);

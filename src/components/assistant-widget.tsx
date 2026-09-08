@@ -263,6 +263,7 @@ export function AssistantWidget() {
                   threads.slice(0, 8).map((t) => (
                     <DropdownMenuItem
                       key={t.id}
+                      data-testid="assistant-thread-item"
                       onClick={() => setActiveThreadId(t.id)}
                       className={cn(t.id === activeThreadId && "font-semibold bg-canvas")}
                     >
@@ -478,6 +479,7 @@ export function AssistantWidget() {
             <PromptInputBody>
               <PromptInputTextarea
                 ref={promptInputRef}
+                data-testid="assistant-prompt-input"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Tanyakan hal akuntansi atau ketik perintah..."

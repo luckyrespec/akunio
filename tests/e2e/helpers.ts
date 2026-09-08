@@ -37,14 +37,18 @@ export async function walkOnboardingToDashboard(
   };
   const chip = async (name: string) => {
     // Chip hanya mengisi input (tidak auto-kirim) — user menekan Enter/kirim.
+    // Nilai terisi = teks chip penuh server (cth. "Kuliner / F&B"), jadi cocokkan substring.
     await page.getByTestId("onboarding-chip").filter({ hasText: name }).click();
-    await expect(page.getByTestId("onboarding-input")).toHaveValue(name, { timeout: 10000 });
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    await expect(page.getByTestId("onboarding-input")).toHaveValue(new RegExp(escaped), { timeout: 10000 });
     await page.getByTestId("onboarding-send").click();
   };
 
   await send(opts?.displayName ?? "Budi");
   await send(opts?.businessName ?? "Warung Budi E2E");
   await chip("Kuliner");
+  await chip("Harga rata-rata");
+  await chip("Otomatis tiap jual");
   await chip("10–50");
   await chip("2–5");
   await chip("Lewati");
@@ -52,7 +56,8 @@ export async function walkOnboardingToDashboard(
   await chip("Ya, lanjut");
   await expect(page.getByTestId("coa-confirm")).toBeVisible();
   await page.getByTestId("coa-confirm").click();
-  await expect(page).toHaveURL(/\/dasbor/, { timeout: 30000 });
+  // Provisioning COA + 12 periode fiskal atomik di branch E2E dingin bisa lama.
+  await expect(page).toHaveURL(/\/dasbor/, { timeout: 90000 });
 }
 
 /**

@@ -515,6 +515,7 @@ export default function AsistenClient({
                 <PromptInputBody>
                   <PromptInputTextarea
                     ref={promptInputRef}
+                    data-testid="assistant-prompt-input"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder="Tanyakan hal akuntansi, minta laporan, atau ketik transaksi..."

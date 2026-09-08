@@ -191,9 +191,11 @@ function generateSmartTitle(prompt: string): string {
 
     // Ingatan lintas sesi (Task 7): dibaca via withOrg agar lolos RLS app_user.
     let memoryBlock = "";
+    let memoryCount = 0;
     try {
       if (orgSettings.aiMemoryEnabled !== false) {
         const mems = await withOrg(ctx.orgId, (tx) => listMemories(tx, ctx.orgId));
+        memoryCount = mems.length;
         memoryBlock = formatMemoriesForPrompt(mems);
       }
     } catch (e) {
@@ -587,6 +589,7 @@ Tugas:
             type: "done",
             messageId: assistantMsg.id,
             citations,
+            memoryUsed: memoryCount,
           });
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : "Terjadi kesalahan saat memproses jawaban.";

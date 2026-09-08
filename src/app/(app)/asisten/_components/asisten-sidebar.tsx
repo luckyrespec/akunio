@@ -154,6 +154,7 @@ export function AsistenSidebar({
             return (
               <div
                 key={t.id}
+                data-testid="assistant-thread-item"
                 className={cn(
                   "group relative flex items-center justify-between rounded-xl px-2.5 py-2 text-xs transition-colors",
                   isActive

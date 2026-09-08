@@ -229,6 +229,17 @@ export function NaraMessageFeed({
                       })}
                     </div>
                   )}
+
+                  {/* Badge ingatan lintas sesi */}
+                  {typeof m.memoryUsed === "number" && m.memoryUsed > 0 && (
+                    <div
+                      data-testid="assistant-memory-badge"
+                      className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-terra/30 bg-terra/5 px-1.5 py-0.5 text-[10px] font-medium text-terra"
+                      title="Akunio menggunakan ingatan tersimpan Anda untuk jawaban ini"
+                    >
+                      <span>menggunakan {m.memoryUsed} ingatan</span>
+                    </div>
+                  )}
                 </MessageContent>
               </Message>
             )}
