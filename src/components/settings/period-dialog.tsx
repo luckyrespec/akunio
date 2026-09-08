@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Edit2, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,24 +34,20 @@ interface PeriodDialogProps {
   mode: "create" | "edit";
   period?: PeriodItem;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function PeriodDialog({ mode, period, trigger }: PeriodDialogProps) {
+export function PeriodDialog({ mode, period, trigger, open: controlledOpen, onOpenChange }: PeriodDialogProps) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [name, setName] = React.useState(period?.name ?? "");
   const [startsOn, setStartsOn] = React.useState(period?.startsOn ?? "");
   const [endsOn, setEndsOn] = React.useState(period?.endsOn ?? "");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (period) {
-      setName(period.name);
-      setStartsOn(period.startsOn);
-      setEndsOn(period.endsOn);
-    }
-  }, [period]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,6 +95,7 @@ export function PeriodDialog({ mode, period, trigger }: PeriodDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {(trigger || onOpenChange === undefined) && (
       <DialogTrigger asChild>
         {trigger ? (
           trigger
@@ -112,6 +109,7 @@ export function PeriodDialog({ mode, period, trigger }: PeriodDialogProps) {
           </Button>
         )}
       </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-md p-6">
         <DialogHeader className="space-y-1">
@@ -196,9 +194,21 @@ export function PeriodDialog({ mode, period, trigger }: PeriodDialogProps) {
   );
 }
 
-export function DeletePeriodButton({ periodId, periodName }: { periodId: string; periodName: string }) {
+export function DeletePeriodButton({
+  periodId,
+  periodName,
+  open: controlledOpen,
+  onOpenChange,
+}: {
+  periodId: string;
+  periodName: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -219,6 +229,7 @@ export function DeletePeriodButton({ periodId, periodName }: { periodId: string;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {onOpenChange === undefined && (
       <DialogTrigger asChild>
         <button
           type="button"
@@ -228,6 +239,7 @@ export function DeletePeriodButton({ periodId, periodName }: { periodId: string;
           <Trash2 className="size-3.5" />
         </button>
       </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-md p-6">
         <DialogHeader className="space-y-1">
