@@ -7,6 +7,7 @@ import { listAccounts } from "@/server/db/repos/accounts.repo";
 import { listPeriods } from "@/server/db/repos/periods.repo";
 import { getInventorySettings } from "@/server/db/repos/inventory.repo";
 import { getTaxSettings } from "@/server/db/repos/tax.repo";
+import { getProfile } from "@/server/db/repos/onboarding.repo";
 import { PageHeader } from "@/components/page-header";
 import { SettingsClient } from "@/components/settings/settings-client";
 
@@ -21,13 +22,14 @@ export default async function PengaturanPage() {
     const periods = await listPeriods(tx, ctx.orgId);
     const invSettings = await getInventorySettings(tx, ctx.orgId);
     const taxSettings = await getTaxSettings(tx, ctx.orgId);
+    const profile = await getProfile(tx, ctx.orgId);
     const members = await tx
       .select({ email: user.email, role: memberships.role })
       .from(memberships)
       .innerJoin(user, eq(user.id, memberships.userId))
       .where(eq(memberships.orgId, ctx.orgId))
       .orderBy(memberships.createdAt);
-    return { accounts, periods, members, invSettings, taxSettings };
+    return { accounts, periods, members, invSettings, taxSettings, profile };
   });
 
   return (
@@ -67,6 +69,15 @@ export default async function PengaturanPage() {
               adjustmentLossAccountId: data.invSettings.adjustmentLossAccountId,
               adjustmentGainAccountId: data.invSettings.adjustmentGainAccountId,
               isLocked: data.invSettings.isLocked,
+            }
+          : null
+      }
+      organizationProfile={
+        data.profile
+          ? {
+              businessName: data.profile.businessName,
+              city: data.profile.city,
+              address: data.profile.address,
             }
           : null
       }

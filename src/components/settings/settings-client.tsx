@@ -20,6 +20,7 @@ import { CoaManager, type AccountItem } from "@/components/settings/coa-manager"
 import { HitlPolicySelector } from "@/components/settings/hitl-policy-selector";
 import { PeriodActions } from "@/components/settings/period-actions";
 import { InventorySettingsTab, type InventorySettingsData } from "@/components/settings/inventory-settings";
+import { OrganizationProfileTab, type OrganizationProfileData } from "@/components/settings/organization-profile";
 import { TaxSettingsTab } from "@/components/settings/tax-settings-tab";
 import { DEFAULT_TAX_SETTINGS, type TaxSettings } from "@/core/tax/pph-final";
 import { IconTax } from "@/components/icons";
@@ -52,6 +53,7 @@ interface OrganizationInfo {
 
 interface SettingsClientProps {
   organization: OrganizationInfo;
+  organizationProfile: OrganizationProfileData | null;
   accounts: AccountItem[];
   periods: PeriodItem[];
   inventorySettings?: InventorySettingsData | null;
@@ -109,6 +111,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 export function SettingsClient({
   organization,
+  organizationProfile,
   accounts,
   periods,
   inventorySettings,
@@ -403,43 +406,11 @@ export function SettingsClient({
 
         {/* TAB 4: PROFIL ORGANISASI */}
         {activeTab === "organisasi" && (
-          <div className="space-y-6 animate-in fade-in-50 duration-200">
-            <div>
-              <h2 className="font-display text-base font-bold text-ink">Profil Organisasi</h2>
-              <p className="mt-0.5 text-xs text-ink-soft">
-                Informasi entitas bisnis dan parameter pembukuan standar.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-rule bg-paper p-6 shadow-2xs space-y-4 max-w-xl">
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="text-ink-soft block text-[11px]">Nama Perusahaan / Entitas</span>
-                  <span className="font-semibold text-ink text-sm mt-0.5 block">{organization.name}</span>
-                </div>
-                <div>
-                  <span className="text-ink-soft block text-[11px]">Mata Uang Pelaporan</span>
-                  <span className="font-semibold text-ink text-sm mt-0.5 block">{organization.baseCurrency} (Rupiah)</span>
-                </div>
-                <div>
-                  <span className="text-ink-soft block text-[11px]">Awal Tahun Fiskal</span>
-                  <span className="font-semibold text-ink text-sm mt-0.5 block">
-                    Bulan ke-{organization.fiscalYearStartMonth} (Januari)
-                  </span>
-                </div>
-                <div>
-                  <span className="text-ink-soft block text-[11px]">Standar Akuntansi Kepatuhan</span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-sm mt-0.5 block">
-                    SAK EMKM / IFRS for SMEs
-                  </span>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-rule/60 text-[11px] text-ink-soft">
-                <span className="font-mono text-[11px] text-ink-soft">ID Organisasi: {organization.id}</span>
-              </div>
-            </div>
-          </div>
+          <OrganizationProfileTab
+            organization={organization}
+            profile={organizationProfile}
+            canEdit={canEdit}
+          />
         )}
       </main>
     </div>
