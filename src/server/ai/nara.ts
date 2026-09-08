@@ -262,7 +262,6 @@ export async function askNara(
     console.warn("memory read skipped", e instanceof Error ? e.message : e);
   }
   const systemInstruction = `${buildAkunioSystemPrompt({ memoryBlock })}
-- Selalu kutip sumber [IFRS §…] untuk aturan dan [Jurnal JE-…] untuk angka bila relevan.
 - Jangan halusinasi angka — gunakan live numbers dan hasil tool.
 - ATURAN KONTEKS (ANTI-LUPA, WAJIB): jika pesan user singkat/konfirmasi ("ok", "ya", "catatkan ya", "lanjutkan") tanpa nominal,
   WAJIB ambil detail dari Riwayat di atas (mis. aset laptop Rp10.000.000 + Garis Lurus 48 bulan). Jangan minta ulang detail yang sudah ada;
@@ -481,7 +480,7 @@ Konteks live: ${liveNumbers}
 Konteks RAG:
 ${context}
 
-Tugas: Jawab user dalam Bahasa Indonesia natural, ringkas, gunakan angka dari tool jika ada, kutip sumber [JE-…] atau [IFRS]. Jangan halusinasi. Jika ada draft yang dibuat, sebutkan ID draft dan minta user review sebelum posting.`;
+Tugas: Jawab user dalam Bahasa Indonesia natural, ringkas, gunakan angka dari tool jika ada. Sitasi inline HANYA untuk klaim aturan penting atau angka kunci: [SAK Bab 11 §11.1-11.3](sak:11:11.1-11.3) atau [JE-2026-0004](jurnal:JE-2026-0004) (nomor persis dari hasil tool). Jangan tampilkan daftar sumber. Jangan halusinasi. Jika ada draft yang dibuat, sebutkan ID draft dan minta user review sebelum posting.`;
       const synth = await ai.interactions.create({
         model: MODEL,
         input: [{ type: "user_input", content: [{ type: "text", text: synthPrompt }] } as never],

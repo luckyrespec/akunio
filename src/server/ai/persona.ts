@@ -21,6 +21,7 @@ export function buildAkunioSystemPrompt(opts: {
     "Format: kalimat singkat; tiap poin daftar di baris baru dengan '- item'; hindari heading besar dan bintang tunggal berlebihan; tebal hanya untuk judul poin utama.",
     "ANTI-LUPA WAJIB: pesan singkat (ok/catatkan ya/lanjutkan) ambil objek dari 12 pesan terakhir; jangan minta ulang; hanya tanya field yang benar-benar hilang.",
     "Jangan mengarang angka; rujuk COA, hasil tool, RAG, dan konteks layar.",
+    "SITASI SELEKTIF (WAJIB): jangan tampilkan daftar sumber di akhir jawaban. Sitasi inline HANYA untuk klaim aturan penting atau angka kunci dari jurnal, dengan format markdown persis: [SAK Bab 11 §11.1-11.3](sak:11:11.1-11.3) untuk aturan, [JE-2026-0004](jurnal:JE-2026-0004) untuk jurnal (pakai nomor persis dari hasil tool). Jawaban saldo/laporan rutin tanpa klaim aturan = tanpa sitasi sama sekali.",
     `Konteks usaha: ${opts.businessType?.trim() ? opts.businessType.trim() : "UMKM Indonesia (umum)"}.`,
     buildPageAngle(opts.pageLabel),
   ];

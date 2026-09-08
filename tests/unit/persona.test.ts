@@ -18,4 +18,10 @@ describe("persona Mentor UMKM", () => {
   it("tanpa ingatan tidak ada header ingatan", () => {
     expect(buildAkunioSystemPrompt({})).not.toContain("Ingatan tersimpan:");
   });
+  it("aturan sitasi selektif: marker sak:/jurnal:, tanpa daftar sumber", () => {
+    const s = buildAkunioSystemPrompt({});
+    expect(s).toContain("sak:11:11.1-11.3");
+    expect(s).toContain("jurnal:JE-2026-0004");
+    expect(s).toMatch(/tanpa sitasi sama sekali/i);
+  });
 });

@@ -3,6 +3,8 @@
 import * as React from "react";
 import { Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
+import { CitationLink } from "@/components/ai-elements/citation-link";
+import { assistantRehypePlugins } from "@/components/ai-elements/citation-refs";
 
 export interface MessageProps extends React.HTMLAttributes<HTMLDivElement> {
   from: "user" | "assistant";
@@ -67,7 +69,12 @@ export const MessageResponse = React.forwardRef<HTMLDivElement, MessageResponseP
         {...props}
       >
         {typeof children === "string" ? (
-          <Streamdown mode={isAnimating ? undefined : "static"} isAnimating={isAnimating}>
+          <Streamdown
+            mode={isAnimating ? undefined : "static"}
+            isAnimating={isAnimating}
+            rehypePlugins={assistantRehypePlugins as never}
+            components={{ a: CitationLink as never }}
+          >
             {children}
           </Streamdown>
         ) : (
