@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const ctx = await requireContext();
     const threads = await listThreads(db, ctx.orgId);
-    return NextResponse.json(threads);
+    return NextResponse.json({ threads });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Gagal mengambil daftar percakapan.";
     return NextResponse.json({ error: msg }, { status: 500 });
