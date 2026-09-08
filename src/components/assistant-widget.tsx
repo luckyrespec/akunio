@@ -41,7 +41,7 @@ import {
 import { Attachments, AttachmentItem } from "@/components/ai-elements/attachments";
 import { HitlTool } from "@/components/ai-elements/hitl-tool";
 import { getActivePageContext, type PageContext } from "@/lib/assistant-context";
-import { parseThreadsResponse } from "@/lib/parse-threads";
+import { useNaraThreads } from "@/hooks/use-nara-threads";
 import { useNaraStreamChat, type BatchItemData, type MessageItem } from "@/hooks/use-nara-stream-chat";
 import { NaraHitlApprovalCard } from "@/components/ai-elements/nara-hitl-approval-card";
 import { NaraMessageFeed } from "@/components/ai-elements/nara-message-feed";
@@ -50,17 +50,11 @@ import { cn } from "@/lib/utils";
 
 export type { BatchItemData };
 
-interface ThreadSummary {
-  id: string;
-  title: string;
-  updatedAt?: string | Date;
-}
-
 export function AssistantWidget() {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
-  const [threads, setThreads] = React.useState<ThreadSummary[]>([]);
-  const [activeThreadId, setActiveThreadId] = React.useState<string | null>(null);
+  const { threads, activeThreadId, setActiveThreadId, refresh, handleCreated } =
+    useNaraThreads();
   const [pageContext, setPageContext] = React.useState<PageContext>({
     pathname: "",
     title: "",
@@ -100,7 +94,7 @@ export function AssistantWidget() {
     activeThreadId,
     setActiveThreadId,
     onThreadCreated: (threadId, title) => {
-      setThreads((prev) => [{ id: threadId, title, updatedAt: new Date() }, ...prev]);
+      handleCreated(threadId, title);
     },
   });
 
@@ -137,25 +131,11 @@ export function AssistantWidget() {
     return () => window.removeEventListener("akunio:open-assistant", onOpen);
   }, []);
 
-  // Fetch threads list when opened
+  // Fetch threads list when opened (satu store dengan /asisten)
   React.useEffect(() => {
     if (!open) return;
-    async function loadThreads() {
-      try {
-        const res = await fetch("/api/nara/threads");
-        if (res.ok) {
-          const list = parseThreadsResponse(await res.json());
-          setThreads(list);
-          if (!activeThreadId && list.length > 0) {
-            setActiveThreadId(list[0].id);
-          }
-        }
-      } catch (e) {
-        console.error("Gagal memuat daftar sesi", e);
-      }
-    }
-    loadThreads();
-  }, [open, activeThreadId]);
+    void refresh();
+  }, [open, refresh]);
 
   // NOTE: quick access diam total — tidak ada auto-kirim briefing.
   // Ringkasan hanya dikirim bila user menekan kirim / memilih chip suggest.
@@ -296,7 +276,7 @@ export function AssistantWidget() {
 
           <div className="flex items-center gap-1">
             <Link
-              href="/asisten"
+              href={activeThreadId ? `/asisten?thread=${activeThreadId}` : "/asisten"}
               className="p-1.5 rounded-lg text-ink-soft hover:text-ink hover:bg-canvas transition-colors"
               title="Buka tampilan penuh di halaman Asisten"
               aria-label="Buka layar penuh"

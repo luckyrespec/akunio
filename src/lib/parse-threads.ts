@@ -1,7 +1,8 @@
 export interface ThreadItem {
   id: string;
   title: string;
-  updatedAt: string | Date;
+  updatedAt?: string | Date;
+  createdAt?: string | Date;
   pinned?: boolean;
   modelPreset?: string;
 }

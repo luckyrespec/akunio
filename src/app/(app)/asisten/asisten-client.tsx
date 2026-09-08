@@ -36,6 +36,7 @@ import { Attachments, AttachmentItem } from "@/components/ai-elements/attachment
 import { ModelSelector, type ModelPreset } from "@/components/ai-elements/model-selector";
 import { HitlTool } from "@/components/ai-elements/hitl-tool";
 import { useNaraStreamChat } from "@/hooks/use-nara-stream-chat";
+import { useNaraThreads } from "@/hooks/use-nara-threads";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import { NaraHitlApprovalCard } from "@/components/ai-elements/nara-hitl-approval-card";
 import { NaraMessageFeed } from "@/components/ai-elements/nara-message-feed";
@@ -53,10 +54,33 @@ export default function AsistenClient({
   initialHitlPolicy?: "smart" | "strict" | "autonomous";
   userEmail?: string;
 }) {
-  const [threads, setThreads] = React.useState<ThreadItem[]>(initialThreads);
-  const [activeThreadId, setActiveThreadId] = React.useState<string | null>(
-    initialThreads[0]?.id ?? null,
-  );
+  const { threads, setThreads, activeThreadId, setActiveThreadId, refresh, handleCreated } =
+    useNaraThreads({ initialThreads, initialActiveId: initialThreads[0]?.id ?? null });
+  // Tampilan butuh createdAt wajib — fallback ke updatedAt bila API tak mengirimnya.
+  const viewThreads: ThreadItem[] = threads.map((t) => ({
+    ...t,
+    updatedAt: t.updatedAt ?? t.createdAt ?? new Date(0).toISOString(),
+    createdAt: t.createdAt ?? t.updatedAt ?? new Date(0).toISOString(),
+  }));
+
+  // Sinkron dengan quick access: hormati ?thread=, lalu id tersimpan, lalu refresh daftar.
+  React.useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get("thread");
+      if (q) {
+        setActiveThreadId(q);
+        return;
+      }
+    } catch {}
+    void refresh();
+  }, [refresh, setActiveThreadId]);
+
+  // Jika id tersimpan tak ada di daftar (mis. dihapus dari widget), fallback aman.
+  React.useEffect(() => {
+    if (activeThreadId && threads.length > 0 && !threads.some((t) => t.id === activeThreadId)) {
+      setActiveThreadId(threads[0].id);
+    }
+  }, [activeThreadId, threads, setActiveThreadId]);
   const [currentView, setCurrentView] = React.useState<"chat" | "library">("chat");
   const [modelPreset, setModelPreset] = React.useState<ModelPreset>("fast");
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
@@ -101,15 +125,7 @@ export default function AsistenClient({
     modelPreset,
     initialHitlPolicy,
     onThreadCreated: (threadId, title) => {
-      setThreads((prev) => [
-        {
-          id: threadId,
-          title,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        ...prev,
-      ]);
+      handleCreated(threadId, title);
     },
   });
 
@@ -242,8 +258,8 @@ export default function AsistenClient({
               return a.pinned ? -1 : 1;
             }
             return (
-              new Date(b.updatedAt || b.createdAt).getTime() -
-              new Date(a.updatedAt || a.createdAt).getTime()
+              new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() -
+              new Date(a.updatedAt ?? a.createdAt ?? 0).getTime()
             );
           });
         });
@@ -281,7 +297,7 @@ export default function AsistenClient({
         setSidebarOpen={setSidebarOpen}
         currentView={currentView}
         setCurrentView={setCurrentView}
-        threads={threads}
+        threads={viewThreads}
         activeThreadId={activeThreadId}
         onSelectThread={(id) => setActiveThreadId(id)}
         onNewChat={handleNewChat}
@@ -296,7 +312,7 @@ export default function AsistenClient({
       <AsistenSearchModal
         isOpen={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
-        threads={threads}
+        threads={viewThreads}
         onSelectThread={(id) => {
           setCurrentView("chat");
           setActiveThreadId(id);
