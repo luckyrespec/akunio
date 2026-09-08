@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { CoaManager, type AccountItem } from "@/components/settings/coa-manager";
 import { HitlPolicySelector } from "@/components/settings/hitl-policy-selector";
-import { PeriodActions } from "@/components/settings/period-actions";
+import { PeriodRowMenu } from "@/components/settings/period-row-menu";
 import { InventorySettingsTab, type InventorySettingsData } from "@/components/settings/inventory-settings";
 import { OrganizationProfileTab, type OrganizationProfileData } from "@/components/settings/organization-profile";
 import { TaxSettingsTab } from "@/components/settings/tax-settings-tab";
@@ -27,8 +27,8 @@ import { IconTax } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-import { PeriodDialog, DeletePeriodButton } from "@/components/settings/period-dialog";
-import { Bot, Edit2 } from "lucide-react";
+import { PeriodDialog } from "@/components/settings/period-dialog";
+import { Bot } from "lucide-react";
 
 interface PeriodItem {
   id: string;
@@ -273,30 +273,7 @@ export function SettingsClient({
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            {canEdit && (
-                              <div className="flex items-center justify-center gap-1.5">
-                                {/* Close / Reopen Icon Action */}
-                                <PeriodActions periodId={p.id} status={p.status} />
-
-                                {/* Edit Dialog Icon */}
-                                <PeriodDialog
-                                  mode="edit"
-                                  period={p}
-                                  trigger={
-                                    <button
-                                      type="button"
-                                      title="Edit Periode"
-                                      className="flex size-7 items-center justify-center rounded-lg border border-rule/80 text-ink-soft hover:text-ink hover:bg-canvas transition-colors"
-                                    >
-                                      <Edit2 className="size-3" />
-                                    </button>
-                                  }
-                                />
-
-                                {/* Delete Dialog Icon */}
-                                <DeletePeriodButton periodId={p.id} periodName={p.name} />
-                              </div>
-                            )}
+                            {canEdit && <PeriodRowMenu period={p} />}
                           </td>
                         </tr>
                       ))

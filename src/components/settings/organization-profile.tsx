@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2 } from "lucide-react";
+import { Eye, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,11 +146,14 @@ export function OrganizationProfileTab({
 
         {canEdit ? (
           <Button type="submit" size="sm" disabled={saving} className="bg-terra text-white hover:bg-terra/90 text-xs gap-1.5 shadow-xs">
-            <Building2 className="size-3.5" />
+            <Save className="size-3.5" />
             <span>{saving ? "Menyimpan…" : "Simpan Profil"}</span>
           </Button>
         ) : (
-          <p className="text-xs text-ink-soft">Anda masuk sebagai Viewer sehingga hanya bisa melihat. Minta Owner untuk mengubah data.</p>
+          <p className="flex items-center gap-1.5 text-xs text-ink-soft">
+            <Eye className="size-3.5 shrink-0" />
+            <span>Anda masuk sebagai Viewer sehingga hanya bisa melihat. Minta Owner untuk mengubah data.</span>
+          </p>
         )}
       </form>
     </div>
