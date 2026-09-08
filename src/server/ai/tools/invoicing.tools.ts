@@ -75,6 +75,35 @@ export const invoicingToolDefs: ToolDefinition[] = [
       required: ["invoiceNumber"],
     },
   },
+  {
+    type: "function",
+    name: "list_invoices",
+    description:
+      "Ambil daftar faktur penjualan (INVOICE) atau tagihan pembelian (BILL) beserta status dan sisa. Gunakan untuk 'faktur yang belum lunas apa saja'.",
+    parameters: {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["INVOICE", "BILL"], description: "INVOICE untuk penjualan, BILL untuk pembelian (opsional)" },
+        status: {
+          type: "string",
+          description: "Filter status: DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, VOID (opsional)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    type: "function",
+    name: "get_invoice_detail",
+    description: "Rincian satu faktur/tagihan berdasarkan nomor: kontak, tanggal, total, sudah dibayar, sisa.",
+    parameters: {
+      type: "object",
+      properties: {
+        invoiceNumber: { type: "string", description: "Nomor faktur (contoh: INV-2026-0001)" },
+      },
+      required: ["invoiceNumber"],
+    },
+  },
 ];
 
 export const invoicingHandlers: Record<string, ToolHandler> = {
@@ -247,6 +276,69 @@ export const invoicingHandlers: Record<string, ToolHandler> = {
         invoiceNumber: inv.invoiceNumber,
         journalEntryId: journalId,
         suggestions: ["Lihat Jurnal", "Cek Buku Besar"],
+      },
+    };
+  },
+
+  list_invoices: async (orgId, _actorEmail, args) => {
+    const { listInvoicesRepo } = await import("@/server/db/repos/invoices.repo");
+    const type = args.type === "BILL" ? "BILL" : args.type === "INVOICE" ? "INVOICE" : undefined;
+    const statuses = ["DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "OVERDUE", "VOID"] as const;
+    const status = (statuses as readonly string[]).includes(String(args.status ?? ""))
+      ? (String(args.status) as (typeof statuses)[number])
+      : undefined;
+    const rows = await listInvoicesRepo(db, orgId, { type, status });
+    return {
+      success: true,
+      data: {
+        totalCount: rows.length,
+        invoices: rows.slice(0, 30).map((r) => ({
+          invoiceNumber: r.invoiceNumber,
+          type: r.type,
+          contactName: r.contactName,
+          issueDate: r.issueDate,
+          dueDate: r.dueDate,
+          total: Money.fromMinor(r.totalMinor).formatIdr(),
+          paid: Money.fromMinor(r.amountPaidMinor).formatIdr(),
+          status: r.status,
+        })),
+      },
+    };
+  },
+
+  get_invoice_detail: async (orgId, _actorEmail, args) => {
+    const { getInvoiceByIdRepo } = await import("@/server/db/repos/invoices.repo");
+    const { invoices } = await import("@/server/db/schema/invoicing");
+    const { eq, and } = await import("drizzle-orm");
+    const invNum = String(args.invoiceNumber || "").trim();
+    if (!invNum) return { success: false, error: "invoiceNumber wajib diisi." };
+    const [head] = await db
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.orgId, orgId), eq(invoices.invoiceNumber, invNum)));
+    if (!head) return { success: false, error: `Faktur #${invNum} tidak ditemukan.` };
+    const full = (await getInvoiceByIdRepo(db, orgId, head.id)) as unknown as {
+      invoiceNumber: string;
+      type: string;
+      status: string;
+      issueDate: string;
+      dueDate: string;
+      totalMinor: bigint;
+      amountPaidMinor: bigint;
+    } | null;
+    if (!full) return { success: false, error: `Faktur #${invNum} tidak ditemukan.` };
+    const remaining = full.totalMinor - full.amountPaidMinor;
+    return {
+      success: true,
+      data: {
+        invoiceNumber: full.invoiceNumber,
+        type: full.type,
+        status: full.status,
+        issueDate: full.issueDate,
+        dueDate: full.dueDate,
+        total: Money.fromMinor(full.totalMinor).formatIdr(),
+        paid: Money.fromMinor(full.amountPaidMinor).formatIdr(),
+        remaining: Money.fromMinor(remaining > 0n ? remaining : 0n).formatIdr(),
       },
     };
   },

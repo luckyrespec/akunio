@@ -194,7 +194,16 @@ function generateSmartTitle(prompt: string): string {
     - 'create_invoice': Buat faktur penjualan (INVOICE) atau tagihan pembelian (BILL).
     - 'record_invoice_payment': Catat pelunasan faktur.
     - 'post_invoice_to_journal': Posting faktur ke jurnal buku besar.
+    - 'list_invoices', 'get_invoice_detail': Daftar dan rincian faktur/tagihan (status, sisa).
     - 'get_ar_ap_aging': Analisis umur piutang dan utang usaha.
+  * Kontak & Buku Pembantu:
+    - 'list_contacts', 'find_contact': Daftar/cari pelanggan-pemasok. Selalu 'find_contact' dulu sebelum update_contact atau sebelum menyebut kontak di mutasi lain agar id-nya pasti.
+    - 'create_contact', 'update_contact': Daftarkan/ubah kontak (butuh konfirmasi).
+    - 'list_contact_ledgers', 'get_contact_ledger': Ringkasan dan kartu piutang (INVOICE) / utang (BILL) per kontak — untuk "tagihan Pak Budi kurang berapa".
+    - 'get_item_stock_card': Kartu mutasi + sisa stok per barang.
+  * Kas & Bank:
+    - 'list_cash_entries', 'get_cash_summary': Mutasi dan posisi kas (BAYAR/TERIMA/TRANSFER).
+    - 'record_cash_entry': Catat pembayaran/penerimaan/transfer sebagai DRAF (pengesahan tetap di UI). Jangan gunakan 'post_journal' mentah untuk mutasi kas. Lawan Piutang/Utang wajib sertakan contactId (cari via find_contact).
   * Rekonsiliasi Bank:
     - 'get_bank_reconciliation_status': Cek saldo bank vs saldo buku kas vs selisih.
     - 'auto_match_bank_reconciliation': Jalankan pencocokan otomatis mutasi bank.
@@ -204,12 +213,16 @@ function generateSmartTitle(prompt: string): string {
     - 'list_accounts', 'drilldown_account_details', 'check_accounting_health', 'list_periods'.
   * Persediaan & Inventaris Barang Dagang:
     - 'list_inventory_items': Lihat daftar stok barang, harga modal rata-rata, harga jual, dan kategori.
+    - 'list_stock_opnames': Riwayat stok opname + selisihnya.
+    - 'create_stock_opname': Buat DRAF opname dari hasil hitung fisik (pengesahan tetap di UI; item dirujuk per itemId dari list_inventory_items).
     - 'add_inventory_item': Tambah 1 barang baru ke master persediaan (butuh konfirmasi).
     - 'batch_add_inventory_items': Tambah puluhan SKU barang sekaligus ke master persediaan (butuh konfirmasi).
       JIKA PENGGUNA MENGUNGGAH FILE EXCEL / CSV ATAU MEMINTA INPUT BANYAK BARANG:
       AI WAJIB mengekstrak data tabel barang tersebut secara cerdas (Kode SKU, Nama Barang, Kategori, Satuan, Stok Awal, Harga Modal, Harga Jual, Min. Stok),
       kemudian memanggil tool 'batch_add_inventory_items' dengan list items lengkap untuk ditinjau dan disetujui pengguna!
   * Aset Tetap & Penyusutan:
+    - 'list_fixed_assets': Daftar aset (kode, kategori, status, harga perolehan).
+    - 'register_fixed_asset': Daftarkan aset baru + jadwal susutnya; akun-akunnya cari dulu via list_accounts.
     - 'recommend_asset_depreciation': Rekomendasi masa manfaat, tarif, dan metode penyusutan (Garis Lurus / Saldo Menurun).
     - 'run_monthly_depreciation': Posting beban penyusutan bulanan ke buku besar.
 - ATURAN KONTEKS PERCAKAPAN (ANTI-LUPA, WAJIB):

@@ -1,11 +1,10 @@
 import { db } from "@/server/db";
-import { eq } from "drizzle-orm";
-import { accounts } from "@/server/db/schema/org";
 import {
   postMonthlyDepreciation,
   listFixedAssets,
-  getFixedAssetDetail,
+  createFixedAsset,
 } from "@/server/db/repos/assets.repo";
+import { Money } from "@/core/money/money";
 import {
   evaluatePeriodReadiness,
   closePeriod,
@@ -72,6 +71,60 @@ export const assetsAndClosingToolDefs: ToolDefinition[] = [
         },
       },
       required: ["periodName"],
+    },
+  },
+  {
+    type: "function",
+    name: "list_fixed_assets",
+    description:
+      "Ambil daftar aset tetap beserta kode, kategori, status, dan harga perolehan. Gunakan untuk 'aset apa saja yang dimiliki'.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Filter kata kunci nama atau kode (opsional)" },
+      },
+      required: [],
+    },
+  },
+  {
+    type: "function",
+    name: "register_fixed_asset",
+    description:
+      "Daftarkan aset tetap baru beserta jadwal penyusutannya (kecuali TANAH yang tidak disusutkan). Akun aset/akumulasi/beban wajib akun valid — cari dulu via list_accounts. Wajib konfirmasi user sebelum eksekusi.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nama aset" },
+        category: {
+          type: "string",
+          enum: ["TANAH", "BANGUNAN", "KENDARAAN", "MESIN_PERALATAN", "INVENTARIS_KANTOR"],
+          description: "Kategori aset",
+        },
+        acquisitionDate: { type: "string", description: "Tanggal perolehan YYYY-MM-DD" },
+        acquisitionCostText: { type: "string", description: "Harga perolehan Rupiah (misal: '120000000')" },
+        usefulLifeMonths: { type: "number", description: "Masa manfaat dalam bulan" },
+        depreciationMethod: {
+          type: "string",
+          enum: ["STRAIGHT_LINE", "DECLINING_BALANCE"],
+          description: "Metode penyusutan",
+        },
+        assetAccountId: { type: "string", description: "Id akun aset" },
+        accumulatedDepAccountId: { type: "string", description: "Id akun akumulasi penyusutan" },
+        depreciationExpenseAccountId: { type: "string", description: "Id akun beban penyusutan" },
+        salvageValueText: { type: "string", description: "Nilai sisa Rupiah (opsional, default 0)" },
+        notes: { type: "string", description: "Catatan (opsional)" },
+      },
+      required: [
+        "name",
+        "category",
+        "acquisitionDate",
+        "acquisitionCostText",
+        "usefulLifeMonths",
+        "depreciationMethod",
+        "assetAccountId",
+        "accumulatedDepAccountId",
+        "depreciationExpenseAccountId",
+      ],
     },
   },
 ];
@@ -180,8 +233,9 @@ export const assetsAndClosingHandlers: Record<string, ToolHandler> = {
               : `Tidak ada aset yang perlu disusutkan untuk periode ${periodName}.`,
         },
       };
-    } catch (e: any) {
-      return { success: false, error: e.message };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal memproses permintaan.";
+      return { success: false, error: message };
     }
   },
 
@@ -201,8 +255,9 @@ export const assetsAndClosingHandlers: Record<string, ToolHandler> = {
           items: checklist.items,
         },
       };
-    } catch (e: any) {
-      return { success: false, error: e.message };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal memproses permintaan.";
+      return { success: false, error: message };
     }
   },
 
@@ -231,8 +286,103 @@ export const assetsAndClosingHandlers: Record<string, ToolHandler> = {
           message: `Periode ${periodName} berhasil ditutup dan dikunci.`,
         },
       };
-    } catch (e: any) {
-      return { success: false, error: e.message };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal memproses permintaan.";
+      return { success: false, error: message };
+    }
+  },
+
+  list_fixed_assets: async (orgId, _actor, args) => {
+    const query = String(args.query ?? "").trim();
+    const rows = await listFixedAssets(db, orgId);
+    const filtered = query
+      ? rows.filter(
+          (a) =>
+            a.name.toLowerCase().includes(query.toLowerCase()) ||
+            a.code.toLowerCase().includes(query.toLowerCase()),
+        )
+      : rows;
+    return {
+      success: true,
+      data: {
+        totalCount: filtered.length,
+        assets: filtered.slice(0, 30).map((a) => ({
+          id: a.id,
+          code: a.code,
+          name: a.name,
+          category: a.category,
+          status: a.status,
+          acquisitionCost: Money.fromMinor(a.acquisitionCostMinor).formatIdr(),
+        })),
+      },
+    };
+  },
+
+  register_fixed_asset: async (orgId, _actor, args) => {
+    const categories = ["TANAH", "BANGUNAN", "KENDARAAN", "MESIN_PERALATAN", "INVENTARIS_KANTOR"] as const;
+    const methods = ["STRAIGHT_LINE", "DECLINING_BALANCE"] as const;
+    const category = String(args.category ?? "").toUpperCase();
+    if (!(categories as readonly string[]).includes(category)) {
+      return { success: false, error: "category harus salah satu: TANAH, BANGUNAN, KENDARAAN, MESIN_PERALATAN, INVENTARIS_KANTOR." };
+    }
+    const method = String(args.depreciationMethod ?? "").toUpperCase();
+    if (!(methods as readonly string[]).includes(method)) {
+      return { success: false, error: "depreciationMethod harus STRAIGHT_LINE atau DECLINING_BALANCE." };
+    }
+    const name = String(args.name ?? "").trim();
+    if (!name) return { success: false, error: "Nama aset wajib diisi." };
+    const acquisitionDate = String(args.acquisitionDate ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(acquisitionDate)) {
+      return { success: false, error: "acquisitionDate harus format YYYY-MM-DD." };
+    }
+    let acquisitionCostMinor: bigint;
+    let salvageValueMinor = 0n;
+    try {
+      acquisitionCostMinor = Money.parseIdr(String(args.acquisitionCostText ?? "")).minor;
+      if (args.salvageValueText) salvageValueMinor = Money.parseIdr(String(args.salvageValueText)).minor;
+    } catch {
+      return { success: false, error: "Nominal Rupiah tidak valid." };
+    }
+    if (acquisitionCostMinor <= 0n) {
+      return { success: false, error: "Harga perolehan harus lebih dari 0." };
+    }
+    const usefulLifeMonths = Number(args.usefulLifeMonths);
+    if (!Number.isInteger(usefulLifeMonths) || usefulLifeMonths <= 0) {
+      return { success: false, error: "usefulLifeMonths harus bilangan bulat > 0." };
+    }
+    for (const k of ["assetAccountId", "accumulatedDepAccountId", "depreciationExpenseAccountId"] as const) {
+      if (!String(args[k] ?? "").trim()) {
+        return { success: false, error: `${k} wajib diisi (cari id akun via list_accounts).` };
+      }
+    }
+    try {
+      const asset = await createFixedAsset(db, {
+        orgId,
+        name,
+        category: category as (typeof categories)[number],
+        acquisitionDate,
+        inServiceDate: acquisitionDate,
+        acquisitionCostMinor,
+        salvageValueMinor,
+        usefulLifeMonths,
+        depreciationMethod: method as (typeof methods)[number],
+        assetAccountId: String(args.assetAccountId),
+        accumulatedDepAccountId: String(args.accumulatedDepAccountId),
+        depreciationExpenseAccountId: String(args.depreciationExpenseAccountId),
+        notes: args.notes ? String(args.notes) : undefined,
+      });
+      return {
+        success: true,
+        data: {
+          id: asset.id,
+          code: asset.code,
+          name: asset.name,
+          message: `Aset ${asset.code} terdaftar beserta jadwal penyusutannya.`,
+        },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal mendaftarkan aset";
+      return { success: false, error: message };
     }
   },
 };

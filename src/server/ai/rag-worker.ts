@@ -7,6 +7,16 @@ import { eq } from "drizzle-orm";
 import { embed } from "./embeddings";
 import { chunkJournal } from "./chunking";
 
+/**
+ * Kill-switch ingestion RAG per tenant: RAG_TENANT_INDEXING="0" mematikan
+ * enqueue (journals/inventory repo) + drain (cron). Dibaca saat dipanggil
+ * (bukan saat import) agar test bisa mengubah env di tengah jalan.
+ * Default (unset / nilai lain): aktif.
+ */
+export function isRagTenantIndexingEnabled(): boolean {
+  return process.env.RAG_TENANT_INDEXING !== "0";
+}
+
 export async function enqueueRagJob(
   q: { execute: (s: unknown) => Promise<unknown>; insert: (t: unknown) => unknown } & Record<string, unknown>,
   orgId: string,
@@ -29,6 +39,8 @@ export async function enqueueRagJobDirect(
 }
 
 export async function processQueueBatch(limit = 20): Promise<number> {
+  // Kill-switch: biarkan antrean utuh, laporkan 0 diproses.
+  if (!isRagTenantIndexingEnabled()) return 0;
   const jobs = await db.execute(sql`
     SELECT id, org_id, kind, ref_id, attempts
     FROM rag_queue

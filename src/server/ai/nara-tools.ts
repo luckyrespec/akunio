@@ -5,6 +5,9 @@ import { invoicingToolDefs, invoicingHandlers } from "./tools/invoicing.tools";
 import { reconciliationToolDefs, reconciliationHandlers } from "./tools/reconciliation.tools";
 import { assetsAndClosingToolDefs, assetsAndClosingHandlers } from "./tools/assets-closing.tools";
 import { inventoryToolDefs, inventoryHandlers } from "./tools/inventory.tools";
+import { contactsToolDefs, contactsHandlers } from "./tools/contacts.tools";
+import { subsidiaryToolDefs, subsidiaryHandlers } from "./tools/subsidiary.tools";
+import { cashBankToolDefs, cashBankHandlers } from "./tools/cash-bank.tools";
 import type { ToolHandler } from "./tools/types";
 
 export const SAFE_TOOLS = new Set<string>([
@@ -23,6 +26,17 @@ export const SAFE_TOOLS = new Set<string>([
   "recommend_asset_depreciation",
   "check_period_closing_readiness",
   "list_inventory_items",
+  "list_contacts",
+  "find_contact",
+  "list_contact_ledgers",
+  "get_contact_ledger",
+  "get_item_stock_card",
+  "list_cash_entries",
+  "get_cash_summary",
+  "list_invoices",
+  "get_invoice_detail",
+  "list_stock_opnames",
+  "list_fixed_assets",
 ]);
 
 export const MUTATING_TOOLS = new Set<string>([
@@ -41,7 +55,13 @@ export const MUTATING_TOOLS = new Set<string>([
   "run_monthly_depreciation",
   "close_fiscal_period",
   "add_inventory_item",
+  "add_service_item",
   "batch_add_inventory_items",
+  "create_contact",
+  "update_contact",
+  "record_cash_entry",
+  "create_stock_opname",
+  "register_fixed_asset",
 ]);
 
 export const ALL_NARA_TOOLS = [
@@ -52,9 +72,13 @@ export const ALL_NARA_TOOLS = [
   ...reconciliationToolDefs,
   ...assetsAndClosingToolDefs,
   ...inventoryToolDefs,
+  ...contactsToolDefs,
+  ...subsidiaryToolDefs,
+  ...cashBankToolDefs,
 ] as never[];
 
-const toolHandlers: Record<string, ToolHandler> = {
+/** Diekspor untuk test registry: setiap nama di SAFE/MUTATING wajib punya handler. */
+export const naraToolHandlers: Record<string, ToolHandler> = {
   ...coaHandlers,
   ...journalHandlers,
   ...reportsHandlers,
@@ -62,6 +86,9 @@ const toolHandlers: Record<string, ToolHandler> = {
   ...reconciliationHandlers,
   ...assetsAndClosingHandlers,
   ...inventoryHandlers,
+  ...contactsHandlers,
+  ...subsidiaryHandlers,
+  ...cashBankHandlers,
 };
 
 export async function executeNaraTool(
@@ -71,7 +98,7 @@ export async function executeNaraTool(
   args: Record<string, unknown>,
 ): Promise<{ success: boolean; data?: unknown; error?: string }> {
   try {
-    const handler = toolHandlers[toolName];
+    const handler = naraToolHandlers[toolName];
     if (!handler) {
       return { success: false, error: `Tool ${toolName} tidak dikenali.` };
     }

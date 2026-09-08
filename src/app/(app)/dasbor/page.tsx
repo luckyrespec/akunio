@@ -17,6 +17,9 @@ import { listEntriesWithLines } from "@/server/db/repos/journals.repo";
 import { getAgingReportRepo } from "@/server/db/repos/invoices.repo";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
+import { AkunioBriefingCard } from "@/components/dasbor/akunio-briefing-card";
+import { DecisionStrip } from "@/components/dasbor/decision-strip";
+import { avgDailyExpense, decideCashSafety, dueWithinDays, momDelta, topExpenses } from "@/core/dasbor/decisions";
 import {
   AlertCircle,
   ArrowRight,
@@ -131,6 +134,49 @@ export default async function DasborPage() {
       };
     }
   }
+  // --- Lapisan keputusan (semua dari repo/tool yang sudah ada, tanpa RAG) ---
+  const curMonth = months[5];
+  const { start: curStart, end: curEnd } = monthWindow(curMonth.y, curMonth.m);
+  const curMonthLines = await postedLinesBetween(db, ctx.orgId, curStart, curEnd);
+  const curAggs = aggregateFromLines(curMonthLines, metas);
+  const topBeban = topExpenses(curAggs, 3);
+  const avgDaily = avgDailyExpense(curAggs, now.getDate());
+
+  const apDue7 = dueWithinDays(agingAP.itemized, today, 7);
+  const apDue7Minor = apDue7.reduce((s, i) => s + i.outstandingMinor, 0n);
+  const safety = decideCashSafety({ cashMinor, due7Minor: apDue7Minor, avgDailyExpenseMinor: avgDaily });
+
+  const sortedOverdueAR = [...overdueAR].sort((a, b) =>
+    a.outstandingMinor < b.outstandingMinor ? 1 : a.outstandingMinor > b.outstandingMinor ? -1 : 0,
+  );
+  const topAR = sortedOverdueAR[0];
+
+  const curNet = monthlyNet[5] ?? 0n;
+  const prevNet = monthlyNet[4] ?? 0n;
+  const mom = momDelta(curNet, prevNet);
+  const prevLabel = months[4]?.label ?? "bln lalu";
+
+  const urgentSentence = pendingDrafts.length > 0
+    ? `${pendingDrafts.length} draf menunggu review sebelum posting.`
+    : data.findings.length > 0
+      ? `${data.findings.length} temuan pembukuan terbuka perlu ditindaklanjuti.`
+      : overdueAR.length > 0
+        ? `${overdueAR.length} piutang jatuh tempo senilai ${Money.fromMinor(overdueARMinor).formatIdr()} — tagih ${topAR ? `${topAR.contactName} (${topAR.invoiceNumber})` : "sekarang"}.`
+        : overdueAP.length > 0
+          ? `${overdueAP.length} utang jatuh tempo senilai ${Money.fromMinor(overdueAPMinor).formatIdr()}.`
+          : "Semua beres — tidak ada draf, temuan, atau tunggakan.";
+
+  const briefingSentences = [
+    apDue7.length > 0
+      ? `Kas & bank ${Money.fromMinor(cashMinor).formatIdr()} — ${safety.status === "AMAN" ? "aman" : safety.status === "WASPADA" ? "waspada" : "kritis"} untuk kewajiban 7 hari ${Money.fromMinor(apDue7Minor).formatIdr()}.`
+      : `Kas & bank ${Money.fromMinor(cashMinor).formatIdr()} — tanpa kewajiban 7 hari ke depan.`,
+    urgentSentence,
+    `Laba ${curMonth.label} ${Money.fromMinor(curNet).formatIdr()}, ${mom.direction === "sama" ? `stabil vs ${prevLabel}` : `${mom.direction} ${mom.pct !== null ? `${mom.pct > 0 ? "+" : ""}${mom.pct}% ` : ""}vs ${prevLabel}`}.`,
+  ];
+  const assistantSummary =
+    `Dasbor ${year}: Kas ${Money.fromMinor(cashMinor).formatIdr()}, Laba YTD ${Money.fromMinor(ytd.netIncomeMinor).formatIdr()}, ` +
+    `Laba ${curMonth.label} ${Money.fromMinor(curNet).formatIdr()} (${mom.direction}${mom.pct !== null ? ` ${mom.pct}%` : ""} vs ${prevLabel}), ` +
+    `${pendingDrafts.length} draf, ${data.findings.length} temuan, ${overdueAR.length} piutang overdue, ${overdueAP.length} utang overdue.`;
 
   const daysLeft = data.period
     ? Math.max(
@@ -190,7 +236,7 @@ export default async function DasborPage() {
   }>;
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-8">
       <PageHeader
         title="Dasbor"
         eyebrow={`Ringkasan keuangan tahun berjalan (${year})`}
@@ -217,7 +263,41 @@ export default async function DasborPage() {
         />
       )}
 
-      {/* Panel posisi & denyut — instrumen utama, bukan kartu metrik */}
+      {/* Zona aksi: briefing AKUNIO memimpin, strip keputusan menyusul — rapat */}
+      <div className="space-y-4">
+      {/* AKUNIO briefing — selalu kelihatan, chat on-click via widget */}
+      <Reveal>
+        <AkunioBriefingCard sentences={briefingSentences} assistantSummary={assistantSummary} />
+      </Reveal>
+
+      {/* Strip 3 keputusan 10-detik */}
+      <Reveal>
+        <DecisionStrip
+          cash={{
+            status: safety.status,
+            runwayDays: safety.runwayDays,
+            note: safety.note,
+            cashText: Money.fromMinor(cashMinor).formatIdr(),
+            due7Text: Money.fromMinor(apDue7Minor).formatIdr(),
+            due7Count: apDue7.length,
+          }}
+          collect={{
+            topOverdueText: topAR ? Money.fromMinor(topAR.outstandingMinor).formatIdr() : "",
+            overdueCount: overdueAR.length,
+            topName: topAR ? `${topAR.contactName} · ${topAR.invoiceNumber}` : "",
+            href: "/faktur",
+          }}
+          health={{
+            direction: mom.direction,
+            pct: mom.pct,
+            curText: Money.fromMinor(curNet).formatIdr(),
+            prevLabel,
+          }}
+        />
+      </Reveal>
+      </div>
+
+      {/* Zona bukti: panel posisi & denyut — instrumen utama, bukan kartu metrik */}
       <Reveal>
         <div className="matte-card grid gap-6 rounded-2xl border border-rule bg-paper p-5 sm:p-7 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
           <div className="min-w-0">
@@ -237,6 +317,27 @@ export default async function DasborPage() {
                 {Money.fromMinor(ytd.netIncomeMinor).formatIdr()}
               </span>
             </div>
+
+            {topBeban.length > 0 && (
+              <div className="mt-4" data-testid="dasbor-top-beban">
+                <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                  Top beban · {curMonth.label}
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {topBeban.map((t) => (
+                    <li key={t.code} className="flex items-baseline justify-between gap-3 text-xs">
+                      <span className="min-w-0 truncate text-ink">
+                        <span className="mr-1.5 font-mono text-[11px] font-bold text-ink-soft">{t.code}</span>
+                        {t.name}
+                      </span>
+                      <span className="tnum shrink-0 font-semibold text-ink">
+                        {Money.fromMinor(t.totalMinor).formatIdr()}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-soft">
               <span className="inline-flex items-center gap-1.5">

@@ -35,8 +35,12 @@ export async function walkOnboardingToDashboard(
     await expect(input).toHaveValue(text, { timeout: 10000 });
     await page.getByTestId("onboarding-send").click();
   };
-  const chip = (name: string) =>
-    page.getByTestId("onboarding-chip").filter({ hasText: name }).click();
+  const chip = async (name: string) => {
+    // Chip hanya mengisi input (tidak auto-kirim) — user menekan Enter/kirim.
+    await page.getByTestId("onboarding-chip").filter({ hasText: name }).click();
+    await expect(page.getByTestId("onboarding-input")).toHaveValue(name, { timeout: 10000 });
+    await page.getByTestId("onboarding-send").click();
+  };
 
   await send(opts?.displayName ?? "Budi");
   await send(opts?.businessName ?? "Warung Budi E2E");

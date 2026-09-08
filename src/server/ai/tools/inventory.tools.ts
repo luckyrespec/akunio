@@ -90,6 +90,44 @@ export const inventoryToolDefs: ToolDefinition[] = [
       required: ["items"],
     },
   },
+  {
+    type: "function",
+    name: "list_stock_opnames",
+    description:
+      "Ambil daftar stok opname (perhitungan fisik) beserta status dan selisih nilainya. Gunakan untuk 'hasil opname terakhir bagaimana'.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    type: "function",
+    name: "create_stock_opname",
+    description:
+      "Buat draf stok opname dari hasil hitung fisik (berhenti di DRAF — penyesuaian stok disahkan user di menu Persediaan). Item dirujuk per itemId (cari dulu via list_inventory_items). Wajib konfirmasi user sebelum eksekusi.",
+    parameters: {
+      type: "object",
+      properties: {
+        opnameDate: { type: "string", description: "Tanggal opname YYYY-MM-DD" },
+        notes: { type: "string", description: "Catatan opname (opsional)" },
+        items: {
+          type: "array",
+          description: "Daftar hasil hitung fisik",
+          items: {
+            type: "object",
+            properties: {
+              itemId: { type: "string", description: "Id barang" },
+              physicalQty: { type: "number", description: "Kuantitas fisik hasil hitung (>= 0)" },
+              reason: { type: "string", description: "Alasan selisih (opsional)" },
+            },
+            required: ["itemId", "physicalQty"],
+          },
+        },
+      },
+      required: ["opnameDate", "items"],
+    },
+  },
 ];
 
 export const inventoryHandlers: Record<string, ToolHandler> = {
@@ -332,6 +370,77 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Gagal mendaftarkan batch barang persediaan";
+      return { success: false, error: message };
+    }
+  },
+
+  list_stock_opnames: async (orgId, _actor) => {
+    try {
+      const { listStockOpnames } = await import("@/server/db/repos/inventory.repo");
+      const rows = await withOrg(orgId, async (tx) => listStockOpnames(tx, orgId));
+      return {
+        success: true,
+        data: {
+          totalCount: rows.length,
+          opnames: rows.slice(0, 20).map((o) => ({
+            id: o.id,
+            number: o.number,
+            opnameDate: o.opnameDate,
+            status: o.status,
+            differenceValue: Money.fromMinor(o.totalDifferenceValueMinor ?? 0n).formatIdr(),
+          })),
+        },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal mengambil daftar opname";
+      return { success: false, error: message };
+    }
+  },
+
+  create_stock_opname: async (orgId, _actor, args) => {
+    try {
+      const { createStockOpname } = await import("@/server/db/repos/inventory.repo");
+      const opnameDate = String(args.opnameDate ?? "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(opnameDate)) {
+        return { success: false, error: "opnameDate harus format YYYY-MM-DD." };
+      }
+      const rawItems = Array.isArray(args.items) ? args.items : [];
+      if (rawItems.length === 0) {
+        return { success: false, error: "Daftar item opname kosong." };
+      }
+      const items: Array<{ itemId: string; physicalQty: number; reason?: string }> = [];
+      for (const [idx, raw] of rawItems.entries()) {
+        const r = raw as Record<string, unknown>;
+        const itemId = String(r.itemId ?? "").trim();
+        const physicalQty = typeof r.physicalQty === "number" ? r.physicalQty : Number(r.physicalQty);
+        if (!itemId) return { success: false, error: `Item ke-${idx + 1}: itemId wajib diisi.` };
+        if (!Number.isFinite(physicalQty) || physicalQty < 0) {
+          return { success: false, error: `Item ke-${idx + 1}: physicalQty harus angka >= 0.` };
+        }
+        items.push({
+          itemId,
+          physicalQty,
+          reason: r.reason ? String(r.reason) : undefined,
+        });
+      }
+      const opname = await withOrg(orgId, async (tx) =>
+        createStockOpname(tx, orgId, {
+          opnameDate,
+          notes: args.notes ? String(args.notes) : undefined,
+          items,
+        }),
+      );
+      return {
+        success: true,
+        data: {
+          id: opname.id,
+          number: opname.number,
+          status: "DRAFT",
+          note: "Tersimpan sebagai draf. Minta user meninjau dan mengesahkan di menu Persediaan.",
+        },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal membuat draf opname";
       return { success: false, error: message };
     }
   },
