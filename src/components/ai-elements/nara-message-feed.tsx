@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ThreeDots } from "react-loader-spinner";
 import { FileText, Image as ImageIcon, FileSpreadsheet } from "lucide-react";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { ThinkingTrace } from "@/components/ai-elements/thinking-trace";
@@ -193,12 +194,20 @@ export function NaraMessageFeed({
                 <span className="inline-block w-1.5 h-3.5 bg-terra/70 ml-1 animate-pulse align-middle rounded-xs" />
               </MessageResponse>
             ) : (
-              <div className="flex items-center gap-2 py-2 px-1 text-xs text-ink-soft select-none">
-                <span className="font-medium text-ink/75">Akunio sedang berpikir</span>
-                <span className="inline-flex items-center gap-1.5 py-2 px-1" role="status" aria-label="Akunio sedang berpikir">
-                  <span className="size-1.5 rounded-full bg-terra animate-pulse" />
-                </span>
-              </div>
+              <span
+                className="inline-flex items-center gap-1.5 py-2 px-1 text-terra"
+                role="status"
+                aria-label="Akunio sedang berpikir"
+              >
+                <ThreeDots
+                  visible
+                  height="24"
+                  width="44"
+                  radius="4"
+                  color="currentColor"
+                  ariaLabel="Akunio sedang berpikir"
+                />
+              </span>
             )}
 
             {streamingQueue && streamingQueue.length > 0 && (

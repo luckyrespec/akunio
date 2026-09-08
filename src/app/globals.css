@@ -407,5 +407,9 @@ html { background-color: var(--color-canvas); }
   [data-sd-animate] {
     animation: none;
   }
+  [aria-label="Akunio sedang berpikir"] *,
+  [aria-label="Akunio sedang berpikir"] {
+    animation: none !important;
+  }
 }
 
