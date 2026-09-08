@@ -26,7 +26,7 @@ import { IconTax } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-import { PeriodDialog, DeletePeriodButton } from "@/components/settings/period-dialog";
+import { PeriodDialog, DeletePeriodButton, PeriodYearForm } from "@/components/settings/period-dialog";
 import { Bot, Edit2 } from "lucide-react";
 
 interface PeriodItem {
@@ -131,6 +131,10 @@ export function SettingsClient({
 
   const openPeriodsCount = periods.filter((p) => p.status === "OPEN").length;
   const canEdit = userRole !== "VIEWER";
+  const existingYears = periods
+    .map((p) => Number(p.name.slice(0, 4)))
+    .filter((y) => Number.isInteger(y));
+  const suggestedYear = existingYears.length > 0 ? Math.max(...existingYears) + 1 : new Date().getFullYear();
 
   return (
     <div className="flex flex-col lg:flex-row h-full w-full min-h-[calc(100vh-3.5rem)] bg-canvas">
@@ -205,7 +209,8 @@ export function SettingsClient({
               </div>
 
               {canEdit && (
-                <div className="shrink-0">
+                <div className="shrink-0 flex items-end gap-2">
+                  <PeriodYearForm defaultYear={suggestedYear} />
                   <PeriodDialog mode="create" />
                 </div>
               )}

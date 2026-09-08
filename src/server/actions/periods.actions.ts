@@ -9,6 +9,33 @@ import { appendAudit } from "@/server/db/repos/audit.repo";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
+export async function ensureYearPeriodsAction(
+  year: number,
+): Promise<{ ok: true; created: number } | { ok: false; error: string }> {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const { ensureFiscalYearPeriods } = await import("@/server/db/repos/periods.repo");
+    const res = await db.transaction(async (tx) => {
+      const out = await ensureFiscalYearPeriods(tx, ctx.orgId, year);
+      await appendAudit(tx, {
+        orgId: ctx.orgId,
+        actor: ctx.userEmail,
+        action: "PERIOD_CREATE_YEAR",
+        subjectType: "fiscal_period",
+        subjectId: `${out.year}`,
+        data: { year: out.year, created: out.created },
+      });
+      return out;
+    });
+    revalidatePath("/pengaturan");
+    revalidatePath("/tutup-buku");
+    return { ok: true, created: res.created };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    return { ok: false, error: e instanceof Error ? e.message : "GAGAL_TAMBAH_TAHUN" };
+  }
+}
+
 export async function closePeriodAction(periodId: string): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);

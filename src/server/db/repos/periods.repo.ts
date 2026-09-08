@@ -80,3 +80,41 @@ export async function deletePeriod(
   if (!row) throw new Error("PERIODE_TIDAK_DITEMUKAN");
   return row;
 }
+
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+/**
+ * Buat 12 bulan kalender (Januari–Desember) untuk tahun tertentu.
+ * Idempoten: bulan yang sudah ada dilewati. Untuk tahun lampau maupun depan.
+ */
+export async function ensureFiscalYearPeriods(
+  q: Queryable,
+  orgId: string,
+  year: number,
+): Promise<{ year: number; created: number }> {
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    throw new Error("TAHUN_TIDAK_VALID: gunakan tahun 2000–2100");
+  }
+  const rows = Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    const lastDay = new Date(Date.UTC(year, m, 0)).getUTCDate();
+    const name = `${year}-${pad2(m)}`;
+    return {
+      orgId,
+      name,
+      startsOn: `${name}-01`,
+      endsOn: `${name}-${pad2(lastDay)}`,
+      status: "OPEN" as const,
+    };
+  });
+  let created = 0;
+  for (const r of rows) {
+    const inserted = await q
+      .insert(fiscalPeriods)
+      .values(r)
+      .onConflictDoNothing({ target: [fiscalPeriods.orgId, fiscalPeriods.name] })
+      .returning({ id: fiscalPeriods.id });
+    created += inserted.length;
+  }
+  return { year, created };
+}

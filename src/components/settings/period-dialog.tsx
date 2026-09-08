@@ -18,6 +18,7 @@ import {
   createPeriodAction,
   updatePeriodAction,
   deletePeriodAction,
+  ensureYearPeriodsAction,
 } from "@/server/actions/periods.actions";
 import { useRouter } from "next/navigation";
 
@@ -269,5 +270,71 @@ export function DeletePeriodButton({ periodId, periodName }: { periodId: string;
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Tambah 12 bulan sekaligus untuk satu tahun (lewati yang sudah ada). */
+export function PeriodYearForm({ defaultYear }: { defaultYear: number }) {
+  const router = useRouter();
+  const [year, setYear] = React.useState(String(defaultYear));
+  const [pending, start] = React.useTransition();
+  const [msg, setMsg] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const y = Number(year.trim());
+    if (!Number.isInteger(y)) {
+      setMsg({ type: "error", text: "Isi tahun dengan angka, misal 2027." });
+      return;
+    }
+    setMsg(null);
+    start(async () => {
+      const res = await ensureYearPeriodsAction(y);
+      if (!res.ok) {
+        setMsg({ type: "error", text: res.error });
+        return;
+      }
+      setMsg({
+        type: "success",
+        text: res.created > 0 ? `${res.created} bulan ${y} ditambahkan.` : `Semua bulan ${y} sudah ada.`,
+      });
+      router.refresh();
+    });
+  }
+
+  return (
+    <div>
+      <form onSubmit={submit} className="flex items-end gap-2">
+        <div className="space-y-1">
+          <Label htmlFor="period-year" className="text-[11px] text-ink-soft">
+            Tahun
+          </Label>
+          <Input
+            id="period-year"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            inputMode="numeric"
+            maxLength={4}
+            disabled={pending}
+            className="h-8 w-24 font-mono text-xs"
+          />
+        </div>
+        <Button
+          type="submit"
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          className="h-8 text-xs rounded-xl px-3.5 border-rule bg-paper"
+        >
+          {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+          <span>Tambah tahun</span>
+        </Button>
+      </form>
+      {msg && (
+        <p role="status" className={`mt-1 text-[11px] ${msg.type === "success" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+          {msg.text}
+        </p>
+      )}
+    </div>
   );
 }
