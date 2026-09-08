@@ -14,6 +14,11 @@ export interface OrganizationProfileData {
   address: string | null;
 }
 
+const MONTHS = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
 export function OrganizationProfileTab({
   organization,
   profile,
@@ -31,6 +36,7 @@ export function OrganizationProfileTab({
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const initial = (name.trim() || "O").charAt(0).toUpperCase();
+  const fiscalMonth = MONTHS[organization.fiscalYearStartMonth - 1] ?? `Bulan ${organization.fiscalYearStartMonth}`;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +46,7 @@ export function OrganizationProfileTab({
     try {
       const res = await updateOrganizationProfileAction({ name, businessName, city, address });
       if (res.ok) {
-        setFeedback({ type: "success", message: "Profil organisasi berhasil disimpan." });
+        setFeedback({ type: "success", message: "Perubahan tersimpan." });
       } else {
         setFeedback({ type: "error", message: res.error });
       }
@@ -56,7 +62,7 @@ export function OrganizationProfileTab({
       <div>
         <h2 className="font-display text-base font-bold text-ink">Profil Organisasi</h2>
         <p className="mt-0.5 text-xs text-ink-soft">
-          Identitas ruang kerja. ID bersifat permanen — nama dan alamat bebas diubah kapan saja.
+          ID tidak bisa diganti. Nama dan alamat boleh diubah kapan saja.
         </p>
       </div>
 
@@ -72,7 +78,7 @@ export function OrganizationProfileTab({
         </div>
         <div className="flex shrink-0 flex-wrap gap-1.5">
           <Badge variant="outline">{organization.baseCurrency}</Badge>
-          <Badge variant="outline">Fiskal bln-{organization.fiscalYearStartMonth}</Badge>
+          <Badge variant="outline">Fiskal {fiscalMonth}</Badge>
           <Badge variant="outline" className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
             SAK EMKM
           </Badge>
@@ -144,7 +150,7 @@ export function OrganizationProfileTab({
             <span>{saving ? "Menyimpan…" : "Simpan Profil"}</span>
           </Button>
         ) : (
-          <p className="text-xs text-ink-soft">Peran Anda hanya bisa melihat. Minta OWNER/ACCOUNTANT untuk mengubah.</p>
+          <p className="text-xs text-ink-soft">Anda masuk sebagai Viewer sehingga hanya bisa melihat. Minta Owner untuk mengubah data.</p>
         )}
       </form>
     </div>
