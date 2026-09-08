@@ -16,6 +16,9 @@ import {
 import { postInvoiceToLedger } from "@/server/invoicing/posting";
 
 const year = new Date().getFullYear();
+// Tanggal dinamis (hari ini) agar urutan kartu deterministik —
+ // saldo awal (hari ini) selalu segaris waktu dengan mutasi uji.
+const today = new Date().toISOString().slice(0, 10);
 
 async function setupCards(name: string) {
   const { orgId } = await makeOrg(name);
@@ -37,12 +40,12 @@ async function setupCards(name: string) {
   );
   const customer = await createContactRepo(db, orgId, { name: "Pelanggan", type: "CUSTOMER" });
   const inv = await createInvoiceRepo(db, orgId,
-    { type: "INVOICE", contactId: customer.id, issueDate: `${year}-09-07`, dueDate: `${year}-09-21` },
+    { type: "INVOICE", contactId: customer.id, issueDate: today, dueDate: `${year}-09-21` },
     [{ description: "Kopi", quantity: 2, unitPriceMinor: 35_000n, catalogItemId: item.id }]);
   await postInvoiceToLedger(db, orgId, inv.id, "t@t.id");
   const full = await getInvoiceByIdRepo(db, orgId, inv.id);
   const { payment } = await recordInvoicePaymentRepo(db, orgId, {
-    invoiceId: inv.id, paymentDate: `${year}-09-08`, amountMinor: 20_000n, paymentAccountId: byCode("1110").id,
+    invoiceId: inv.id, paymentDate: today, amountMinor: 20_000n, paymentAccountId: byCode("1110").id,
   });
   const { postInvoicePaymentToLedger } = await import("@/server/invoicing/posting");
   await postInvoicePaymentToLedger(db, orgId, payment.id, "t@t.id");

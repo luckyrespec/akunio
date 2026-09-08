@@ -8,7 +8,7 @@ import {
   inventoryTransactions,
 } from "@/server/db/schema/inventory";
 import { getInvoiceByIdRepo } from "@/server/db/repos/invoices.repo";
-import { getInventorySettings } from "@/server/db/repos/inventory.repo";
+import { getInventorySettings, lockInventoryPolicy } from "@/server/db/repos/inventory.repo";
 import { postJournalEntry, toMinor } from "@/server/db/repos/journals.repo";
 import { journalLines } from "@/server/db/schema/journal";
 import { calculateItemTotal } from "@/core/invoicing/calculations";
@@ -492,6 +492,13 @@ export async function postInvoiceToLedger(
         lines,
       }
     );
+
+    // Kebijakan metode terkunci sejak faktur operasional pertama yang
+    // menyentuh barang (jasa saja tidak mengunci). Dibuka lagi saat tutup tahun.
+    const hasBarang = inv.items.some((line) => masterOf(line.catalogItemId)?.itemType === "BARANG");
+    if (hasBarang) {
+      await lockInventoryPolicy(tx, orgId);
+    }
 
     await tx
       .update(invoices)

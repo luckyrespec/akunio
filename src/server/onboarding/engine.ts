@@ -35,6 +35,8 @@ import {
   parseConfirm,
   parseUbahTarget,
   parseCoaIntent,
+  parseStockValuation,
+  parseStockRecording,
 } from "./parse";
 
 export interface EngineReply {
@@ -43,6 +45,8 @@ export interface EngineReply {
   step: OnboardingStep;
   coaPreview?: AccountDef[];
   finished?: boolean;
+  /** Alur langkah dinamis (STOK hanya untuk usaha berstok). */
+  steps?: string[];
 }
 
 export interface FinalizeResult {
@@ -59,6 +63,74 @@ const LOKASI_CHIPS = ["Lewati"];
 const REFERRAL_CHIPS = ["Teman / Keluarga", "Google", "Instagram / TikTok", "Lainnya"];
 const RINGKASAN_CHIPS = ["Ya, lanjut", "Ubah jawaban"];
 const COA_CHIPS = ["Gunakan COA ini", "Tambah akun", "Hapus akun"];
+const STOK_VALUATION_CHIPS = ["Harga rata-rata (disarankan)", "Harga beli terakhir (FIFO)"];
+const STOK_RECORDING_CHIPS = ["Otomatis tiap jual/beli (disarankan)", "Hitung manual akhir bulan"];
+
+export type StockValuation = "WEIGHTED_AVERAGE" | "FIFO";
+export type StockRecording = "PERPETUAL" | "PERIODIC";
+
+/** Jenis usaha yang menjual barang fisik (perlu pilihan metode stok). */
+export function hasStockType(t: BusinessType | null | undefined): boolean {
+  return t !== null && t !== undefined && t !== "JASA";
+}
+
+/** Urutan langkah dinamis: STOK disisipkan setelah JENIS bila berstok. */
+export function flowSteps(businessType: BusinessType | null | undefined): string[] {
+  const base = ["NAMA", "USAHA", "JENIS", "SKALA", "LOKASI", "REFERRAL", "RINGKASAN", "COA"];
+  if (!hasStockType(businessType)) return base;
+  const out = [...base];
+  out.splice(3, 0, "STOK");
+  return out;
+}
+
+interface StockStash {
+  stockValuation?: StockValuation;
+  stockRecording?: StockRecording;
+}
+
+async function readOrgSettings(q: Queryable, orgId: string): Promise<Record<string, unknown>> {
+  const [row] = await q
+    .select({ settings: organizations.settings })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  return (row?.settings ?? {}) as Record<string, unknown>;
+}
+
+async function readStockStash(q: Queryable, orgId: string): Promise<StockStash> {
+  const s = await readOrgSettings(q, orgId);
+  const out: StockStash = {};
+  if (s.stockValuation === "WEIGHTED_AVERAGE" || s.stockValuation === "FIFO") {
+    out.stockValuation = s.stockValuation;
+  }
+  if (s.stockRecording === "PERPETUAL" || s.stockRecording === "PERIODIC") {
+    out.stockRecording = s.stockRecording;
+  }
+  return out;
+}
+
+async function writeStockStash(q: Queryable, orgId: string, patch: StockStash): Promise<void> {
+  const cur = await readOrgSettings(q, orgId);
+  await q.update(organizations)
+    .set({ settings: { ...cur, ...patch } })
+    .where(eq(organizations.id, orgId));
+}
+
+async function clearStockStash(q: Queryable, orgId: string): Promise<void> {
+  const cur = await readOrgSettings(q, orgId);
+  delete cur.stockValuation;
+  delete cur.stockRecording;
+  await q.update(organizations)
+    .set({ settings: cur })
+    .where(eq(organizations.id, orgId));
+}
+
+export function stockSummaryLabel(stash: StockStash): string | null {
+  if (!stash.stockValuation || !stash.stockRecording) return null;
+  const v = stash.stockValuation === "WEIGHTED_AVERAGE" ? "harga rata-rata" : "harga beli terakhir (FIFO)";
+  const r = stash.stockRecording === "PERPETUAL" ? "otomatis" : "manual akhir bulan";
+  return `HPP ${v}, stok ${r}`;
+}
 
 const REVENUE_LABELS = {
   BARU_MULAI: "Baru memulai usaha",
@@ -135,6 +207,11 @@ function questionFor(step: OnboardingStep): { reply: string; chips: string[] } {
       return { reply: "Apa nama usaha Anda?", chips: [] };
     case "JENIS":
       return { reply: "Usaha Anda bergerak di bidang apa? Pilih yang paling mendekati.", chips: JENIS_CHIPS };
+    case "STOK":
+      return {
+        reply: "Saat harga beli naik-turun, HPP dihitung pakai harga rata-rata (stabil, disarankan) atau harga beli terakhir (FIFO)?",
+        chips: STOK_VALUATION_CHIPS,
+      };
     case "SKALA":
       return { reply: "Berapa omzet usaha per bulan? (kira-kira saja — atau pilih Baru memulai usaha)", chips: SKALA_CHIPS };
     case "LOKASI":
@@ -146,11 +223,12 @@ function questionFor(step: OnboardingStep): { reply: string; chips: string[] } {
   }
 }
 
-function summaryOf(p: OrgProfile): string {
+function summaryOf(p: OrgProfile, stockLabel: string | null): string {
   const lines = [
     `Nama: ${p.displayName ?? "-"}`,
     `Usaha: ${p.businessName ?? "-"}`,
     `Jenis: ${p.businessType ? BUSINESS_TYPE_LABELS[p.businessType as BusinessType] : "-"}`,
+    `Stok: ${stockLabel ?? (p.businessType === "JASA" ? "jasa, tanpa persediaan" : "-")}`,
     `Omzet: ${p.revenueRange ? REVENUE_LABELS[p.revenueRange as keyof typeof REVENUE_LABELS] : "-"}`,
     `Karyawan: ${p.employeeCount === null || p.employeeCount === undefined ? "-" : `${p.employeeCount} orang`}`,
     `Kota: ${p.city ?? "-"}`,
@@ -196,16 +274,22 @@ export async function getOnboardingView(q: Queryable, orgId: string) {
   }
   const step = (profile?.currentStep ?? "NAMA") as OnboardingStep;
   const coaPreview = step === "COA" ? (draftOf(profile!) ?? null) : null;
+  const stash = step === "STOK" ? await readStockStash(q, orgId) : {};
   return {
     profile,
     messages: messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     coaPreview,
-    chips: chipsForStep(step, profile),
+    chips: chipsForStep(step, profile, Boolean(stash.stockValuation)),
+    steps: flowSteps(profile?.businessType as BusinessType | null),
   };
 }
 
 /** Chips for a freshly loaded view (mid-flow refresh must show the same chips). */
-export function chipsForStep(step: OnboardingStep, profile: OrgProfile | null): string[] {
+export function chipsForStep(
+  step: OnboardingStep,
+  profile: OrgProfile | null,
+  stockValuationKnown = false,
+): string[] {
   switch (step) {
     case "NAMA":
       return NAMA_CHIPS;
@@ -213,6 +297,8 @@ export function chipsForStep(step: OnboardingStep, profile: OrgProfile | null): 
       return [];
     case "JENIS":
       return JENIS_CHIPS;
+    case "STOK":
+      return stockValuationKnown ? STOK_RECORDING_CHIPS : STOK_VALUATION_CHIPS;
     case "SKALA":
       return profile?.revenueRange ? KARYAWAN_CHIPS : SKALA_CHIPS;
     case "LOKASI":
@@ -261,7 +347,13 @@ export async function submitOnboardingMessage(
     profile = await upsertProfile(q, orgId, { ...patch, currentStep: next });
     const reply = hooks?.streamPolish ? await hooks.streamPolish(template) : await polish(template);
     await addOnboardingMessage(q, orgId, "assistant", reply, next);
-    return { reply, chips, step: next, coaPreview };
+    return {
+      reply,
+      chips,
+      step: next,
+      coaPreview,
+      steps: flowSteps(profile.businessType as BusinessType | null),
+    };
   };
 
   switch (step) {
@@ -279,13 +371,42 @@ export async function submitOnboardingMessage(
     case "JENIS": {
       const t = parseBusinessType(text);
       if (!t) return done("Saya belum mengenali jenis itu — pilih salah satu yang paling mendekati ya.", JENIS_CHIPS, "JENIS");
-      const ask = questionFor("SKALA");
+      if (!hasStockType(t)) {
+        const ask = questionFor("SKALA");
+        return done(
+          `Baik, usaha ${BUSINESS_TYPE_LABELS[t]}. ${ask.reply}`,
+          ask.chips,
+          "SKALA",
+          { businessType: t },
+        );
+      }
+      await clearStockStash(q, orgId);
       return done(
-        `Baik, usaha ${BUSINESS_TYPE_LABELS[t]}. ${ask.reply}`,
-        ask.chips,
-        "SKALA",
+        `Baik, usaha ${BUSINESS_TYPE_LABELS[t]}. Satu hal penting soal stok sebelum lanjut — cara hitung ini terkunci setelah mutasi pertama, jadi pilih yang paling pas. ${questionFor("STOK").reply}`,
+        STOK_VALUATION_CHIPS,
+        "STOK",
         { businessType: t },
       );
+    }
+    case "STOK": {
+      const stash = await readStockStash(q, orgId);
+      if (!stash.stockValuation) {
+        const v = parseStockValuation(text);
+        if (!v) return done("Pilih salah satu cara hitung ya — rata-rata cocok untuk kebanyakan usaha.", STOK_VALUATION_CHIPS, "STOK");
+        await writeStockStash(q, orgId, { stockValuation: v });
+        return done(
+          "Dicatat. Stoknya dicatat otomatis setiap jual/beli (disarankan), atau dihitung manual tiap akhir bulan?",
+          STOK_RECORDING_CHIPS,
+          "STOK",
+        );
+      }
+      const r = parseStockRecording(text);
+      if (!r) return done("Pilih cara pencatatannya ya — otomatis atau manual.", STOK_RECORDING_CHIPS, "STOK");
+      await writeStockStash(q, orgId, { stockRecording: r });
+      const ask = questionFor("SKALA");
+      const vLabel = stash.stockValuation === "FIFO" ? "harga beli terakhir" : "harga rata-rata";
+      const rLabel = r === "PERPETUAL" ? "otomatis" : "manual";
+      return done(`Baik — HPP ${vLabel}, stok ${rLabel}. ${ask.reply}`, ask.chips, "SKALA");
     }
     case "SKALA": {
       // Phase 1: revenue (unless already captured).
@@ -328,16 +449,20 @@ export async function submitOnboardingMessage(
     case "REFERRAL": {
       const ref = parseReferral(text);
       profile = await upsertProfile(q, orgId, { referralSource: ref ?? "LAINNYA" });
-      return done(`${summaryOf(profile)}`, RINGKASAN_CHIPS, "RINGKASAN");
+      const stockLabel = stockSummaryLabel(await readStockStash(q, orgId));
+      return done(`${summaryOf(profile, stockLabel)}`, RINGKASAN_CHIPS, "RINGKASAN");
     }
     case "RINGKASAN": {
       const target = parseUbahTarget(text);
       if (target) {
+        if (target === "STOK") await clearStockStash(q, orgId);
         const ask = questionFor(target);
         return done(`Baik, kita perbaiki. ${ask.reply}`, ask.chips, target);
       }
-      if (!parseConfirm(text))
-        return done(`${summaryOf(profile)}\n\nBalas "Ya, lanjut" jika sudah benar, atau "ubah <bagian>" (misal: ubah jenis usaha).`, RINGKASAN_CHIPS, "RINGKASAN");
+      if (!parseConfirm(text)) {
+        const stockLabel = stockSummaryLabel(await readStockStash(q, orgId));
+        return done(`${summaryOf(profile, stockLabel)}\n\nBalas "Ya, lanjut" jika sudah benar, atau "ubah <bagian>" (misal: ubah jenis usaha).`, RINGKASAN_CHIPS, "RINGKASAN");
+      }
       const type = profile.businessType as BusinessType | null;
       if (!type) return done("Jenis usaha belum terisi — pilih salah satu ya.", JENIS_CHIPS, "JENIS");
       const defs = coaForBusinessType(type);
@@ -520,13 +645,15 @@ export async function finalizeOnboarding(orgId: string, key: string): Promise<Fi
     const lossAcc = orgAccounts.find((a) => a.name.toLowerCase().includes("selisih") || a.code.startsWith("5-19"));
 
     const { inventorySettings } = await import("@/server/db/schema/inventory");
+    const stockStash = await readStockStash(tx, orgId);
     await tx.insert(inventorySettings).values({
       orgId,
-      valuationMethod: "WEIGHTED_AVERAGE",
-      recordingMethod: type === "JASA" ? "PERIODIC" : "PERPETUAL",
+      valuationMethod: stockStash.stockValuation ?? "WEIGHTED_AVERAGE",
+      recordingMethod: stockStash.stockRecording ?? (type === "JASA" ? "PERIODIC" : "PERPETUAL"),
       cogsAccountId: cogsAcc?.id ?? null,
       adjustmentLossAccountId: lossAcc?.id ?? null,
     }).onConflictDoNothing();
+    await clearStockStash(tx, orgId);
     const { seedSubledgerControls } = await import("@/server/db/repos/subledger.repo");
     const arAcc = orgAccounts.find((a) => a.code === "1200");
     const apAcc = orgAccounts.find((a) => a.code === "2100");

@@ -19,6 +19,13 @@ describe("onboarding engine", () => {
     r = await submitOnboardingMessage(db, orgId, "Warung Budi");
     expect(r.step).toBe("JENIS");
     r = await submitOnboardingMessage(db, orgId, "warteg di Tebet");
+    expect(r.step).toBe("STOK");
+    expect(r.chips).toContain("Harga rata-rata (disarankan)");
+    expect(r.steps).toContain("STOK");
+    r = await submitOnboardingMessage(db, orgId, "Harga rata-rata (disarankan)");
+    expect(r.step).toBe("STOK");
+    expect(r.chips).toContain("Otomatis tiap jual/beli (disarankan)");
+    r = await submitOnboardingMessage(db, orgId, "Otomatis tiap jual/beli (disarankan)");
     expect(r.step).toBe("SKALA");
     r = await submitOnboardingMessage(db, orgId, "omzet 20 juta, karyawan 3");
     expect(r.step).toBe("LOKASI");
@@ -27,6 +34,7 @@ describe("onboarding engine", () => {
     r = await submitOnboardingMessage(db, orgId, "Teman");
     expect(r.step).toBe("RINGKASAN");
     expect(r.reply).toContain("Warung Budi");
+    expect(r.reply).toContain("harga rata-rata");
     r = await submitOnboardingMessage(db, orgId, "Ya, lanjut");
     expect(r.step).toBe("COA");
     expect(r.coaPreview?.some((a) => a.name === "Beban Komisi Delivery")).toBe(true);
@@ -37,6 +45,45 @@ describe("onboarding engine", () => {
     const rows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
     expect(rows.some((a) => a.name === "Beban Iklan")).toBe(true);
     expect(rows.some((a) => a.name === "Beban Komisi Delivery")).toBe(true);
+    const { getInventorySettings } = await import("@/server/db/repos/inventory.repo");
+    const settings = await getInventorySettings(db, orgId);
+    expect(settings?.valuationMethod).toBe("WEIGHTED_AVERAGE");
+    expect(settings?.recordingMethod).toBe("PERPETUAL");
+  });
+
+  it("JASA melewati STOK langsung ke SKALA", async () => {
+    const { orgId } = await makeOrg("Org Jasa");
+    const { upsertProfile } = await import("@/server/db/repos/onboarding.repo");
+    await upsertProfile(db, orgId, {
+      displayName: "B",
+      businessName: "Salon",
+      currentStep: "JENIS",
+    });
+    const r = await submitOnboardingMessage(db, orgId, "salon");
+    expect(r.step).toBe("SKALA");
+    expect(r.steps).not.toContain("STOK");
+  });
+
+  it("finalize memakai pilihan stok dari onboarding", async () => {
+    const { orgId } = await makeOrg("Org Stok");
+    const { upsertProfile } = await import("@/server/db/repos/onboarding.repo");
+    const { coaForBusinessType } = await import("@/core/accounts/coa-templates");
+    await upsertProfile(db, orgId, {
+      displayName: "A",
+      businessName: "Toko",
+      businessType: "DAGANG",
+      currentStep: "COA",
+      coaDraft: coaForBusinessType("DAGANG"),
+    });
+    const { organizations } = await import("@/server/db/schema/org");
+    await db.update(organizations)
+      .set({ settings: { stockValuation: "FIFO", stockRecording: "PERIODIC" } })
+      .where(eq(organizations.id, orgId));
+    await finalizeOnboarding(orgId, "stok-key-1");
+    const { getInventorySettings } = await import("@/server/db/repos/inventory.repo");
+    const settings = await getInventorySettings(db, orgId);
+    expect(settings?.valuationMethod).toBe("FIFO");
+    expect(settings?.recordingMethod).toBe("PERIODIC");
   });
 
   it("handles SKALA in two phases (revenue chip, then employees)", async () => {

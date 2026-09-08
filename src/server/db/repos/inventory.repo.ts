@@ -62,6 +62,18 @@ export async function getInventorySettings(q: Queryable, orgId: string) {
   return row ?? null;
 }
 
+/**
+ * Kunci kebijakan metode (WAC/FIFO, perpetual/periodik).
+ * Idempoten; tidak melempar bila settings belum ada.
+ * Dipanggil saat mutasi stok operasional POSTED pertama (jual/beli/opname),
+ * dibuka lagi oleh tutup tahun (closePeriod isYearEnd).
+ */
+export async function lockInventoryPolicy(q: Queryable, orgId: string): Promise<void> {
+  await q.update(inventorySettings)
+    .set({ isLocked: true })
+    .where(and(eq(inventorySettings.orgId, orgId), eq(inventorySettings.isLocked, false)));
+}
+
 export async function upsertInventorySettings(
   q: Queryable,
   orgId: string,
@@ -652,12 +664,7 @@ export async function postOpnameAdjustment(
     .returning();
 
   // Policy lock berlaku saat POSTED (bukan saat draf dibuat).
-  const settings = await getInventorySettings(q, orgId);
-  if (settings && !settings.isLocked) {
-    await q.update(inventorySettings)
-      .set({ isLocked: true })
-      .where(eq(inventorySettings.id, settings.id));
-  }
+  await lockInventoryPolicy(q, orgId);
 
   return { opname: completed ?? opnameData, journalEntryId: entry.id, journalNumber: posted[0].number };
 }

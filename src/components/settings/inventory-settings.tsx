@@ -127,6 +127,7 @@ export function InventorySettingsTab({
           </h2>
           <p className="mt-0.5 text-xs text-ink-soft">
             Standar valuasi harga pokok barang, sistem pencatatan buku besar, serta integrasi otomatisasi bagan akun (COA).
+            Metode terkunci otomatis sejak mutasi stok pertama dan terbuka lagi setiap tutup tahun.
           </p>
         </div>
 

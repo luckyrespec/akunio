@@ -2,8 +2,11 @@ import { eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
 import { todayISO } from "@/lib/date";
 import { db } from "@/server/db";
-import { accounts } from "@/server/db/schema/org";
+import { accounts, organizations } from "@/server/db/schema/org";
 import { findPeriodByDate } from "@/server/db/repos/periods.repo";
+import { evaluatePeriodReadiness } from "@/server/db/repos/periods-closing.repo";
+import { getYearEndPromptState } from "@/core/periods/year-end";
+import { YearEndReminder } from "@/components/dasbor/year-end-reminder";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { postedLinesBetween, postedLinesThrough } from "@/server/reports/build";
 import { aggregateFromLines, signed } from "@/core/reports/aggregates";
@@ -92,6 +95,43 @@ export default async function DasborPage() {
   const overdueARMinor = overdueAR.reduce((s, i) => s + i.outstandingMinor, 0n);
   const overdueAPMinor = overdueAP.reduce((s, i) => s + i.outstandingMinor, 0n);
 
+  // Pengingat tutup tahun: hanya dihitung saat Desember kalender.
+  let yearEnd: {
+    year: number;
+    periodName: string;
+    showBanner: boolean;
+    showModal: boolean;
+    isReady: boolean;
+    blockers: string[];
+  } | null = null;
+  if (now.getMonth() === 11) {
+    const decPeriod = await findPeriodByDate(db, ctx.orgId, `${year}-12-15`);
+    const [orgRow] = await db
+      .select({ settings: organizations.settings })
+      .from(organizations)
+      .where(eq(organizations.id, ctx.orgId))
+      .limit(1);
+    const dismissed = ((orgRow?.settings ?? {}) as Record<string, unknown>).dismissedYearEnd;
+    const st = getYearEndPromptState({
+      todayISO: today,
+      decPeriodStatus: (decPeriod?.status as "OPEN" | "CLOSED" | "LOCKED" | undefined) ?? null,
+      dismissedPeriod: typeof dismissed === "string" ? dismissed : null,
+    });
+    if (st.showBanner || st.showModal) {
+      const readiness = await evaluatePeriodReadiness(db, ctx.orgId, st.periodName);
+      yearEnd = {
+        year: st.year,
+        periodName: st.periodName,
+        showBanner: st.showBanner,
+        showModal: st.showModal,
+        isReady: readiness.isReady,
+        blockers: Object.values(readiness.items)
+          .filter((i) => !i.passed)
+          .map((i) => i.title),
+      };
+    }
+  }
+
   const daysLeft = data.period
     ? Math.max(
         0,
@@ -165,6 +205,17 @@ export default async function DasborPage() {
           </div>
         }
       />
+
+      {yearEnd && (yearEnd.showBanner || yearEnd.showModal) && (
+        <YearEndReminder
+          year={yearEnd.year}
+          periodName={yearEnd.periodName}
+          showBanner={yearEnd.showBanner}
+          showModal={yearEnd.showModal}
+          isReady={yearEnd.isReady}
+          blockers={yearEnd.blockers}
+        />
+      )}
 
       {/* Panel posisi & denyut — instrumen utama, bukan kartu metrik */}
       <Reveal>

@@ -17,6 +17,7 @@ export default async function OnboardingPage() {
     <OnboardingChatClient
       initialMessages={view.messages}
       initialStep={view.profile?.currentStep ?? "NAMA"}
+      initialSteps={view.steps}
       initialPreview={view.coaPreview}
       initialChips={view.chips}
       initialBusinessName={view.profile?.businessName ?? null}

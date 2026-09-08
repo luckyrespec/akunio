@@ -9,6 +9,7 @@ export const ONBOARDING_STEPS = [
   "NAMA",
   "USAHA",
   "JENIS",
+  "STOK",
   "SKALA",
   "LOKASI",
   "REFERRAL",

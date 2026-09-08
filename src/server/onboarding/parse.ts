@@ -156,6 +156,24 @@ export function parseConfirm(input: string): boolean {
   );
 }
 
+/** Pilihan cara hitung HPP saat onboarding: chip "rata-rata" vs "FIFO". */
+export function parseStockValuation(input: string): "WEIGHTED_AVERAGE" | "FIFO" | null {
+  const t = norm(input);
+  if (!t) return null;
+  if (/fifo|harga (beli |pembelian )?(terakhir|terbaru)/.test(t)) return "FIFO";
+  if (/rata|average|stabil/.test(t)) return "WEIGHTED_AVERAGE";
+  return null;
+}
+
+/** Pilihan cara catat stok: "otomatis" (perpetual) vs "manual" (periodik). */
+export function parseStockRecording(input: string): "PERPETUAL" | "PERIODIC" | null {
+  const t = norm(input);
+  if (!t) return null;
+  if (/manual|akhir bulan|hitung sendiri/.test(t)) return "PERIODIC";
+  if (/otomatis|auto|langsung/.test(t)) return "PERPETUAL";
+  return null;
+}
+
 const UBAH_TARGETS: Array<{ step: OnboardingStep; res: RegExp[] }> = [
   { step: "USAHA", res: [/nama usaha/, /\busaha\b/] },
   { step: "NAMA", res: [/\bnama\b/, /panggil/] },
@@ -163,6 +181,7 @@ const UBAH_TARGETS: Array<{ step: OnboardingStep; res: RegExp[] }> = [
   { step: "SKALA", res: [/omzet/, /omset/, /skala/, /karyawan/, /penghasilan/] },
   { step: "LOKASI", res: [/alamat/, /kota/, /lokasi/, /domisili/, /tempat/] },
   { step: "REFERRAL", res: [/referral/, /\btahu\b/, /dapat info/, /dari mana/, /sumber/] },
+  { step: "STOK", res: [/stok/, /\bhpp\b/, /fifo/, /rata-rata/, /pencatatan/, /persediaan/] },
 ];
 
 /** "ubah nama usaha" → USAHA. Returns null when no target is identifiable. */

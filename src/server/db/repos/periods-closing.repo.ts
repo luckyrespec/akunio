@@ -219,5 +219,14 @@ export async function closePeriod(
     .where(and(eq(fiscalPeriods.orgId, orgId), eq(fiscalPeriods.id, period.id)))
     .returning();
 
+  // Tahun buku selesai → kebijakan metode persediaan dibuka lagi sampai
+  // mutasi stok pertama tahun berikutnya.
+  if (isYearEnd) {
+    const { inventorySettings } = await import("../schema/inventory");
+    await q.update(inventorySettings)
+      .set({ isLocked: false })
+      .where(and(eq(inventorySettings.orgId, orgId), eq(inventorySettings.isLocked, true)));
+  }
+
   return { period: updatedPeriod, closingJournalId };
 }

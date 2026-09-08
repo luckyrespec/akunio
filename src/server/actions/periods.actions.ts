@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
@@ -8,6 +9,31 @@ import { setPeriodStatus } from "@/server/db/repos/periods.repo";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
+
+export async function dismissYearEndPromptAction(periodName: string): Promise<ActionResult> {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    if (!/^\d{4}-12$/.test(periodName)) throw new Error("PERIODE_TIDAK_VALID: format YYYY-12");
+    const { organizations } = await import("@/server/db/schema/org");
+    await db.transaction(async (tx) => {
+      const [org] = await tx
+        .select({ settings: organizations.settings })
+        .from(organizations)
+        .where(eq(organizations.id, ctx.orgId))
+        .limit(1);
+      const cur = (org?.settings ?? {}) as Record<string, unknown>;
+      await tx
+        .update(organizations)
+        .set({ settings: { ...cur, dismissedYearEnd: periodName } })
+        .where(eq(organizations.id, ctx.orgId));
+    });
+    revalidatePath("/dasbor");
+    return { ok: true };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    return { ok: false, error: e instanceof Error ? e.message : "GAGAL_SIMPAN_PILIHAN" };
+  }
+}
 
 export async function ensureYearPeriodsAction(
   year: number,

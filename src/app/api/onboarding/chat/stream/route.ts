@@ -4,7 +4,7 @@ import { db } from "@/server/db";
 import { buildPolishPrompt, submitOnboardingMessage } from "@/server/onboarding/engine";
 
 // SSE ala /api/nara/chat/stream: {type:"text",delta} mengalir per token,
-// lalu {type:"done", reply, chips, step, coaPreview, finished}.
+// lalu {type:"done", reply, chips, step, coaPreview, finished, steps}.
 // Yang di-stream adalah paraphrase polish() — mesin step (validasi, chips,
 // COA) tetap deterministik di server dan tidak pernah datang dari LLM.
 export async function POST(req: NextRequest) {
@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
           step: result.step,
           coaPreview: result.coaPreview ?? null,
           finished: !!result.finished,
+          steps: result.steps ?? [],
         });
       } catch (err) {
         send({ type: "error", message: err instanceof Error ? err.message : "Gagal memproses pesan." });
@@ -87,6 +88,9 @@ export async function POST(req: NextRequest) {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      // Cegah proxy (nginx/Vercel) menahan chunk SSE sampai stream selesai —
+      // tanpa ini token menumpuk lalu keluar bergerombol (terasa patah).
+      "X-Accel-Buffering": "no",
     },
   });
 }

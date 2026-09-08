@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import Image from "next/image";
 import type { AccountDef } from "@/core/accounts/types";
@@ -18,46 +18,114 @@ import { AkunioStage, type StageStatus } from "./akunio-stage";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 
 interface ChatMessage {
+  id: string;
   role: "user" | "assistant";
   content: string;
 }
 
-const STEP_ORDER = ["NAMA", "USAHA", "JENIS", "SKALA", "LOKASI", "REFERRAL", "RINGKASAN", "COA"] as const;
+const BASE_STEPS = ["NAMA", "USAHA", "JENIS", "SKALA", "LOKASI", "REFERRAL", "RINGKASAN", "COA"];
 
 const PLACEHOLDERS: Record<string, string> = {
   NAMA: "cth: Budi",
   USAHA: "cth: Warung Barokah",
   JENIS: "cth: warteg, bengkel, toko online…",
+  STOK: "cth: rata-rata",
   SKALA: "cth: omzet 20 juta / baru mulai",
   LOKASI: "cth: Yogyakarta (atau Lewati)",
   REFERRAL: "cth: dari teman",
 };
 
+/**
+ * Bubble pesan yang di-memo: riwayat tidak ikut re-render tiap token
+ * stream — hanya bubble stream yang diperbarui per frame. Tanpa ini,
+ * React merekonsiliasi seluruh daftar pesan untuk setiap delta kecil
+ * dan stream terlihat patah-patah.
+ */
+const ChatBubble = memo(function ChatBubble({
+  role,
+  content,
+  staticAppear,
+  delay,
+}: {
+  role: "user" | "assistant";
+  content: string;
+  staticAppear: boolean;
+  delay: number;
+}) {
+  return (
+    <motion.div
+      initial={staticAppear ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay, ease: "easeOut" }}
+      className={`flex ${role === "user" ? "justify-end" : "justify-start"}`}
+    >
+      <div
+        className={`max-w-[85%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-xs ${
+          role === "user"
+            ? "rounded-br-md bg-terra text-white"
+            : "rounded-bl-md border border-rule bg-paper text-ink"
+        }`}
+      >
+        {content}
+      </div>
+    </motion.div>
+  );
+});
+
 export function OnboardingChatClient({
   initialMessages,
   initialStep,
+  initialSteps,
   initialPreview,
   initialChips,
   initialBusinessName,
 }: {
-  initialMessages: ChatMessage[];
+  initialMessages: Array<{ role: "user" | "assistant"; content: string }>;
   initialStep: string;
+  initialSteps: string[];
   initialPreview: AccountDef[] | null;
   initialChips: string[];
   initialBusinessName: string | null;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    initialMessages.map((m, i) => ({ ...m, id: `init-${i}` })),
+  );
   const [chips, setChips] = useState<string[]>(initialChips);
   const [step, setStep] = useState<string>(initialStep);
+  const [steps, setSteps] = useState<string[]>(
+    initialSteps.length > 0 ? initialSteps : BASE_STEPS,
+  );
   const [preview, setPreview] = useState<AccountDef[] | null>(initialPreview);
   const [text, setText] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
+  // Id pesan yang baru selesai di-stream: teksnya sudah terlihat utuh di
+  // bubble stream, jadi bubble finalnya harus muncul diam tanpa animasi
+  // entrance (fade/slide) yang menggeser dan "menghancurkan" stream.
+  const [freshId, setFreshId] = useState<string | null>(null);
   const [announce, setAnnounce] = useState("");
   const [preparing, setPreparing] = useState(initialStep === "SELESAI");
-  const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const idRef = useRef(initialMessages.length);
+  const nextId = () => `m${(idRef.current += 1)}`;
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Penambat bawah: true selama user di dekat bawah. Diperbarui oleh
+  // onScroll container — effect auto-scroll menghormatinya agar tidak
+  // merampas bacaan riwayat saat stream berjalan.
+  const pinnedRef = useRef(true);
+  // Buffer stream: delta jaringan menumpuk di ref, cat hanya disiram ke
+  // state sekali per animation frame (maks 1 render/frame, bukan per token).
+  const accRef = useRef("");
+  const rafRef = useRef<number | null>(null);
+  const flushStream = () => {
+    rafRef.current = null;
+    setStreamText(accRef.current);
+  };
+  const scheduleFlush = () => {
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(flushStream);
+  };
 
   // Testability marker: effects run only after hydration commits, so e2e
   // can wait for this instead of racing keystrokes against hydration
@@ -70,24 +138,29 @@ export function OnboardingChatClient({
   }, []);
 
   useEffect(() => {
-    // Hanya ikut ke bawah bila user memang sudah di dekat bawah —
-    // jangan rampas bacaan riwayat saat stream berjalan.
+    // Pin instan ke bawah (tanpa animasi smooth): smooth scroll per token
+    // saling membatalkan puluhan kali per detik dan itu sumber utama
+    // stream terasa patah-patah. Instant scrollTop mengikuti teks tumbuh
+    // seperti ChatGPT/Claude/Gemini.
     const el = scrollRef.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight > 140) return;
-    const reduced =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    bottomRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "end" });
+    if (!el || !pinnedRef.current) return;
+    el.scrollTop = el.scrollHeight;
   }, [messages, preview, streamText]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    },
+    [],
+  );
 
   async function send(raw: string) {
     const value = raw.trim();
     if (!value || streaming || preparing) return;
     setText("");
     setChips([]);
-    setMessages((m) => [...m, { role: "user", content: value }]);
+    setMessages((m) => [...m, { id: nextId(), role: "user", content: value }]);
     setStreaming(true);
     setStreamText("");
 
@@ -138,7 +211,8 @@ export function OnboardingChatClient({
           };
           if (payload.type === "text" && payload.delta) {
             acc += payload.delta;
-            setStreamText(acc);
+            accRef.current = acc;
+            scheduleFlush();
           } else if (payload.type === "done") {
             final = {
               reply: payload.reply ?? acc,
@@ -153,15 +227,23 @@ export function OnboardingChatClient({
         }
       }
       if (final) {
-        setMessages((m) => [...m, { role: "assistant", content: (final as { reply: string }).reply }]);
-        const f = final as { chips: string[]; step: string; coaPreview: AccountDef[] | null; finished: boolean };
+        const assistantId = nextId();
+        setMessages((m) => [
+          ...m,
+          { id: assistantId, role: "assistant", content: (final as { reply: string }).reply },
+        ]);
+        // Tandai agar bubble final ini dirender statis — stream sudah bagus,
+        // jangan dianimasikan lagi setelah selesai.
+        setFreshId(assistantId);
+        const f = final as { chips: string[]; step: string; coaPreview: AccountDef[] | null; finished: boolean; steps?: string[] };
         setChips(f.chips);
         setStep(f.step);
+        if (f.steps && f.steps.length > 0) setSteps(f.steps);
         if (f.coaPreview) setPreview(f.coaPreview);
         if (f.finished) setPreparing(true);
       } else if (acc) {
         // Stream terputus tanpa done (mis. dibatalkan): simpan yang sudah ada.
-        setMessages((m) => [...m, { role: "assistant", content: acc }]);
+        setMessages((m) => [...m, { id: nextId(), role: "assistant", content: acc }]);
       }
     } catch (err) {
       if ((err as Error).name === "AbortError" && !timedOut) return;
@@ -170,23 +252,42 @@ export function OnboardingChatClient({
         : "Maaf, ada gangguan sebentar. Coba kirim ulang ya.";
       if (timedOut && acc) {
         // Timeout di tengah stream: simpan potongan yang sudah ada.
-        setMessages((m) => [...m, { role: "assistant", content: acc }]);
+        setMessages((m) => [...m, { id: nextId(), role: "assistant", content: acc }]);
       }
-      setMessages((m) => [...m, { role: "assistant", content: msg }]);
+      setMessages((m) => [...m, { id: nextId(), role: "assistant", content: msg }]);
       setAnnounce(msg);
     } finally {
       clearTimeout(timeout);
+      // Batalkan flush terjadwal agar teks basi tidak sempat tercat lagi
+      // setelah bubble stream ditutup (bubble final sudah statis & utuh).
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       setStreaming(false);
       setStreamText("");
     }
   }
 
-  const stepIndex = STEP_ORDER.indexOf(step as (typeof STEP_ORDER)[number]);
+  /** Saran chip hanya mengisi kotak chat (tidak langsung terkirim). */
+  function fillSuggestion(c: string) {
+    if (streaming || preparing) return;
+    setText(c);
+    // Textarea autoresize hanya jalan di event change — selaraskan manual,
+    // lalu fokus agar user tinggal tekan Enter.
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+      el.focus();
+    });
+  }
+
+  const stepIndex = steps.indexOf(step);
   const busy = streaming || preparing;
   const reduced = usePrefersReducedMotion();
   const stageStatus: StageStatus = preparing ? "done" : streaming ? "typing" : "idle";
-  const stageStepLabel =
-    stepIndex >= 0 ? `Langkah ${stepIndex + 1} dari ${STEP_ORDER.length}` : null;
 
   return (
     <div className="flex h-dvh flex-col bg-canvas">
@@ -205,7 +306,7 @@ export function OnboardingChatClient({
                 <p className="font-display text-lg font-semibold text-ink">Kenalan dengan Akunio</p>
           <p className="text-xs text-ink-soft">
             {stepIndex >= 0 ? (
-              <>Langkah {stepIndex + 1} dari {STEP_ORDER.length} · Penyiapan awal usaha Anda</>
+              <>Langkah {stepIndex + 1} dari {steps.length} · Penyiapan awal usaha Anda</>
             ) : (
               <>Penyiapan awal usaha Anda</>
             )}
@@ -216,13 +317,13 @@ export function OnboardingChatClient({
               aria-label="Kemajuan penyiapan"
               aria-valuenow={stepIndex + 1}
               aria-valuemin={1}
-              aria-valuemax={STEP_ORDER.length}
+              aria-valuemax={steps.length}
               className="mt-2 h-0.5 overflow-hidden rounded-full bg-rule"
             >
               <motion.div
                 className="h-full origin-left rounded-full bg-terra"
                 initial={false}
-                animate={{ scaleX: (stepIndex + 1) / STEP_ORDER.length }}
+                animate={{ scaleX: (stepIndex + 1) / steps.length }}
                 transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 120, damping: 20 }}
               />
             </div>
@@ -231,25 +332,23 @@ export function OnboardingChatClient({
             </div>
         </header>
 
-        <div ref={scrollRef} className="paper-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto py-5">
+        <div
+          ref={scrollRef}
+          onScroll={() => {
+            const el = scrollRef.current;
+            if (!el) return;
+            pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 140;
+          }}
+          className="paper-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto py-5"
+        >
           {messages.map((m, i) => (
-            <motion.div
-              key={i}
-              initial={reduced ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, delay: Math.min(i, 4) * 0.06, ease: "easeOut" }}
-              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[85%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-xs ${
-                  m.role === "user"
-                    ? "rounded-br-md bg-terra text-white"
-                    : "rounded-bl-md border border-rule bg-paper text-ink"
-                }`}
-              >
-                {m.content}
-              </div>
-            </motion.div>
+            <ChatBubble
+              key={m.id}
+              role={m.role}
+              content={m.content}
+              staticAppear={reduced || m.id === freshId}
+              delay={Math.min(i, 4) * 0.06}
+            />
           ))}
           {streaming && (
             <div className="flex justify-start">
@@ -275,7 +374,6 @@ export function OnboardingChatClient({
           {step === "COA" && preview && !preparing && (
             <CoaPreview defs={preview} onConfirm={() => send("gunakan ini")} disabled={busy} />
           )}
-          <div ref={bottomRef} />
           {announce && (
             <p role="status" className="sr-only">
               {announce}
@@ -300,7 +398,7 @@ export function OnboardingChatClient({
                       size="sm"
                       data-testid="onboarding-chip"
                       disabled={busy}
-                      onClick={() => send(c)}
+                      onClick={() => fillSuggestion(c)}
                       className="rounded-full border-rule bg-paper text-xs shadow-xs hover:border-terra/50 hover:text-terra"
                     >
                       {c}
@@ -312,6 +410,7 @@ export function OnboardingChatClient({
             <PromptInput onSubmit={() => send(text)}>
               <PromptInputBody>
                 <PromptInputTextarea
+                  ref={inputRef}
                   data-testid="onboarding-input"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
@@ -336,7 +435,7 @@ export function OnboardingChatClient({
         )}
         </div>
 
-        <AkunioStage status={stageStatus} stepLabel={stageStepLabel} />
+        <AkunioStage status={stageStatus} />
       </div>
 
       {preparing && (
