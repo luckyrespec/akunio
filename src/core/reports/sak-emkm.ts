@@ -55,8 +55,16 @@ export function buildSakEmkmBalanceSheet(
   const liabilityList = list.filter((a) => a.meta.type === "LIABILITAS").map(toRow);
   const equityList = list.filter((a) => a.meta.type === "EKUITAS").map(toRow);
 
+  // Beban dibayar di muka (seri 16xx, mis. 1600 Sewa Dibayar di Muka) adalah
+  // aset LANCAR walau kodenya >= 1500 — daftar pengecualian eksplisit.
+  const isPrepaidSeries = (code: string): boolean => {
+    const n = parseInt(code, 10);
+    return !isNaN(n) && n >= 1600 && n < 1700;
+  };
+
   const currentAssetRows = sortByCode(
     assetList.filter((r) => {
+      if (isPrepaidSeries(r.code)) return true;
       const codeNum = parseInt(r.code, 10);
       return isNaN(codeNum) || codeNum < 1500;
     }),
@@ -64,6 +72,7 @@ export function buildSakEmkmBalanceSheet(
 
   const fixedAssetRows = sortByCode(
     assetList.filter((r) => {
+      if (isPrepaidSeries(r.code)) return false;
       const codeNum = parseInt(r.code, 10);
       return !isNaN(codeNum) && codeNum >= 1500;
     }),

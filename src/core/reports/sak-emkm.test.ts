@@ -10,6 +10,7 @@ const METAS: Map<string, ReportAccountMeta> = new Map([
   ["bank", M("bank", "1120", "Bank", "ASET", "D")],
   ["piutang", M("piutang", "1200", "Piutang Usaha", "ASET", "D")],
   ["persediaan", M("persediaan", "1300", "Persediaan Barang", "ASET", "D")],
+  ["dimuka", M("dimuka", "1600", "Sewa Dibayar di Muka", "ASET", "D")],
   ["peralatan", M("peralatan", "1500", "Peralatan Usaha", "ASET", "D")],
   ["utang", M("utang", "2100", "Utang Usaha", "LIABILITAS", "K")],
   ["utang_bank", M("utang_bank", "2400", "Utang Bank Jangka Panjang", "LIABILITAS", "K")],
@@ -71,5 +72,18 @@ describe("SAK EMKM Financial Statements Aggregations", () => {
     expect(bs.totalEquityMinor).toBe(40n * JT); // Modal 30jt + Laba Berjalan 10jt
     expect(bs.totalLiabilitiesAndEquityMinor).toBe(60n * JT);
     expect(bs.isBalanced).toBe(true);
+  });
+
+  it("menggolongkan 1600 sewa dibayar di muka sebagai aset lancar", () => {
+    const lines: LedgerLine[] = [
+      L("kas", 18n * JT, 0n), L("modal", 0n, 18n * JT),
+      L("dimuka", 12n * JT, 0n), L("kas", 0n, 12n * JT), // Bayar sewa 12jt di muka
+    ];
+    const aggs = aggregateFromLines(lines, METAS);
+    const is = buildSakEmkmIncomeStatement(aggs);
+    const bs = buildSakEmkmBalanceSheet(aggs, is.netIncomeMinor);
+    expect(bs.currentAssetRows.map((r) => r.code)).toContain("1600");
+    expect(bs.fixedAssetRows.map((r) => r.code)).not.toContain("1600");
+    expect(bs.totalCurrentAssetsMinor).toBe(18n * JT); // Kas 6jt + Dimuka 12jt
   });
 });
