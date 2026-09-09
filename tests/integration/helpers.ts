@@ -23,6 +23,7 @@ export async function truncateAll(): Promise<void> {
   await admin.query(`
     TRUNCATE assistant_memories, subledger_journal_links, subledger_controls,
                prepaid_schedule_lines, prepaid_contracts,
+               sak_sources,
                tax_summaries, audit_log, journal_lines, journal_entries, journal_seq_counters,
               kas_bank_entries, kas_bank_seq_counters, inventory_sku_counters,
               bank_statement_lines, bank_reconciliations,

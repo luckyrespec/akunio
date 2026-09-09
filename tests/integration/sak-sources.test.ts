@@ -1,8 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { sql } from "drizzle-orm";
 import { registerSakSource, getActiveSakSource, isSakSection } from "@/server/db/repos/sak.repo";
+import { truncateAll } from "./helpers";
 
 describe.skipIf(process.env.SKIP_DB_TESTS === "1")("sak sources registry", () => {
+  // sak_sources global (tanpa org_id): bersihkan sisa file lain agar
+  // "latest effective source" deterministik apa pun urutan eksekusi.
+  beforeEach(async () => { await truncateAll(); });
   it("isSakSection detects SAK sections only", () => {
     expect(isSakSection("SAK-EMKM-Bab7")).toBe(true);
     expect(isSakSection("IFRS-SME-3")).toBe(false);
