@@ -12,6 +12,7 @@ BEGIN
                             'tenant_chunks','chat_threads','onboarding_messages','org_profiles','ai_findings','ai_proposals',
                            'contacts','invoices','bank_reconciliations','kas_bank_entries','kas_bank_seq_counters',
                            'fixed_assets','asset_depreciation_lines','asset_disposals',
+                           'prepaid_contracts','prepaid_schedule_lines',
                            'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames','inventory_sku_counters',
                            'subledger_controls','subledger_journal_links',
                            'tax_summaries','assistant_memories']
