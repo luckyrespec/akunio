@@ -1,13 +1,20 @@
 import type { Queryable } from "./queryable";
 import { accounts } from "../schema/org";
-import { eq, asc, and } from "drizzle-orm";
+import { eq, asc, and, ilike, or } from "drizzle-orm";
 import type { ReportAccountMeta } from "@/core/reports/aggregates";
 import { checkPostingAccounts } from "@/core/journals/validate";
 
 type AccountRow = typeof accounts.$inferSelect;
 
-export async function listAccounts(q: Queryable, orgId: string): Promise<AccountRow[]> {
-  return q.select().from(accounts).where(eq(accounts.orgId, orgId)).orderBy(asc(accounts.code));
+export async function listAccounts(q: Queryable, orgId: string, keyword?: string): Promise<AccountRow[]> {
+  const term = keyword?.trim();
+  if (!term) {
+    return q.select().from(accounts).where(eq(accounts.orgId, orgId)).orderBy(asc(accounts.code));
+  }
+  const like = `%${term}%`;
+  return q.select().from(accounts)
+    .where(and(eq(accounts.orgId, orgId), or(ilike(accounts.code, like), ilike(accounts.name, like))))
+    .orderBy(asc(accounts.code));
 }
 
 export async function getAccountById(q: Queryable, orgId: string, id: string) {

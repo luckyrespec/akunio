@@ -1,4 +1,4 @@
-import { and, eq, ilike, or } from "drizzle-orm";
+import { and, eq, gte, ilike, lte, or } from "drizzle-orm";
 import { journalEntries } from "../schema/journal";
 import { accounts } from "../schema/org";
 import type { Queryable } from "./queryable";
@@ -8,12 +8,19 @@ export async function searchJournals(
   orgId: string,
   term: string,
   limit = 5,
+  opts: { dateFrom?: string; dateTo?: string } = {},
 ) {
   const like = `%${term}%`;
+  const conds = [
+    eq(journalEntries.orgId, orgId),
+    or(ilike(journalEntries.number, like), ilike(journalEntries.memo, like)),
+  ];
+  if (opts.dateFrom) conds.push(gte(journalEntries.entryDate, opts.dateFrom));
+  if (opts.dateTo) conds.push(lte(journalEntries.entryDate, opts.dateTo));
   return q
     .select({ id: journalEntries.id, number: journalEntries.number, memo: journalEntries.memo, entryDate: journalEntries.entryDate })
     .from(journalEntries)
-    .where(and(eq(journalEntries.orgId, orgId), or(ilike(journalEntries.number, like), ilike(journalEntries.memo, like))))
+    .where(and(...conds))
     .limit(limit);
 }
 
