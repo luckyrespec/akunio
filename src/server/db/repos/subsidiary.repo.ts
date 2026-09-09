@@ -1,7 +1,9 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 import type { Queryable } from "./queryable";
 import { contacts, invoices, invoicePayments } from "../schema/invoicing";
 import { inventoryItems, inventoryTransactions, stockOpnames } from "../schema/inventory";
+import { prepaidContracts, prepaidScheduleLines } from "../schema/prepaid";
+import { fixedAssets, assetDepreciationLines } from "../schema/assets";
 import { buildContactCard, type ContactLedgerInput } from "@/core/subledger/cards";
 import { getSubledgerControls } from "./subledger.repo";
 import type { SubledgerKind } from "../schema/subledger";
@@ -161,4 +163,70 @@ export async function getContactCard(
     amountMinor: p.amountMinor,
   }));
   return { contact, entries: buildContactCard(type === "INVOICE" ? "PIUTANG" : "UTANG", bills, payments) };
+}
+
+export async function listPrepaidCards(q: Queryable, orgId: string) {
+  return q.select().from(prepaidContracts)
+    .where(eq(prepaidContracts.orgId, orgId))
+    .orderBy(asc(prepaidContracts.code));
+}
+
+export async function getPrepaidCard(q: Queryable, orgId: string, contractId: string) {
+  const [contract] = await q.select().from(prepaidContracts)
+    .where(and(eq(prepaidContracts.orgId, orgId), eq(prepaidContracts.id, contractId)))
+    .limit(1);
+  if (!contract) return null;
+  const lines = await q.select().from(prepaidScheduleLines)
+    .where(and(eq(prepaidScheduleLines.orgId, orgId), eq(prepaidScheduleLines.contractId, contractId)))
+    .orderBy(asc(prepaidScheduleLines.periodName));
+  return { contract, lines };
+}
+
+export interface AssetCardSummary {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  acquisitionDate: string;
+  acquisitionCostMinor: bigint;
+  accumulatedMinor: bigint;
+  bookValueMinor: bigint;
+  status: string;
+  depreciationMethod: string;
+}
+
+/** Kartu aset per unit dengan nilai buku dari susut yang SUDAH diposting. */
+export async function listAssetCards(q: Queryable, orgId: string): Promise<AssetCardSummary[]> {
+  const assets = await q.select().from(fixedAssets)
+    .where(eq(fixedAssets.orgId, orgId))
+    .orderBy(desc(fixedAssets.createdAt));
+  if (assets.length === 0) return [];
+  const posted = await q.select({
+    assetId: assetDepreciationLines.assetId,
+    total: assetDepreciationLines.depreciationAmountMinor,
+  }).from(assetDepreciationLines)
+    .where(and(
+      eq(assetDepreciationLines.orgId, orgId),
+      eq(assetDepreciationLines.status, "POSTED"),
+      inArray(assetDepreciationLines.assetId, assets.map((a) => a.id)),
+    ));
+  const accumByAsset = new Map<string, bigint>();
+  for (const p of posted) {
+    accumByAsset.set(p.assetId, (accumByAsset.get(p.assetId) ?? 0n) + p.total);
+  }
+  return assets.map((a) => {
+    const accumulatedMinor = accumByAsset.get(a.id) ?? 0n;
+    return {
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      category: a.category,
+      acquisitionDate: a.acquisitionDate,
+      acquisitionCostMinor: a.acquisitionCostMinor,
+      accumulatedMinor,
+      bookValueMinor: a.acquisitionCostMinor - accumulatedMinor,
+      status: a.status,
+      depreciationMethod: a.depreciationMethod,
+    };
+  });
 }

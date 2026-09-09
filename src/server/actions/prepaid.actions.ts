@@ -6,6 +6,7 @@ import { createPrepaidContract, postMonthlyAmortization } from "@/server/db/repo
 export async function createPrepaidContractAction(input: {
   name: string; vendor?: string; startDate: string; months: number;
   totalMinor: string; controlAccountId: string; expenseAccountId: string; paymentAccountId: string;
+  notes?: string;
 }) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);

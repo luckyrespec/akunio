@@ -6,13 +6,15 @@ import { SUBLEDGER_KIND_LABEL, SUBLEDGER_LIST_ROUTE } from "@/core/subledger/car
 import { getSubledgerReconAction } from "@/server/actions/subledger.actions";
 import { RunCheckButton } from "./run-check-button";
 import { Entrance } from "@/components/subsidiary/animated";
-import { Package, Users, Store, ChevronRight } from "lucide-react";
+import { Package, Users, Store, Building2, CalendarClock, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const KIND_META = {
   PERSEDIAAN: { icon: Package, title: "Kartu Persediaan per SKU", desc: "Mutasi masuk, keluar, dan saldo tiap barang" },
   PIUTANG: { icon: Users, title: "Kartu Piutang per Pelanggan", desc: "Tagihan, pembayaran, dan sisa tiap pelanggan" },
   UTANG: { icon: Store, title: "Kartu Utang per Pemasok", desc: "Tagihan, pelunasan, dan sisa tiap pemasok" },
+  ASET_TETAP: { icon: Building2, title: "Kartu Aset per Unit", desc: "Biaya, akumulasi susut, dan nilai buku tiap aset" },
+  DIMUKA: { icon: CalendarClock, title: "Kartu Dimuka per Kontrak", desc: "Nilai kontrak, sudah diakui, dan sisa tiap kontrak" },
 } as const;
 
 export default async function BukuPembantuPage() {
