@@ -4,6 +4,7 @@ import type { PgDatabase } from "drizzle-orm/pg-core";
 import type { NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
 import { db } from "@/server/db";
 import { accounts, fiscalPeriods } from "@/server/db/schema/org";
+import { subledgerControls } from "@/server/db/schema/subledger";
 import type { AccountDef } from "@/core/accounts/types";
 import { COA_TEMPLATE } from "@/core/accounts/coa-template";
 
@@ -73,4 +74,31 @@ export async function seedOrgData(
 
   await seedOrgAccounts(orgId, COA_TEMPLATE, exec);
   await seedFiscalPeriods(orgId, fiscalYearStartMonth, exec);
+  await seedPersediaanControl(orgId, exec);
+}
+
+/**
+ * Daftarkan kontrol PERSEDIAAN agar alur modul (opname, pembelian) langsung
+ * bisa posting tanpa menunggu onboarding selesai. Idempoten; dilewati bila
+ * COA tidak punya akun persediaan (mis. usaha jasa).
+ */
+async function seedPersediaanControl(orgId: string, exec: Executor): Promise<void> {
+  const orgAccounts = await exec
+    .select()
+    .from(accounts)
+    .where(eq(accounts.orgId, orgId));
+  const isParent = (code: string) => orgAccounts.some((a) => a.parentCode === code);
+  const cands = orgAccounts.filter(
+    (a) => a.code.startsWith("13") || a.name.toLowerCase().includes("persediaan"),
+  );
+  const invAcc =
+    cands.find((a) => a.code === "1310" && !isParent(a.code)) ??
+    cands.find((a) => !isParent(a.code)) ??
+    cands[0] ??
+    null;
+  if (!invAcc) return;
+  await exec
+    .insert(subledgerControls)
+    .values({ orgId, kind: "PERSEDIAAN", controlAccountId: invAcc.id })
+    .onConflictDoNothing({ target: [subledgerControls.orgId, subledgerControls.kind] });
 }

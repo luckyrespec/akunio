@@ -6,6 +6,8 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("nara new tools (kontak, pemb
   let orgId: string;
   let cashAccountId = "";
   let expenseAccountId = "";
+  let lossAccountId = "";
+  let gainAccountId = "";
   let assetAccA = "";
   let assetAccB = "";
   let assetAccC = "";
@@ -36,6 +38,13 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("nara new tools (kontak, pemb
     }
     cashAccountId = cash.id;
     expenseAccountId = expenses[0].id;
+    const lossRow = rows.rows.find((r) => r.code === "5900") ?? expenses[0];
+    const gainRow = rows.rows.find((r) => r.code === "4200") ?? others[0];
+    if (!lossRow || !gainRow) {
+      throw new Error("COA seed tidak lengkap untuk test tools");
+    }
+    lossAccountId = lossRow.id;
+    gainAccountId = gainRow.id;
     [assetAccA, assetAccB, assetAccC] = [others[1].id, others[2].id, others[3].id];
   });
   afterAll(async () => {
@@ -174,12 +183,30 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("nara new tools (kontak, pemb
     itemId = (item as { id: string }).id;
 
     const { inventoryHandlers } = await import("@/server/ai/tools/inventory.tools");
+    // Pemetaan akun selisih (jalur Pengaturan > Persediaan) wajib ada sebelum
+    // rantai sahkan+posting bisa berjalan — fail-closed by design.
+    const { upsertInventorySettings } = await import("@/server/db/repos/inventory.repo");
+    await withOrg(orgId, (tx) =>
+      upsertInventorySettings(tx as never, orgId, {
+        adjustmentLossAccountId: lossAccountId,
+        adjustmentGainAccountId: gainAccountId,
+      }),
+    );
     const created = await inventoryHandlers.create_stock_opname(orgId, actor, {
       opnameDate: `${year}-02-10`,
       items: [{ itemId, physicalQty: 9 }],
     });
     expect(created.success).toBe(true);
-    expect((created.data as { status: string }).status).toBe("DRAFT");
+    expect((created.data as { status: string }).status).toBe("COMPLETED");
+    expect(typeof (created.data as { journalNumber: string }).journalNumber).toBe("string");
+
+    const draftOnly = await inventoryHandlers.create_stock_opname(orgId, actor, {
+      opnameDate: `${year}-02-10`,
+      postImmediately: false,
+      items: [{ itemId, physicalQty: 8 }],
+    });
+    expect(draftOnly.success).toBe(true);
+    expect((draftOnly.data as { status: string }).status).toBe("DRAFT");
 
     const listed = await inventoryHandlers.list_stock_opnames(orgId, actor, {});
     expect(listed.success).toBe(true);
