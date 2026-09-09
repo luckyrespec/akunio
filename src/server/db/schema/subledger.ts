@@ -2,7 +2,7 @@ import { pgTable, uuid, text, numeric, boolean, timestamp, uniqueIndex, index } 
 import { organizations, accounts } from "./org";
 import { journalLines } from "./journal";
 
-export const subledgerKindEnum = ["PIUTANG", "UTANG", "PERSEDIAAN"] as const;
+export const subledgerKindEnum = ["PIUTANG", "UTANG", "PERSEDIAAN", "ASET_TETAP", "DIMUKA"] as const;
 export type SubledgerKind = (typeof subledgerKindEnum)[number];
 
 export const subledgerControls = pgTable("subledger_controls", {

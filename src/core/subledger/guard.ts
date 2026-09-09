@@ -1,6 +1,6 @@
 import type { JournalSource } from "@/core/journals/types";
 
-export type SubledgerKind = "PIUTANG" | "UTANG" | "PERSEDIAAN";
+export type SubledgerKind = "PIUTANG" | "UTANG" | "PERSEDIAAN" | "ASET_TETAP" | "DIMUKA";
 
 export interface SubledgerLinkInput {
   kind: SubledgerKind;
@@ -29,6 +29,8 @@ export const MANUAL_SOURCES: ReadonlySet<JournalSource> = new Set([
 export function moduleLabelForKind(kind: SubledgerKind): string {
   if (kind === "PIUTANG") return "Faktur Penjualan";
   if (kind === "UTANG") return "Tagihan Pembelian";
+  if (kind === "DIMUKA") return "Sewa Dibayar di Muka";
+  if (kind === "ASET_TETAP") return "Aset Tetap";
   return "Persediaan/Opname";
 }
 

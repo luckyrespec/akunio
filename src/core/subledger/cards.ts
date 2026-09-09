@@ -15,16 +15,20 @@ export function formatQty(raw: string): string {
   return Number.isFinite(n) ? String(n) : raw;
 }
 
-export const SUBLEDGER_LIST_ROUTE: Record<"PERSEDIAAN" | "PIUTANG" | "UTANG", string> = {
+export const SUBLEDGER_LIST_ROUTE: Record<"PERSEDIAAN" | "PIUTANG" | "UTANG" | "ASET_TETAP" | "DIMUKA", string> = {
   PERSEDIAAN: "/buku-pembantu/persediaan",
   PIUTANG: "/buku-pembantu/piutang",
   UTANG: "/buku-pembantu/utang",
+  ASET_TETAP: "/buku-pembantu/aset",
+  DIMUKA: "/buku-pembantu/dimuka",
 };
 
-export const SUBLEDGER_KIND_LABEL: Record<"PERSEDIAAN" | "PIUTANG" | "UTANG", string> = {
+export const SUBLEDGER_KIND_LABEL: Record<"PERSEDIAAN" | "PIUTANG" | "UTANG" | "ASET_TETAP" | "DIMUKA", string> = {
   PERSEDIAAN: "Persediaan per SKU",
   PIUTANG: "Piutang Usaha per Pelanggan",
   UTANG: "Utang Usaha per Pemasok",
+  ASET_TETAP: "Aset Tetap per Unit",
+  DIMUKA: "Dimuka per Kontrak",
 };
 
 export function stockStatus(currentQty: number, minAlert: number): StockStatus {

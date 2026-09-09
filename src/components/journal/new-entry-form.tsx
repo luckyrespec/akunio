@@ -19,7 +19,7 @@ import { createAndPostAction } from "@/server/actions/journal.actions";
 import { uploadDocumentAction } from "@/server/actions/upload.actions";
 import { PostedSuccess } from "@/components/journal/posted-success";
 import { Money } from "@/core/money/money";
-import { moduleLabelForKind } from "@/core/subledger/guard";
+import { moduleLabelForKind, type SubledgerKind } from "@/core/subledger/guard";
 import { todayISO } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import { SplitButton } from "@/components/ui/split-button";
@@ -51,7 +51,7 @@ export function NewEntryForm({
   controlKinds = {},
 }: {
   accounts: Array<{ id: string; code?: string; name?: string; label?: string }>;
-  controlKinds?: Record<string, "PIUTANG" | "UTANG" | "PERSEDIAAN">;
+  controlKinds?: Record<string, SubledgerKind>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -91,7 +91,7 @@ export function NewEntryForm({
 
   // Akun kontrol tidak bisa diposting via jurnal manual (B1) — cegah sebelum submit.
   const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
-  const blockedRows: Array<{ key: number; index: number; label: string; kind: "PIUTANG" | "UTANG" | "PERSEDIAAN" }> = [];
+  const blockedRows: Array<{ key: number; index: number; label: string; kind: SubledgerKind }> = [];
   rows.forEach((r, index) => {
     const kind = controlKinds[r.accountId];
     if (r.accountId && kind) {
