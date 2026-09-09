@@ -13,6 +13,7 @@ import {
 import type { JournalEntryInput } from "@/core/journals/types";
 import { validateSubledgerControl, moduleLabelForKind } from "@/core/subledger/guard";
 import { getControlKindByAccount, insertSubledgerLinks, listLinksForEntry } from "./subledger.repo";
+import type { SubledgerKind } from "../schema/subledger";
 
 export class PostingError extends Error {
   constructor(readonly issues: Array<Record<string, unknown>>) {
@@ -60,7 +61,7 @@ async function persistSubledgerLinks(
   lineIdsByPosition: Map<number, string>,
   input: JournalEntryInput,
 ): Promise<void> {
-  const rows: Array<{ journalLineId: string; kind: "PIUTANG" | "UTANG" | "PERSEDIAAN"; refId: string; amountMinor: bigint; qty?: number }> = [];
+  const rows: Array<{ journalLineId: string; kind: SubledgerKind; refId: string; amountMinor: bigint; qty?: number }> = [];
   input.lines.forEach((l, i) => {
     for (const link of l.subledgerLinks ?? []) {
       rows.push({ journalLineId: lineIdsByPosition.get(i)!, kind: link.kind, refId: link.refId, amountMinor: link.amountMinor, qty: link.qty });

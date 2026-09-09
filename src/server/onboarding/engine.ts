@@ -631,6 +631,8 @@ export async function finalizeOnboarding(orgId: string, key: string): Promise<Fi
     // Inisialisasi pengaturan default persediaan & stok.
     // Kontrol subledger WAJIB akun daun (bisa diposting): induk grup seperti
     // 1300 ditolak aturan GROUP_ACCOUNT, jadi jangan pernah daftarkan induk.
+    // Pengecualian: ASET_TETAP menunjuk root famili 1500 — recon-nya mengagregat
+    // seluruh daun 15xx dikurangi kontra 159x (lihat getControlGlBalance).
     const orgAccounts = await tx.select().from(accounts).where(eq(accounts.orgId, orgId));
     const isParent = (code: string) => orgAccounts.some((a) => a.parentCode === code);
     const persediaanCands = orgAccounts.filter(
@@ -657,10 +659,14 @@ export async function finalizeOnboarding(orgId: string, key: string): Promise<Fi
     const { seedSubledgerControls } = await import("@/server/db/repos/subledger.repo");
     const arAcc = orgAccounts.find((a) => a.code === "1200");
     const apAcc = orgAccounts.find((a) => a.code === "2100");
+    const dimukaAcc = orgAccounts.find((a) => a.code === "1600" && !isParent(a.code));
+    const asetRoot = orgAccounts.find((a) => a.code === "1500");
     await seedSubledgerControls(tx, orgId, {
       receivableAccountId: arAcc?.id ?? null,
       payableAccountId: apAcc?.id ?? null,
       inventoryAccountId: invAcc?.id ?? null,
+      dimukaAccountId: dimukaAcc?.id ?? null,
+      assetAccountId: asetRoot?.id ?? null,
     });
 
     await upsertProfile(tx, orgId, {

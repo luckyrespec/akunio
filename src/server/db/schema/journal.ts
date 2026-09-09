@@ -19,7 +19,7 @@ export const journalEntries = pgTable(
     number: text("number").notNull(),
     entryDate: date("entry_date").notNull(),
     memo: text("memo").notNull(),
-    source: text("source", { enum: ["MANUAL", "AI", "DOCUMENT", "IMPORT", "STOCK_OPNAME", "TAX", "KAS_BAYAR", "KAS_TERIMA", "KAS_TRANSFER"] })
+    source: text("source", { enum: ["MANUAL", "AI", "DOCUMENT", "IMPORT", "STOCK_OPNAME", "TAX", "KAS_BAYAR", "KAS_TERIMA", "KAS_TRANSFER", "DIMUKA"] })
       .notNull()
       .default("MANUAL"),
     status: text("status", { enum: ["DRAFT", "POSTED"] }).notNull().default("DRAFT"),
