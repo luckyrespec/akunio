@@ -84,6 +84,7 @@ const NAVIGATION_GROUPS: NavGroup[] = [
           { href: "/kas-bank/penerimaan", label: "Penerimaan", desc: "Catat uang masuk kas/bank" },
           { href: "/kas-bank/transfer", label: "Transfer Bank", desc: "Pindahkan dana antar rekening" },
           { href: "/kas-bank/histori", label: "Histori Bank", desc: "Riwayat semua mutasi kas/bank" },
+          { href: "/kas-bank/setoran", label: "Setoran Shift", desc: "Tutup shift kasir dan selisihkan kas" },
           { href: "/kas-bank/rekonsiliasi", label: "Rekonsiliasi Bank", desc: "Cocokkan buku dengan mutasi bank" },
         ],
       },

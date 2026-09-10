@@ -43,3 +43,22 @@ test("kasir: tambah barang lalu checkout tunai sampai struk", async ({ page }) =
   await expect(page.getByTestId("kasir-receipt").getByText("POS-", { exact: false }).first()).toBeVisible();
   await expect(page.getByTestId("kasir-receipt").getByText("Rp10.000").first()).toBeVisible();
 });
+
+test("setoran: buka shift lalu tutup pas tanpa selisih", async ({ page }) => {
+  test.setTimeout(180_000);
+  const email = `setor${Date.now()}@test.id`;
+  await signupAndVerify(page, "Kasir", email);
+  await walkOnboardingToDashboard(page);
+
+  await page.goto("/kas-bank/setoran");
+  await page.waitForLoadState("networkidle", { timeout: 30000 });
+  await page.waitForTimeout(2000);
+  await page.getByTestId("setoran-opening").fill("100000");
+  await page.getByTestId("setoran-open-submit").click();
+  const shiftCard = page.locator('[data-testid^="setoran-shift-"]').first();
+  await expect(shiftCard).toBeVisible({ timeout: 15000 });
+  await expect(shiftCard.getByText("Rp100.000").first()).toBeVisible({ timeout: 15000 });
+  await page.getByTestId("setoran-counted").fill("100000");
+  await page.getByTestId("setoran-close-submit").click();
+  await expect(page.getByText("ditutup pas", { exact: false }).first()).toBeVisible({ timeout: 15000 });
+});
