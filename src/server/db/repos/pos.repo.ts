@@ -6,7 +6,7 @@ import { kasBankEntries } from "../schema/cash-bank";
 import { accounts } from "../schema/org";
 import { inventoryItems } from "../schema/inventory";
 import { journalEntries } from "../schema/journal";
-import { postJournalEntry } from "./journals.repo";
+import { postJournalEntry, createDraftJournalEntry, postDraftEntry } from "./journals.repo";
 import { getInventorySettings, lockInventoryPolicy } from "./inventory.repo";
 import { findPeriodByDate } from "./periods.repo";
 import {
@@ -346,4 +346,149 @@ export async function getPosSaleDetail(q: Queryable, orgId: string, saleId: stri
     items: rows.map((r) => ({ ...r.line, itemName: r.itemName, itemCode: r.itemCode })),
     journalNumber,
   };
+}
+
+export interface ShiftSummary {
+  shift: typeof posShifts.$inferSelect;
+  saleCount: number;
+  tunaiMinor: bigint;
+  qrisMinor: bigint;
+  transferMinor: bigint;
+  expectedCashMinor: bigint;
+}
+
+export async function openShift(
+  q: Queryable,
+  orgId: string,
+  actorEmail: string,
+  input: { cashAccountId: string; openingCashMinor: bigint },
+): Promise<typeof posShifts.$inferSelect> {
+  const [cash] = await q
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.orgId, orgId), eq(accounts.id, input.cashAccountId)))
+    .limit(1);
+  if (!cash) throw new Error("AKUN_TIDAK_DITEMUKAN");
+  if (cash.archivedAt) throw new Error("AKUN_DIARSIPKAN");
+  if (!cash.isCash) throw new Error("BUKAN_AKUN_KAS: shift hanya untuk rekening Kas atau Bank");
+  if (input.openingCashMinor < 0n) throw new Error("KAS_AWAL_TIDAK_VALID");
+  const [open] = await q
+    .select({ id: posShifts.id })
+    .from(posShifts)
+    .where(and(
+      eq(posShifts.orgId, orgId),
+      eq(posShifts.cashAccountId, input.cashAccountId),
+      eq(posShifts.status, "BUKA"),
+    ))
+    .limit(1);
+  if (open) throw new Error("SHIFT_SUDAH_BUKA: tutup shift berjalan dulu");
+  const [shift] = await q
+    .insert(posShifts)
+    .values({
+      orgId,
+      cashAccountId: input.cashAccountId,
+      openedBy: actorEmail,
+      openingCashMinor: input.openingCashMinor,
+      status: "BUKA",
+    })
+    .returning();
+  return shift;
+}
+
+export async function getShiftSummary(q: Queryable, orgId: string, shiftId: string): Promise<ShiftSummary> {
+  const [shift] = await q
+    .select()
+    .from(posShifts)
+    .where(and(eq(posShifts.orgId, orgId), eq(posShifts.id, shiftId)))
+    .limit(1);
+  if (!shift) throw new Error("SHIFT_TIDAK_DITEMUKAN");
+  const rows = await q
+    .select({ method: posSales.paymentMethod, total: posSales.totalMinor })
+    .from(posSales)
+    .where(and(eq(posSales.orgId, orgId), eq(posSales.shiftId, shiftId)));
+  let tunai = 0n, qris = 0n, transfer = 0n;
+  for (const r of rows) {
+    if (r.method === "TUNAI") tunai += r.total;
+    else if (r.method === "QRIS") qris += r.total;
+    else transfer += r.total;
+  }
+  return {
+    shift,
+    saleCount: rows.length,
+    tunaiMinor: tunai,
+    qrisMinor: qris,
+    transferMinor: transfer,
+    expectedCashMinor: shift.openingCashMinor + tunai,
+  };
+}
+
+export async function closeShift(
+  q: Queryable,
+  orgId: string,
+  actorEmail: string,
+  input: { shiftId: string; cashCountedMinor: bigint; varianceAccountId?: string | null; dateISO?: string },
+): Promise<{ shift: typeof posShifts.$inferSelect; varianceMinor: bigint; varianceJournalEntryId: string | null }> {
+  const summary = await getShiftSummary(q, orgId, input.shiftId);
+  if (summary.shift.status !== "BUKA") throw new Error("SHIFT_SUDAH_TUTUP");
+  if (input.cashCountedMinor < 0n) throw new Error("KAS_HITUNG_TIDAK_VALID");
+  const variance = input.cashCountedMinor - summary.expectedCashMinor;
+  const dateISO = input.dateISO ?? new Date().toISOString().slice(0, 10);
+
+  let varianceJournalEntryId: string | null = summary.shift.varianceJournalEntryId;
+  if (variance !== 0n && input.varianceAccountId && !varianceJournalEntryId) {
+    const [varianceAcc] = await q
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.orgId, orgId), eq(accounts.id, input.varianceAccountId)))
+      .limit(1);
+    if (!varianceAcc) throw new Error("AKUN_TIDAK_DITEMUKAN");
+    if (varianceAcc.archivedAt) throw new Error("AKUN_DIARSIPKAN");
+    const abs = variance < 0n ? -variance : variance;
+    const draft = await createDraftJournalEntry(q, orgId, {
+      dateISO,
+      memo: `Selisih setoran shift ${summary.shift.id.slice(0, 8)}`,
+      source: "POS_SELISIH",
+      lines: variance > 0n
+        ? [
+            { accountId: summary.shift.cashAccountId, debitMinor: abs, creditMinor: 0n, memo: "Kas selisih lebih" },
+            { accountId: varianceAcc.id, debitMinor: 0n, creditMinor: abs, memo: "Selisih lebih setoran" },
+          ]
+        : [
+            { accountId: varianceAcc.id, debitMinor: abs, creditMinor: 0n, memo: "Selisih kurang setoran" },
+            { accountId: summary.shift.cashAccountId, debitMinor: 0n, creditMinor: abs, memo: "Kas selisih kurang" },
+          ],
+    });
+    varianceJournalEntryId = draft.id;
+  }
+
+  const [closed] = await q
+    .update(posShifts)
+    .set({ status: "TUTUP", closedAt: new Date(), varianceJournalEntryId, updatedAt: new Date() })
+    .where(eq(posShifts.id, summary.shift.id))
+    .returning();
+  return { shift: closed, varianceMinor: variance, varianceJournalEntryId };
+}
+
+export async function postShiftVariance(
+  q: Queryable,
+  orgId: string,
+  actorEmail: string,
+  shiftId: string,
+): Promise<{ journalEntryId: string }> {
+  const [shift] = await q
+    .select()
+    .from(posShifts)
+    .where(and(eq(posShifts.orgId, orgId), eq(posShifts.id, shiftId)))
+    .limit(1);
+  if (!shift) throw new Error("SHIFT_TIDAK_DITEMUKAN");
+  if (!shift.varianceJournalEntryId) throw new Error("TIDAK_ADA_SELISIH: tidak ada jurnal selisih untuk diposting");
+  const [entry] = await q
+    .select({ status: journalEntries.status })
+    .from(journalEntries)
+    .where(eq(journalEntries.id, shift.varianceJournalEntryId))
+    .limit(1);
+  if (!entry) throw new Error("JURNAL_TIDAK_DITEMUKAN");
+  if (entry.status === "POSTED") return { journalEntryId: shift.varianceJournalEntryId };
+  await postDraftEntry(q, orgId, actorEmail, shift.varianceJournalEntryId);
+  return { journalEntryId: shift.varianceJournalEntryId };
 }
