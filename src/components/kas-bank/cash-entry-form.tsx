@@ -479,6 +479,7 @@ export function CashEntryForm({
                 <input
                   ref={fileInputRef}
                   type="file"
+                  data-testid="cash-file-input"
                   accept="image/*,application/pdf"
                   onChange={handleFileChange}
                   className="hidden"
