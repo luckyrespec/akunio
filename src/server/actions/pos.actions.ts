@@ -13,15 +13,26 @@ import {
   closeShift,
   postShiftVariance,
   getShiftSummary,
+  listOpenShifts,
   type PosPaymentMethod,
 } from "@/server/db/repos/pos.repo";
 import { Money } from "@/core/money/money";
+import { PostingError } from "@/server/db/repos/journals.repo";
 
 export interface PosCartLineDTO {
   itemId: string;
   qty: number;
-  unitPriceText: string;
-  discountText?: string;
+  /** Minor (sudah dikali 100). BUKAN teks rupiah — Money.parseIdr akan mengalikan 100 lagi. */
+  unitPriceMinor: string;
+  /** Minor, opsional. */
+  discountMinor?: string;
+}
+
+/** Validasi string minor murni (digit saja) — untuk nilai yang sudah minor dari client. */
+function parseMinorText(raw: string, label: string): bigint {
+  const s = (raw ?? "").trim();
+  if (!/^\d+$/.test(s)) throw new Error(`${label} tidak valid.`);
+  return BigInt(s);
 }
 
 export async function getPosCashAccountsAction() {
@@ -68,21 +79,17 @@ export async function checkoutPosSaleAction(input: {
   items: PosCartLineDTO[];
   paymentMethod: PosPaymentMethod;
   cashAccountId: string;
-  cashReceivedText: string;
-  headerDiscountText?: string;
+  /** Minor (digit saja). Client mem-parse teks rupiah via Money.parseIdr lebih dulu. */
+  cashReceivedMinor: string;
   buyerName?: string;
   shiftId?: string | null;
   idempotencyKey: string;
 }) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    let cashReceivedMinor: bigint;
-    let headerDiscountMinor = 0n;
+    let cashReceived: bigint;
     try {
-      cashReceivedMinor = Money.parseIdr(input.cashReceivedText).minor;
-      if (input.headerDiscountText?.trim()) {
-        headerDiscountMinor = Money.parseIdr(input.headerDiscountText).minor;
-      }
+      cashReceived = parseMinorText(input.cashReceivedMinor, "Uang diterima");
     } catch {
       return { ok: false as const, error: "Nominal tidak valid. Contoh: 1500000 atau Rp1.500.000." };
     }
@@ -91,8 +98,8 @@ export async function checkoutPosSaleAction(input: {
       let unitPriceMinor: bigint;
       let discountMinor = 0n;
       try {
-        unitPriceMinor = Money.parseIdr(l.unitPriceText).minor;
-        if (l.discountText?.trim()) discountMinor = Money.parseIdr(l.discountText).minor;
+        unitPriceMinor = parseMinorText(l.unitPriceMinor, "Harga barang");
+        if (l.discountMinor?.trim()) discountMinor = parseMinorText(l.discountMinor, "Diskon");
       } catch {
         return { ok: false as const, error: "Harga barang tidak valid." };
       }
@@ -104,8 +111,7 @@ export async function checkoutPosSaleAction(input: {
         paymentMethod: input.paymentMethod,
         cashAccountId: input.cashAccountId,
         lines,
-        headerDiscountMinor,
-        cashReceivedMinor,
+        cashReceivedMinor: cashReceived,
         buyerName: input.buyerName ?? null,
         shiftId: input.shiftId ?? null,
         idempotencyKey: input.idempotencyKey,
@@ -124,6 +130,9 @@ export async function checkoutPosSaleAction(input: {
       },
     };
   } catch (e) {
+    if (e instanceof PostingError) {
+      return { ok: false as const, error: `VALIDASI_GAGAL: ${JSON.stringify(e.issues)}` };
+    }
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal menyimpan penjualan." };
   }
 }
@@ -156,6 +165,25 @@ export async function getPosSaleAction(saleId: string) {
     };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal memuat struk." };
+  }
+}
+
+export async function getOpenShiftsAction() {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const rows = await db.transaction((tx) => listOpenShifts(tx as never, ctx.orgId));
+    return {
+      ok: true as const,
+      data: rows.map((r) => ({
+        id: r.id,
+        cashAccountId: r.cashAccountId,
+        cashCode: r.cashCode,
+        cashName: r.cashName,
+        openedAt: r.openedAt?.toISOString() ?? null,
+      })),
+    };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Gagal memuat shift." };
   }
 }
 

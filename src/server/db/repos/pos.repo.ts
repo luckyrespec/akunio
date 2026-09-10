@@ -58,10 +58,46 @@ async function getAccountByCodeOrNull(q: Queryable, orgId: string, code: string)
   return row ?? null;
 }
 
-async function getAccountByCode(q: Queryable, orgId: string, code: string) {
-  const row = await getAccountByCodeOrNull(q, orgId, code);
-  if (!row) throw new Error(`Akun dengan kode '${code}' tidak ditemukan pada bagan akun (COA).`);
-  return row;
+type OrgAccount = typeof accounts.$inferSelect;
+
+/** Akun pendapatan siap posting: preferensi item → 4110 → detail PENDAPATAN-K pertama.
+ *  Fallback kode mentah (4100) bisa berupa akun GRUP pada COA hasil onboarding
+ *  (punya anak) sehingga ditolak guard GROUP_ACCOUNT — karenanya seleksi eksplisit. */
+function resolveRevenueAccountId(orgAccounts: OrgAccount[], preferredId: string | null): string {
+  const byId = new Map(orgAccounts.map((a) => [a.id, a]));
+  const hasChildren = (code: string) => orgAccounts.some((a) => a.parentCode === code);
+  const postable = (a: OrgAccount) => !a.archivedAt && !hasChildren(a.code);
+  if (preferredId) {
+    const p = byId.get(preferredId);
+    if (p && postable(p)) return p.id;
+  }
+  const c4110 = orgAccounts.find((a) => a.code === "4110");
+  if (c4110 && postable(c4110)) return c4110.id;
+  const first = orgAccounts
+    .filter((a) => a.type === "PENDAPATAN" && a.normal === "K" && !a.contra && postable(a))
+    .sort((x, y) => x.code.localeCompare(y.code))[0];
+  if (first) return first.id;
+  throw new Error("AKUN_PENDAPATAN_TIDAK_ADA: tidak ada akun pendapatan siap posting di COA");
+}
+
+/** Akun HPP siap posting: setting → detail BEBAN 51xx pertama → BEBAN-D pertama. */
+function resolveCogsAccountId(orgAccounts: OrgAccount[], preferredId: string | null): string {
+  const byId = new Map(orgAccounts.map((a) => [a.id, a]));
+  const hasChildren = (code: string) => orgAccounts.some((a) => a.parentCode === code);
+  const postable = (a: OrgAccount) => !a.archivedAt && !hasChildren(a.code);
+  if (preferredId) {
+    const p = byId.get(preferredId);
+    if (p && postable(p)) return p.id;
+  }
+  const child51 = orgAccounts
+    .filter((a) => a.type === "BEBAN" && a.code.startsWith("51") && postable(a))
+    .sort((x, y) => x.code.localeCompare(y.code))[0];
+  if (child51) return child51.id;
+  const anyBeban = orgAccounts
+    .filter((a) => a.type === "BEBAN" && a.normal === "D" && !a.contra && postable(a))
+    .sort((x, y) => x.code.localeCompare(y.code))[0];
+  if (anyBeban) return anyBeban.id;
+  throw new Error("AKUN_HPP_TIDAK_ADA: tidak ada akun beban siap posting di COA");
 }
 
 async function nextPosNumber(q: Queryable, orgId: string, soldDate: string): Promise<string> {
@@ -180,11 +216,9 @@ export async function checkoutPosSale(
   const change = input.cashReceivedMinor - total;
 
   const revenueGroups = new Map<string, bigint>();
+  const orgAccounts = await q.select().from(accounts).where(eq(accounts.orgId, orgId));
   for (const p of prepared) {
-    const accId =
-      p.master.revenueAccountId ??
-      (await getAccountByCodeOrNull(q, orgId, "4110"))?.id ??
-      (await getAccountByCode(q, orgId, "4100")).id;
+    const accId = resolveRevenueAccountId(orgAccounts, p.master.revenueAccountId);
     revenueGroups.set(accId, (revenueGroups.get(accId) ?? 0n) + p.netMinor);
   }
   if (headerDiscount > 0n) {
@@ -230,7 +264,7 @@ export async function checkoutPosSale(
     lines.push({ accountId, debitMinor: 0n, creditMinor: netto, memo: `Pendapatan ${number}` });
   }
   if (recording === "PERPETUAL" && hppTotal > 0n) {
-    const cogsAccId = settings?.cogsAccountId ?? (await getAccountByCode(q, orgId, "5100")).id;
+    const cogsAccId = resolveCogsAccountId(orgAccounts, settings?.cogsAccountId ?? null);
     const invAccId = await resolveInventoryControlAccountId(q, orgId);
     lines.push({ accountId: cogsAccId, debitMinor: hppTotal, creditMinor: 0n, memo: `HPP ${number}` });
     lines.push({
@@ -355,6 +389,22 @@ export interface ShiftSummary {
   qrisMinor: bigint;
   transferMinor: bigint;
   expectedCashMinor: bigint;
+}
+
+export async function listOpenShifts(q: Queryable, orgId: string) {
+  const rows = await q
+    .select({
+      id: posShifts.id,
+      cashAccountId: posShifts.cashAccountId,
+      openedAt: posShifts.openedAt,
+      cashCode: accounts.code,
+      cashName: accounts.name,
+    })
+    .from(posShifts)
+    .innerJoin(accounts, eq(accounts.id, posShifts.cashAccountId))
+    .where(and(eq(posShifts.orgId, orgId), eq(posShifts.status, "BUKA")))
+    .orderBy(posShifts.openedAt);
+  return rows;
 }
 
 export async function openShift(

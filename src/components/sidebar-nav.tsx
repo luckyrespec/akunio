@@ -20,6 +20,7 @@ import {
   IconTax,
   IconSettings,
   IconClose,
+  IconBolt,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ const NAVIGATION_GROUPS: NavGroup[] = [
     id: "operasional",
     title: "Operasional",
     items: [
+      { href: "/kasir", label: "Kasir", desc: "Kasir cepat untuk toko & warung", icon: IconBolt },
       { href: "/faktur", label: "Faktur & Tagihan", desc: "Buat, kirim, dan pantau piutang–utang usaha", icon: IconReceipt },
       {
         href: "/persediaan/daftar",
