@@ -69,6 +69,7 @@ export async function getPosCatalogAction() {
           barcode: r.barcode,
           appBarcode: r.appBarcode,
           unit: r.unit,
+          category: r.category,
           qty: String(r.currentQty),
           price: r.standardSellingPriceMinor.toString(),
           minStock: String(r.minStockAlert ?? "0"),

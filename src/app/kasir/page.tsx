@@ -1,6 +1,5 @@
 import { requireContext } from "@/server/auth/guard";
-import { PageHeader } from "@/components/page-header";
-import { KasirClient } from "./kasir-client";
+import { KasirShell } from "./_components/kasir-shell";
 import {
   getPosCashAccountsAction,
   getPosCatalogAction,
@@ -21,16 +20,12 @@ export default async function KasirPage() {
   ]);
   const error = !cashRes.ok ? cashRes.error : !catalogRes.ok ? catalogRes.error : !shiftsRes.ok ? shiftsRes.error : null;
 
-  return (
-    <section className="w-full space-y-6">
-      <PageHeader title="Kasir" eyebrow="Operasional · jual cepat, stok dan jurnal ikut tercatat" />
-      {error || !cashRes.ok || !catalogRes.ok || !shiftsRes.ok ? (
-        <p className="rounded-xl border border-rule bg-paper p-4 text-sm text-ink-soft">
-          {error ?? "Gagal memuat data kasir."}
-        </p>
-      ) : (
-        <KasirClient cashAccounts={cashRes.data} catalog={catalogRes.data} shifts={shiftsRes.data} />
-      )}
-    </section>
-  );
+  if (error || !cashRes.ok || !catalogRes.ok || !shiftsRes.ok) {
+    return (
+      <p className="m-4 rounded-xl border border-rule bg-paper p-4 text-sm text-ink-soft">
+        {error ?? "Gagal memuat data kasir."}
+      </p>
+    );
+  }
+  return <KasirShell cashAccounts={cashRes.data} catalog={catalogRes.data} shifts={shiftsRes.data} />;
 }
