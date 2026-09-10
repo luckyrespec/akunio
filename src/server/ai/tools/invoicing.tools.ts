@@ -6,7 +6,7 @@ export const invoicingToolDefs: ToolDefinition[] = [
   {
     type: "function",
     name: "create_invoice",
-    description: "Buat faktur penjualan (INVOICE) atau tagihan pembelian (BILL) ke pelanggan/pemasok.",
+    description: "Buat faktur penjualan (INVOICE) atau tagihan pembelian (BILL) ke pelanggan/pemasok. Wajib konfirmasi user sebelum eksekusi. Setelah berhasil, sebutkan faktur sebagai tautan [NOMOR](faktur:NOMOR-dari-hasil-tool) agar pengguna bisa membuka rinciannya.",
     parameters: {
       type: "object",
       properties: {
@@ -24,6 +24,7 @@ export const invoicingToolDefs: ToolDefinition[] = [
               unitPrice: { type: "number", description: "Harga per unit dalam Rupiah" },
               discount: { type: "number", description: "Potongan harga jika ada" },
               taxRate: { type: "number", description: "Tarif PPN (0, 11, atau 12)" },
+              catalogItemId: { type: "string", description: "Id barang di katalog persediaan (WAJIB diisi bila barangnya terdaftar — cari dulu via list_inventory_items; menentukan akun + mutasi stok saat posting)" },
             },
             required: ["description", "quantity", "unitPrice"],
           },
@@ -49,6 +50,36 @@ export const invoicingToolDefs: ToolDefinition[] = [
         notes: { type: "string", description: "Keterangan pembayaran" },
       },
       required: ["invoiceNumber", "amount"],
+    },
+  },
+  {
+    type: "function",
+    name: "update_invoice",
+    description:
+      "Koreksi faktur/tagihan: jatuh tempo dan catatan kapan pun; rincian barang HANYA bila belum diposting ke jurnal (bila sudah diposting, tolak dan arahkan ke jurnal pembalik). Cari nomornya dulu via list_invoices bila belum pasti. Wajib konfirmasi user sebelum eksekusi. Setelah berhasil, sebutkan faktur sebagai tautan [NOMOR](faktur:NOMOR).",
+    parameters: {
+      type: "object",
+      properties: {
+        invoiceNumber: { type: "string", description: "Nomor faktur (contoh: INV-2026-0001)" },
+        dueDate: { type: "string", description: "Jatuh tempo baru YYYY-MM-DD (opsional, hitung tanggal relatif via get_server_time)" },
+        notes: { type: "string", description: "Catatan baru (opsional)" },
+        items: {
+          type: "array",
+          description: "Ganti SELURUH rincian barang (hanya bila belum diposting)",
+          items: {
+            type: "object",
+            properties: {
+              description: { type: "string", description: "Nama barang/jasa" },
+              quantity: { type: "number", description: "Jumlah unit" },
+              unitPrice: { type: "number", description: "Harga per unit Rupiah" },
+              discount: { type: "number", description: "Diskon Rupiah" },
+              taxRate: { type: "number", description: "Tarif PPN (0, 11, 12)" },
+            },
+            required: ["description", "quantity", "unitPrice"],
+          },
+        },
+      },
+      required: ["invoiceNumber"],
     },
   },
   {
@@ -132,6 +163,7 @@ export const invoicingHandlers: Record<string, ToolHandler> = {
         unitPriceMinor: BigInt(Math.round(price * 100)),
         discountMinor: BigInt(Math.round(disc * 100)),
         taxRatePercent: String(tax),
+        catalogItemId: typeof it.catalogItemId === "string" && it.catalogItemId ? it.catalogItemId : null,
       };
     });
 
@@ -306,6 +338,61 @@ export const invoicingHandlers: Record<string, ToolHandler> = {
     };
   },
 
+  update_invoice: async (orgId, _actorEmail, args) => {
+    try {
+      const { updateInvoiceRepo } = await import("@/server/db/repos/invoices.repo");
+      const { invoices } = await import("@/server/db/schema/invoicing");
+      const { eq, and } = await import("drizzle-orm");
+      const invNum = String(args.invoiceNumber || "").trim().toUpperCase();
+      if (!invNum) return { success: false, error: "invoiceNumber wajib diisi." };
+      const [head] = await db
+        .select({ id: invoices.id })
+        .from(invoices)
+        .where(and(eq(invoices.orgId, orgId), eq(invoices.invoiceNumber, invNum)));
+      if (!head) return { success: false, error: `Faktur #${invNum} tidak ditemukan.` };
+
+      const patch: {
+        dueDate?: string;
+        notes?: string;
+        items?: Array<{
+          description: string;
+          quantity: number;
+          unitPriceMinor: bigint;
+          discountMinor: bigint;
+          taxRatePercent: number;
+        }>;
+      } = {};
+      if (typeof args.dueDate === "string" && args.dueDate.trim()) {
+        patch.dueDate = args.dueDate.trim().slice(0, 10);
+      }
+      if (typeof args.notes === "string") patch.notes = args.notes;
+      if (Array.isArray(args.items)) {
+        patch.items = (args.items as Array<Record<string, unknown>>).map((it) => ({
+          description: String(it.description || "Item"),
+          quantity: Number(it.quantity || 1),
+          unitPriceMinor: BigInt(Math.round(Number(it.unitPrice || 0) * 100)),
+          discountMinor: BigInt(Math.round(Number(it.discount || 0) * 100)),
+          taxRatePercent: Number(it.taxRate || 0),
+        }));
+      }
+      if (patch.dueDate === undefined && patch.notes === undefined && patch.items === undefined) {
+        return { success: false, error: "Tidak ada perubahan (isi dueDate, notes, atau items)." };
+      }
+      const updated = await updateInvoiceRepo(db, orgId, head.id, patch);
+      return {
+        success: true,
+        data: {
+          invoiceNumber: updated.invoiceNumber,
+          dueDate: updated.dueDate,
+          status: updated.status,
+          totalFormatted: Money.fromMinor(updated.totalMinor).formatIdr(),
+        },
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Gagal mengoreksi faktur";
+      return { success: false, error: message };
+    }
+  },
   get_invoice_detail: async (orgId, _actorEmail, args) => {
     const { getInvoiceByIdRepo } = await import("@/server/db/repos/invoices.repo");
     const { invoices } = await import("@/server/db/schema/invoicing");

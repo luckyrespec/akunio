@@ -38,23 +38,32 @@ import { HitlTool } from "@/components/ai-elements/hitl-tool";
 import { useNaraStreamChat } from "@/hooks/use-nara-stream-chat";
 import { useNaraThreads } from "@/hooks/use-nara-threads";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
-import { NaraHitlApprovalCard } from "@/components/ai-elements/nara-hitl-approval-card";
 import { NaraMessageFeed } from "@/components/ai-elements/nara-message-feed";
+import { BallTriangle } from "react-loader-spinner";
 import { AsistenSidebar } from "./_components/asisten-sidebar";
 import { AsistenSearchModal, type ThreadItem } from "./_components/asisten-search-modal";
 import { AsistenDeleteModal } from "./_components/asisten-delete-modal";
+import { AsistenSettingsView } from "./_components/asisten-settings-view";
 import { AsistenLibraryView, type LibraryFile } from "./_components/asisten-library-view";
+import type { MemoryItemDTO } from "@/server/actions/settings.actions";
+import type { AiPrefs } from "@/lib/ai-prefs";
 
 export default function AsistenClient({
   initialThreads,
   initialHitlPolicy = "smart",
-  userEmail,
+  memoryEnabled,
+  initialMemories,
+  initialPrefs,
+  canEdit,
 }: {
   initialThreads: ThreadItem[];
   initialHitlPolicy?: "smart" | "strict" | "autonomous";
-  userEmail?: string;
+  memoryEnabled: boolean;
+  initialMemories: MemoryItemDTO[];
+  initialPrefs: AiPrefs;
+  canEdit: boolean;
 }) {
-  const { threads, setThreads, activeThreadId, setActiveThreadId, refresh, handleCreated } =
+  const { threads, setThreads, activeThreadId, setActiveThreadId, refresh, handleCreated, maybeAutoRename } =
     useNaraThreads({ initialThreads, initialActiveId: initialThreads[0]?.id ?? null });
   // Tampilan butuh createdAt wajib — fallback ke updatedAt bila API tak mengirimnya.
   const viewThreads: ThreadItem[] = threads.map((t) => ({
@@ -81,17 +90,31 @@ export default function AsistenClient({
       setActiveThreadId(threads[0].id);
     }
   }, [activeThreadId, threads, setActiveThreadId]);
-  const [currentView, setCurrentView] = React.useState<"chat" | "library">("chat");
-  const [modelPreset, setModelPreset] = React.useState<ModelPreset>("fast");
+  const [currentView, setCurrentView] = React.useState<"chat" | "library" | "settings">("chat");
+  const [modelPreset, setModelPreset] = React.useState<ModelPreset>(initialPrefs.defaultPreset);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [searchModalOpen, setSearchModalOpen] = React.useState(false);
   const [deletingThreadId, setDeletingThreadId] = React.useState<string | null>(null);
+  const [loadingThread, setLoadingThread] = React.useState(false);
+  const [historyHasMore, setHistoryHasMore] = React.useState(false);
+  const [loadingHistoryMore, setLoadingHistoryMore] = React.useState(false);
 
   // Library view state
   const [libraryFiles, setLibraryFiles] = React.useState<LibraryFile[]>([]);
   const [libraryLoading, setLibraryLoading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const promptInputRef = React.useRef<HTMLTextAreaElement>(null);
+  const convRef = React.useRef<HTMLDivElement>(null);
+
+  // Sesi dibuka (loader selesai) → langsung ke pesan terbawah.
+  const wasLoadingThreadRef = React.useRef(false);
+  React.useEffect(() => {
+    if (wasLoadingThreadRef.current && !loadingThread) {
+      const el = convRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+    wasLoadingThreadRef.current = loadingThread;
+  }, [loadingThread]);
 
   const {
     messages,
@@ -119,6 +142,7 @@ export default function AsistenClient({
     handleStopStreaming,
     handleToolDecision,
     restorePendingFromMessages,
+    setPendingForThread,
   } = useNaraStreamChat({
     activeThreadId,
     setActiveThreadId,
@@ -126,6 +150,9 @@ export default function AsistenClient({
     initialHitlPolicy,
     onThreadCreated: (threadId, title) => {
       handleCreated(threadId, title);
+    },
+    onThreadSettled: (threadId) => {
+      void maybeAutoRename(threadId);
     },
   });
 
@@ -145,24 +172,36 @@ export default function AsistenClient({
       return;
     }
 
+    let cancelled = false;
     async function loadThread() {
+      setLoadingThread(true);
+      setMessages([]);
+      setHistoryHasMore(false);
       try {
-        const res = await fetch(`/api/nara/threads/${activeThreadId}`);
+        const res = await fetch(`/api/nara/threads/${activeThreadId}?limit=50`);
         if (!res.ok) return;
         const data = await res.json();
         if (data.thread?.modelPreset) {
           setModelPreset(data.thread.modelPreset as ModelPreset);
         }
         const loaded = data.messages ?? [];
-        setMessages(loaded);
-        // Pulihkan kartu persetujuan milik thread ini bila ada yang belum diputuskan.
-        restorePendingFromMessages(activeThreadId, loaded);
+        if (!cancelled) {
+          setMessages(loaded);
+          setHistoryHasMore(data.hasMore ?? false);
+          // Pulihkan kartu persetujuan milik thread ini bila ada yang belum diputuskan.
+          restorePendingFromMessages(activeThreadId, loaded);
+        }
       } catch (err) {
         console.error("Gagal memuat pesan sesi", err);
+      } finally {
+        if (!cancelled) setLoadingThread(false);
       }
     }
 
     loadThread();
+    return () => {
+      cancelled = true;
+    };
   }, [activeThreadId, currentView, setMessages, restorePendingFromMessages]);
 
   // Load library files when switching to library view
@@ -222,6 +261,44 @@ export default function AsistenClient({
     setErrorBanner(null);
   };
 
+  // Tombol Batalkan di stamp: buka kartu persetujuan reversal (jalur HITL biasa).
+  const handleRequestReverse = (entryId: string, number: string) => {
+    if (!activeThreadId) return;
+    setPendingForThread(activeThreadId, {
+      callId: `rev-${Date.now()}`,
+      toolName: "reverse_journal",
+      args: { entryId, reason: `Dibatalkan dari chat (${number})` },
+      explanation: `Membatalkan jurnal ${number} dengan jurnal pembalik.`,
+    });
+  };
+
+  // Riwayat mundur: 50 pesan lebih lama ditumpuk di atas, posisi scroll dipertahankan.
+  const handleLoadOlder = async () => {
+    if (!activeThreadId || loadingHistoryMore || !historyHasMore || messages.length === 0) return;
+    const oldest = messages[0];
+    if (!oldest?.id || !/^[0-9a-f-]{36}$/i.test(oldest.id) || !oldest.createdAt) return;
+    const el = convRef.current;
+    const prevHeight = el ? el.scrollHeight : 0;
+    setLoadingHistoryMore(true);
+    try {
+      const res = await fetch(
+        `/api/nara/threads/${activeThreadId}?limit=50&before=${encodeURIComponent(new Date(oldest.createdAt).toISOString())}&beforeId=${encodeURIComponent(oldest.id)}`,
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const older = data.messages ?? [];
+      setMessages((prev) => [...older, ...prev]);
+      setHistoryHasMore(data.hasMore ?? false);
+      requestAnimationFrame(() => {
+        if (el) el.scrollTop = el.scrollHeight - prevHeight;
+      });
+    } catch (err) {
+      console.error("Gagal memuat riwayat lama", err);
+    } finally {
+      setLoadingHistoryMore(false);
+    }
+  };
+
   const handleRenameThread = async (threadId: string, newTitle: string) => {
     try {
       const res = await fetch(`/api/nara/threads/${threadId}`, {
@@ -269,23 +346,24 @@ export default function AsistenClient({
     }
   };
 
-  const handleDeleteThread = async () => {
-    if (!deletingThreadId) return;
+  const handleDeleteThread = async (): Promise<boolean> => {
+    if (!deletingThreadId) return false;
+    const targetId = deletingThreadId;
     try {
-      const res = await fetch(`/api/nara/threads/${deletingThreadId}`, {
+      const res = await fetch(`/api/nara/threads/${targetId}`, {
         method: "DELETE",
       });
 
-      if (res.ok) {
-        setThreads((prev) => prev.filter((t) => t.id !== deletingThreadId));
-        if (activeThreadId === deletingThreadId) {
-          handleNewChat();
-        }
+      if (!res.ok) return false;
+      setThreads((prev) => prev.filter((t) => t.id !== targetId));
+      if (activeThreadId === targetId) {
+        handleNewChat();
       }
+      // Sukses: biarkan modal menampilkan status sukses lalu menutup sendiri.
+      return true;
     } catch (err) {
       console.error("Gagal menghapus sesi", err);
-    } finally {
-      setDeletingThreadId(null);
+      return false;
     }
   };
 
@@ -305,7 +383,6 @@ export default function AsistenClient({
         onRenameThread={handleRenameThread}
         onTogglePin={handleTogglePin}
         onDeleteRequest={(id) => setDeletingThreadId(id)}
-        userEmail={userEmail}
       />
 
       {/* 2. MODALS */}
@@ -325,7 +402,7 @@ export default function AsistenClient({
         onConfirm={handleDeleteThread}
       />
 
-      {/* 3. KONTEN UTAMA: PUSTAKA ATAU CHAT */}
+      {/* 3. KONTEN UTAMA: PUSTAKA, PENGATURAN, ATAU CHAT */}
       {currentView === "library" ? (
         <AsistenLibraryView
           sidebarOpen={sidebarOpen}
@@ -347,6 +424,14 @@ export default function AsistenClient({
             ]);
           }}
         />
+      ) : currentView === "settings" ? (
+        <AsistenSettingsView
+          hitlPolicy={initialHitlPolicy}
+          initialMemories={initialMemories}
+          memoryEnabled={memoryEnabled}
+          initialPrefs={initialPrefs}
+          canEdit={canEdit}
+        />
       ) : (
         <main className="relative flex flex-1 min-h-0 flex-col overflow-hidden min-w-0">
           {/* Main Header */}
@@ -364,7 +449,10 @@ export default function AsistenClient({
                 </Button>
               )}
               <MessageSquare className="size-4 text-terra shrink-0" />
-              <span className="text-xs md:text-sm font-semibold text-ink truncate max-w-md">
+              <span
+                key={threads.find((t) => t.id === activeThreadId)?.title || "Percakapan Baru"}
+                className="text-xs md:text-sm font-semibold text-ink truncate max-w-md animate-in fade-in slide-in-from-left-2 duration-300"
+              >
                 {threads.find((t) => t.id === activeThreadId)?.title || "Percakapan Baru"}
               </span>
             </div>
@@ -403,8 +491,46 @@ export default function AsistenClient({
           )}
 
           {/* Conversation Feed */}
-          <Conversation autoScroll={isStreaming} onDropFiles={handleAttachFiles} className="pb-44">
+          <Conversation ref={convRef} autoScroll={isStreaming} onDropFiles={handleAttachFiles} className="pb-44">
             <ConversationContent>
+              {loadingThread ? (
+                <div
+                  data-testid="assistant-thread-loader"
+                  role="status"
+                  aria-label="Memuat percakapan"
+                  className="flex flex-1 items-center justify-center py-16 text-terra"
+                >
+                  <BallTriangle
+                    visible
+                    height={60}
+                    width={60}
+                    radius={5}
+                    color="currentColor"
+                    ariaLabel="Memuat percakapan"
+                  />
+                </div>
+              ) : (
+              <>
+              {historyHasMore && (
+                <div className="flex justify-center pb-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLoadOlder}
+                    disabled={loadingHistoryMore}
+                    className="h-7 text-[11px] text-ink-soft hover:text-ink"
+                  >
+                    {loadingHistoryMore ? (
+                      <>
+                        <Loader2 className="mr-1.5 size-3 animate-spin" aria-hidden />
+                        Memuat...
+                      </>
+                    ) : (
+                      "Muat riwayat lama"
+                    )}
+                  </Button>
+                </div>
+              )}
               <NaraMessageFeed
                 messages={messages}
                 isStreaming={isStreaming}
@@ -417,6 +543,10 @@ export default function AsistenClient({
                   setInput(val);
                   promptInputRef.current?.focus();
                 }}
+                onRequestReverse={handleRequestReverse}
+                pendingApproval={pendingApproval}
+                confirmingLoading={confirmingLoading}
+                onDecision={handleToolDecision}
                 emptyState={
                   <ConversationEmptyState
                     icon={<Sparkles className="size-10 text-terra" />}
@@ -470,14 +600,7 @@ export default function AsistenClient({
                   </ConversationEmptyState>
                 }
               />
-
-              {/* Interactive Approval Card */}
-              {pendingApproval && (
-                <NaraHitlApprovalCard
-                  pendingApproval={pendingApproval}
-                  confirmingLoading={confirmingLoading}
-                  onDecision={handleToolDecision}
-                />
+              </>
               )}
             </ConversationContent>
             <ConversationScrollButton />

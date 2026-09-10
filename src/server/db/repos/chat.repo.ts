@@ -161,6 +161,32 @@ export async function listMessages(q: Queryable, threadId: string): Promise<Chat
     .orderBy(chatMessages.createdAt);
 }
 
+/**
+ * Halaman riwayat untuk UI chat: 50 pesan terbaru dulu, sisanya dimuat
+ * mundur via kursor keyset (createdAt, id). Tidak mengubah listMessages
+ * yang dipakai jalur AI (butuh riwayat penuh untuk konteks).
+ */
+export async function listMessagesPage(
+  q: Queryable,
+  threadId: string,
+  opts: { limit?: number; beforeCreatedAt?: string; beforeId?: string } = {},
+): Promise<{ messages: ChatMessage[]; hasMore: boolean }> {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 100);
+  const conds = [eq(chatMessages.threadId, threadId)];
+  if (opts.beforeCreatedAt && opts.beforeId) {
+    conds.push(
+      sql`(${chatMessages.createdAt}, ${chatMessages.id}) < (${opts.beforeCreatedAt}::timestamptz, ${opts.beforeId}::uuid)`,
+    );
+  }
+  const rows = await q
+    .select()
+    .from(chatMessages)
+    .where(and(...conds))
+    .orderBy(desc(chatMessages.createdAt), desc(chatMessages.id))
+    .limit(limit + 1);
+  return { messages: rows.slice(0, limit).reverse(), hasMore: rows.length > limit };
+}
+
 export async function checkAdvisorQuota(q: Queryable, orgId: string): Promise<{ allowed: boolean; message?: string }> {
   return checkAssistantQuota(q, orgId);
 }

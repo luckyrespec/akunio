@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
+import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import {
@@ -101,6 +102,64 @@ export async function reverseEntryAction(entryId: string, dateISO: string): Prom
     });
     revalidatePath("/jurnal");
     return { ok: true, number: out.number };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export interface JournalDetailLineResult {
+  accountCode: string;
+  accountName: string;
+  debitMinor: string;
+  creditMinor: string;
+  memo: string | null;
+}
+
+export interface JournalDetailResult {
+  ok: boolean;
+  number?: string;
+  data?: {
+    id: string;
+    number: string;
+    entryDate: string;
+    memo: string;
+    status: string;
+    lines: JournalDetailLineResult[];
+  };
+  error?: string;
+}
+
+/**
+ * Rincian satu jurnal untuk sheet drawer (dipakai chat Akunio + reusable).
+ * Lookup per nomor (JE-YYYY-NNNN). Nominal diserialkan ke string.
+ */
+export async function getJournalDetailAction(number: string): Promise<JournalDetailResult> {
+  try {
+    const ctx = await requireContext();
+    const clean = number.trim().toUpperCase();
+    if (!clean) return fail(new Error("Nomor jurnal kosong."));
+    const { searchEntriesWithLines } = await import("@/server/db/repos/journals.repo");
+    const hits = await searchEntriesWithLines(db, ctx.orgId, clean, 5);
+    const entry = hits.find((e) => e.number.toUpperCase() === clean) ?? hits[0];
+    if (!entry) return fail(new Error(`Jurnal ${clean} tidak ditemukan.`));
+    return {
+      ok: true,
+      number: entry.number,
+      data: {
+        id: entry.id,
+        number: entry.number,
+        entryDate: entry.entryDate,
+        memo: entry.memo,
+        status: entry.status,
+        lines: entry.lines.map((l) => ({
+          accountCode: l.accountCode,
+          accountName: l.accountName,
+          debitMinor: l.debitMinor.toString(),
+          creditMinor: l.creditMinor.toString(),
+          memo: l.memo,
+        })),
+      },
+    };
   } catch (e) {
     return fail(e);
   }

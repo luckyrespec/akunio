@@ -2,9 +2,10 @@
 
 import { Money } from "@/core/money/money";
 import { StatusBadge, type InvoiceDetailData } from "./template-formal";
+import type { InvoiceEditState } from "./use-invoice-inline-edit";
 
 /** Template Modern — aksen terra, ringkas, tanpa kolom tanda tangan. */
-export function TemplateModern({ invoice }: { invoice: InvoiceDetailData }) {
+export function TemplateModern({ invoice, edit }: { invoice: InvoiceDetailData; edit?: InvoiceEditState }) {
   const remainingMinor = invoice.totalMinor - invoice.amountPaidMinor;
 
   return (
@@ -28,7 +29,20 @@ export function TemplateModern({ invoice }: { invoice: InvoiceDetailData }) {
           <StatusBadge status={invoice.status} />
           <div className="flex gap-5 text-ink-soft">
             <span>Terbit: <span className="font-medium text-ink">{invoice.issueDate}</span></span>
-            <span>Tempo: <span className="font-medium text-ink">{invoice.dueDate}</span></span>
+            <span>Tempo: {edit?.editing ? (
+              <>
+                <input
+                  type="date"
+                  value={edit.dueDate}
+                  onChange={(e) => edit.setDueDate(e.target.value)}
+                  aria-label="Jatuh tempo"
+                  className="h-7 rounded-lg border border-rule bg-paper px-2 text-xs text-ink shadow-2xs print:hidden"
+                />
+                <span className="hidden font-medium text-ink print:inline">{invoice.dueDate}</span>
+              </>
+            ) : (
+              <span className="font-medium text-ink">{invoice.dueDate}</span>
+            )}</span>
           </div>
         </div>
 
@@ -118,10 +132,26 @@ export function TemplateModern({ invoice }: { invoice: InvoiceDetailData }) {
           </div>
         </div>
 
-        {invoice.notes && (
-          <p className="mt-5 whitespace-pre-wrap border-l-2 border-terra pl-3 text-xs leading-relaxed text-ink-soft">
-            {invoice.notes}
-          </p>
+        {edit?.editing ? (
+          <div className="mt-5 print:hidden">
+            <textarea
+              value={edit.notes}
+              onChange={(e) => edit.setNotes(e.target.value)}
+              rows={6}
+              placeholder="Catatan faktur (opsional)"
+              aria-label="Catatan faktur"
+              className="min-h-32 w-full rounded-xl border border-terra/50 bg-canvas/40 p-3 text-xs leading-relaxed text-ink"
+            />
+            {edit.error && (
+              <p className="mt-1.5 text-[11px] font-medium text-destructive">{edit.error}</p>
+            )}
+          </div>
+        ) : (
+          invoice.notes && (
+            <p className="mt-5 whitespace-pre-wrap border-l-2 border-terra pl-3 text-xs leading-relaxed text-ink-soft">
+              {invoice.notes}
+            </p>
+          )
         )}
 
         {invoice.payments.length > 0 && (

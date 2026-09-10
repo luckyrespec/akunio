@@ -16,6 +16,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { postInvoiceToJournalAction } from "@/server/actions/invoice.actions";
+import { InvoicePostingPreview } from "./invoice-posting-preview";
 import { formatWhatsAppReminder } from "@/core/invoicing/whatsapp";
 import { useRouter } from "next/navigation";
 import type { InvoiceStatus } from "@/server/db/schema/invoicing";
@@ -44,6 +45,7 @@ interface InvoiceListProps {
 export function InvoiceList({ invoices, onOpenPayment, emptyHint }: InvoiceListProps) {
   const router = useRouter();
   const [postingId, setPostingId] = React.useState<string | null>(null);
+  const [previewInv, setPreviewInv] = React.useState<InvoiceRow | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   async function handlePostJournal(id: string) {
@@ -52,6 +54,7 @@ export function InvoiceList({ invoices, onOpenPayment, emptyHint }: InvoiceListP
     try {
       const res = await postInvoiceToJournalAction(id);
       if (!res.ok) throw new Error(res.error);
+      setPreviewInv(null);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal memposting faktur.");
@@ -159,9 +162,12 @@ export function InvoiceList({ invoices, onOpenPayment, emptyHint }: InvoiceListP
                               variant="outline"
                               size="sm"
                               disabled={postingId === inv.id}
-                              onClick={() => handlePostJournal(inv.id)}
+                              onClick={() => {
+                                setError(null);
+                                setPreviewInv(inv);
+                              }}
                               className="h-7 text-[11px] border-rule text-ink-soft hover:text-ink"
-                              title="Posting jurnal umum ke buku besar"
+                              title="Pratinjau draf jurnal lalu posting ke buku besar"
                             >
                               {postingId === inv.id ? (
                                 <Loader2 className="size-3 animate-spin mr-1" />
@@ -220,6 +226,17 @@ export function InvoiceList({ invoices, onOpenPayment, emptyHint }: InvoiceListP
           </div>
         )}
       </div>
+
+      <InvoicePostingPreview
+        invoiceId={previewInv?.id ?? null}
+        invoiceNumber={previewInv?.invoiceNumber ?? ""}
+        open={previewInv !== null}
+        onOpenChange={(v) => {
+          if (!v) setPreviewInv(null);
+        }}
+        onConfirm={handlePostJournal}
+        confirming={postingId !== null}
+      />
     </div>
   );
 }

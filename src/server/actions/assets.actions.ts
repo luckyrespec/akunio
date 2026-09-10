@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { and, eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
 import { db } from "@/server/db";
+import { fixedAssets } from "@/server/db/schema/assets";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import {
   createFixedAsset,
@@ -279,6 +281,49 @@ export async function disposeAssetAction(payload: {
     revalidatePath(`/aset/${payload.assetId}`);
     revalidatePath("/jurnal");
     return { ok: true, data: result };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Rincian satu aset tetap untuk sheet drawer (dipakai chat Akunio + reusable).
+ * Lookup per kode aset. BigInt diserialkan ke string.
+ */
+export async function getFixedAssetSheetAction(code: string) {
+  try {
+    const ctx = await requireContext();
+    const clean = code.trim().toUpperCase();
+    if (!clean) return fail("Kode aset kosong.");
+    const rows = await db
+      .select()
+      .from(fixedAssets)
+      .where(and(eq(fixedAssets.orgId, ctx.orgId), eq(fixedAssets.code, clean)))
+      .limit(1);
+    const asset = rows[0];
+    if (!asset) return fail(`Aset ${clean} tidak ditemukan.`);
+    const detail = await getFixedAssetDetail(db, ctx.orgId, asset.id);
+    const postedLines = (detail?.schedule ?? []).filter((l) => l.status === "POSTED");
+    const accumulatedMinor = postedLines.reduce((a, l) => a + l.depreciationAmountMinor, 0n);
+    return {
+      ok: true,
+      data: {
+        id: asset.id,
+        code: asset.code,
+        name: asset.name,
+        category: asset.category,
+        status: asset.status,
+        acquisitionDate: asset.acquisitionDate,
+        acquisitionCostMinor: asset.acquisitionCostMinor.toString(),
+        salvageValueMinor: asset.salvageValueMinor.toString(),
+        usefulLifeMonths: asset.usefulLifeMonths,
+        depreciationMethod: asset.depreciationMethod,
+        accumulatedMinor: accumulatedMinor.toString(),
+        bookValueMinor: (asset.acquisitionCostMinor - accumulatedMinor).toString(),
+        postedPeriods: postedLines.length,
+        totalPeriods: (detail?.schedule ?? []).length,
+      },
+    };
   } catch (err) {
     return fail(err);
   }

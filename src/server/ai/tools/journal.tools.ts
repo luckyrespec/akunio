@@ -43,7 +43,7 @@ export const journalToolDefs: ToolDefinition[] = [
   {
     type: "function",
     name: "create_journal_draft",
-    description: "Buat draft jurnal double-entry baru untuk ditinjau oleh pengguna sebelum diposting.",
+    description: "Buat draft jurnal double-entry HANYA bila pengguna eksplisit meminta draft. Untuk permintaan mencatat biasa, gunakan post_journal.",
     parameters: {
       type: "object",
       properties: {
@@ -71,7 +71,7 @@ export const journalToolDefs: ToolDefinition[] = [
   {
     type: "function",
     name: "post_journal",
-    description: "Posting transaksi resmi langsung ke buku besar sebagai jurnal JE-YYYY-NNNN.",
+    description: "Pilihan utama untuk mencatat transaksi: posting resmi langsung ke buku besar sebagai jurnal JE-YYYY-NNNN. Kartu persetujuan tampil sebelum eksekusi.",
     parameters: {
       type: "object",
       properties: {

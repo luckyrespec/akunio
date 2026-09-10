@@ -9,17 +9,29 @@ type Policy = "smart" | "strict" | "autonomous";
 
 export function HitlPolicySelector({
   currentPolicy = "smart",
+  value,
+  onChange,
+  disabled = false,
 }: {
   currentPolicy?: Policy;
+  /** Controlled mode (mis. form global): tanpa ini, komponen menyimpan sendiri. */
+  value?: Policy;
+  onChange?: (v: Policy) => void;
+  disabled?: boolean;
 }) {
-  const [selected, setSelected] = React.useState<Policy>(currentPolicy);
+  const [internal, setInternal] = React.useState<Policy>(currentPolicy);
   const [saving, setSaving] = React.useState(false);
   const [msg, setMsg] = React.useState<string | null>(null);
+  const selected = value ?? internal;
 
   const handleSelect = async (val: Policy) => {
     if (saving || val === selected) return;
-    const previous = selected;
-    setSelected(val);
+    if (onChange) {
+      onChange(val);
+      return;
+    }
+    const previous = internal;
+    setInternal(val);
     setSaving(true);
     setMsg(null);
     try {
@@ -29,7 +41,7 @@ export function HitlPolicySelector({
       }
       setMsg("Pengaturan otorisasi berhasil diperbarui.");
     } catch (err) {
-      setSelected(previous);
+      setInternal(previous);
       setMsg(err instanceof Error ? err.message : "Terjadi kesalahan.");
     } finally {
       setSaving(false);
@@ -52,7 +64,7 @@ export function HitlPolicySelector({
         <button
           type="button"
           onClick={() => handleSelect("smart")}
-          disabled={saving}
+          disabled={saving || disabled}
           className={cn(
             "flex flex-col items-start rounded-xl border p-3.5 text-left transition-colors",
             selected === "smart"
@@ -72,7 +84,7 @@ export function HitlPolicySelector({
         <button
           type="button"
           onClick={() => handleSelect("strict")}
-          disabled={saving}
+          disabled={saving || disabled}
           className={cn(
             "flex flex-col items-start rounded-xl border p-3.5 text-left transition-colors",
             selected === "strict"
@@ -92,7 +104,7 @@ export function HitlPolicySelector({
         <button
           type="button"
           onClick={() => handleSelect("autonomous")}
-          disabled={saving}
+          disabled={saving || disabled}
           className={cn(
             "flex flex-col items-start rounded-xl border p-3.5 text-left transition-colors",
             selected === "autonomous"

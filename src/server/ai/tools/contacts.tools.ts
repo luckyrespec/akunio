@@ -62,7 +62,7 @@ export const contactsToolDefs: ToolDefinition[] = [
     type: "function",
     name: "create_contact",
     description:
-      "Daftarkan kontak pelanggan/pemasok baru. Wajib konfirmasi user sebelum eksekusi.",
+      "Daftarkan kontak pelanggan/pemasok baru. Wajib konfirmasi user sebelum eksekusi. Setelah berhasil, sebutkan kontak sebagai tautan [Nama](kontak:ID-dari-hasil-tool) agar pengguna bisa membuka rinciannya.",
     parameters: {
       type: "object",
       properties: {
@@ -82,7 +82,7 @@ export const contactsToolDefs: ToolDefinition[] = [
     type: "function",
     name: "update_contact",
     description:
-      "Ubah data kontak yang sudah ada. Panggil find_contact dulu bila id belum pasti. Wajib konfirmasi user sebelum eksekusi.",
+      "Ubah data kontak yang sudah ada. Panggil find_contact dulu bila id belum pasti. Wajib konfirmasi user sebelum eksekusi. Setelah berhasil, sebutkan kontak sebagai tautan [Nama](kontak:ID).",
     parameters: {
       type: "object",
       properties: {

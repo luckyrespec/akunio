@@ -3,6 +3,7 @@
 import { Building2, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Money } from "@/core/money/money";
+import type { InvoiceEditState } from "./use-invoice-inline-edit";
 
 export interface InvoiceDetailData {
   id: string;
@@ -77,7 +78,7 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 /** Template Formal — kop klasik, tabel bergaris, kolom tanda tangan. */
-export function TemplateFormal({ invoice }: { invoice: InvoiceDetailData }) {
+export function TemplateFormal({ invoice, edit }: { invoice: InvoiceDetailData; edit?: InvoiceEditState }) {
   const remainingMinor = invoice.totalMinor - invoice.amountPaidMinor;
 
   return (
@@ -135,7 +136,20 @@ export function TemplateFormal({ invoice }: { invoice: InvoiceDetailData }) {
           </div>
           <div>
             <span className="text-ink-soft">Jatuh Tempo: </span>
-            <span className="font-medium text-ink">{invoice.dueDate}</span>
+            {edit?.editing ? (
+              <>
+                <input
+                  type="date"
+                  value={edit.dueDate}
+                  onChange={(e) => edit.setDueDate(e.target.value)}
+                  aria-label="Jatuh tempo"
+                  className="h-7 rounded-lg border border-rule bg-paper px-2 text-xs text-ink shadow-2xs print:hidden"
+                />
+                <span className="hidden font-medium text-ink print:inline">{invoice.dueDate}</span>
+              </>
+            ) : (
+              <span className="font-medium text-ink">{invoice.dueDate}</span>
+            )}
           </div>
         </div>
       </div>
@@ -175,11 +189,28 @@ export function TemplateFormal({ invoice }: { invoice: InvoiceDetailData }) {
       {/* Totals Breakdown */}
       <div className="flex flex-col sm:flex-row sm:justify-between items-start pt-6 gap-6 text-xs">
         <div className="space-y-2 max-w-sm">
-          {invoice.notes && (
-            <div className="rounded-xl border border-rule bg-canvas/40 p-3.5">
+          {edit?.editing ? (
+            <div className="rounded-xl border border-terra/50 bg-canvas/40 p-3.5 print:hidden">
               <span className="font-semibold text-ink block text-[11px]">Instruksi / Catatan:</span>
-              <p className="mt-1 text-ink-soft leading-relaxed whitespace-pre-wrap">{invoice.notes}</p>
+              <textarea
+                value={edit.notes}
+                onChange={(e) => edit.setNotes(e.target.value)}
+                rows={6}
+                placeholder="Catatan faktur (opsional)"
+                aria-label="Catatan faktur"
+                className="mt-1.5 min-h-32 w-full rounded-lg border border-rule bg-paper p-2.5 text-xs leading-relaxed text-ink"
+              />
+              {edit.error && (
+                <p className="mt-1.5 text-[11px] font-medium text-destructive">{edit.error}</p>
+              )}
             </div>
+          ) : (
+            invoice.notes && (
+              <div className="rounded-xl border border-rule bg-canvas/40 p-3.5">
+                <span className="font-semibold text-ink block text-[11px]">Instruksi / Catatan:</span>
+                <p className="mt-1 text-ink-soft leading-relaxed whitespace-pre-wrap">{invoice.notes}</p>
+              </div>
+            )
           )}
         </div>
 

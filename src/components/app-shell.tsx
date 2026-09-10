@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAturan = pathname.startsWith("/aturan");
   const isJurnal = pathname === "/jurnal";
   const fullBleed = isAsisten || isPengaturan || isFaktur || isAturan || isJurnal;
-  const isFixedViewport = isAsisten || isAturan;
+  const isFixedViewport = isAsisten || isAturan || isFaktur;
 
   // Avoid flash of wrong width before localStorage read
   if (!ready) {

@@ -56,7 +56,7 @@ const createJournalDraftTool = {
   type: "function",
   name: "create_journal_draft",
   description:
-    "Buat draft jurnal double-entry dari deskripsi transaksi. WAJIB dipanggil ketika user ingin mencatat, membuat, membukukan transaksi, faktur, kwitansi, nota. Draft akan disimpan sebagai PENDING dan butuh persetujuan user sebelum posting. Jangan auto-posting.",
+    "Buat draft jurnal double-entry dari deskripsi transaksi. HANYA dipanggil bila user eksplisit meminta draft (mis. 'buatkan draft', 'jangan posting dulu'). Untuk permintaan mencatat biasa, gunakan post_journal agar hasilnya langsung POSTED setelah persetujuan. Draft disimpan sebagai PENDING dan butuh posting terpisah. Jangan auto-posting.",
   parameters: {
     type: "object",
     properties: {
@@ -266,7 +266,7 @@ export async function askNara(
 - ATURAN KONTEKS (ANTI-LUPA, WAJIB): jika pesan user singkat/konfirmasi ("ok", "ya", "catatkan ya", "lanjutkan") tanpa nominal,
   WAJIB ambil detail dari Riwayat di atas (mis. aset laptop Rp10.000.000 + Garis Lurus 48 bulan). Jangan minta ulang detail yang sudah ada;
   hanya tanyakan field yang benar-benar belum ada (sumber dana/tanggal) sambil menyebut kembali data yang sudah diketahui.
-- Jika user ingin mencatat transaksi, WAJIB panggil create_journal_draft. Draft akan direview user sebelum posting — jangan janji posting otomatis.
+- Jika user ingin mencatat transaksi, UTAMAKAN post_journal (kartu persetujuan tetap tampil sebelum posting sehingga hasilnya langsung POSTED). create_journal_draft HANYA bila user eksplisit meminta draft — jangan janji posting otomatis untuk draft.
 - Jika user menambah barang persediaan sambil melampirkan foto, TAWARKAN dulu menjadikan foto sebagai thumbnail; hanya teruskan imageDocumentId bila user menjawab ya.
 - Jika user tanya laporan/saldo/riwayat, panggil tool yang sesuai (search_journals, get_report, list_accounts, list_drafts, list_journals) lalu jawab berdasarkan hasilnya.
 - Jika tidak perlu tool, jawab langsung dari konteks.`;
@@ -480,7 +480,7 @@ Konteks live: ${liveNumbers}
 Konteks RAG:
 ${context}
 
-Tugas: Jawab user dalam Bahasa Indonesia natural, ringkas, gunakan angka dari tool jika ada. Sitasi inline HANYA untuk klaim aturan penting atau angka kunci: [SAK Bab 11 §11.1-11.3](sak:11:11.1-11.3) atau [JE-2026-0004](jurnal:JE-2026-0004) (nomor persis dari hasil tool). Jangan tampilkan daftar sumber. Jangan halusinasi. Jika ada draft yang dibuat, sebutkan ID draft dan minta user review sebelum posting.`;
+Tugas: Jawab user dalam Bahasa Indonesia natural, ringkas, gunakan angka dari tool jika ada. Sitasi inline HANYA untuk klaim aturan penting atau angka kunci: [SAK EMKM Bab 11 paragraf 11.1-11.3](sak:11:11.1-11.3) atau [JE-2026-0004](jurnal:JE-2026-0004) (nomor persis dari hasil tool). Jangan tampilkan daftar sumber. Jangan halusinasi. Jika ada draft yang dibuat, sebutkan ID draft dan minta user review sebelum posting.`;
       const synth = await ai.interactions.create({
         model: MODEL,
         input: [{ type: "user_input", content: [{ type: "text", text: synthPrompt }] } as never],

@@ -228,3 +228,39 @@ export async function createAccountAction(input: CreateAccountInput) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal menambahkan akun." };
   }
 }
+
+/**
+ * Rincian satu akun COA untuk sheet drawer (dipakai chat Akunio + reusable).
+ * Lookup per kode akun.
+ */
+export async function getAccountDetailAction(code: string) {
+  try {
+    const ctx = await requireContext();
+    const clean = code.trim();
+    if (!clean) return { ok: false as const, error: "Kode akun kosong." };
+    const rows = await db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.code, clean)))
+      .limit(1);
+    const acc = rows[0];
+    if (!acc) return { ok: false as const, error: `Akun ${clean} tidak ditemukan.` };
+    return {
+      ok: true as const,
+      data: {
+        id: acc.id,
+        code: acc.code,
+        name: acc.name,
+        type: acc.type,
+        normal: acc.normal,
+        parentCode: acc.parentCode,
+        isCash: acc.isCash,
+        isBank: acc.isBank,
+        archived: Boolean(acc.archivedAt),
+      },
+    };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    return { ok: false as const, error: e instanceof Error ? e.message : "Gagal memuat akun." };
+  }
+}

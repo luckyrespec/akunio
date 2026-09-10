@@ -47,13 +47,14 @@ export function validateEntry(
 }
 
 export type AccountCheckIssue =
-  | { code: "UNKNOWN_ACCOUNT"; index: number }
-  | { code: "ARCHIVED_ACCOUNT"; index: number }
-  | { code: "GROUP_ACCOUNT"; index: number };
+  | { code: "UNKNOWN_ACCOUNT"; index: number; accountCode?: string }
+  | { code: "ARCHIVED_ACCOUNT"; index: number; accountCode?: string }
+  | { code: "GROUP_ACCOUNT"; index: number; accountCode?: string };
 
 export interface PostingAccountMeta {
   archivedAt: Date | null;
   hasChildren: boolean;
+  code?: string;
 }
 
 export function checkPostingAccounts(
@@ -64,8 +65,8 @@ export function checkPostingAccounts(
   lines.forEach((l, i) => {
     const meta = byId.get(l.accountId);
     if (!meta) issues.push({ code: "UNKNOWN_ACCOUNT", index: i });
-    else if (meta.archivedAt) issues.push({ code: "ARCHIVED_ACCOUNT", index: i });
-    else if (meta.hasChildren) issues.push({ code: "GROUP_ACCOUNT", index: i });
+    else if (meta.archivedAt) issues.push({ code: "ARCHIVED_ACCOUNT", index: i, accountCode: meta.code });
+    else if (meta.hasChildren) issues.push({ code: "GROUP_ACCOUNT", index: i, accountCode: meta.code });
   });
   return issues;
 }

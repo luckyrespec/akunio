@@ -51,6 +51,8 @@ export interface PendingApproval {
   explanation: string;
   /** Thread asal permintaan — keputusan (setuju/tolak) selalu dikirim ke thread ini. */
   threadId?: string | null;
+  /** Arsip putusan: kartu tetap tampil read-only, tombol disabled. */
+  decided?: "approved" | "rejected" | null;
 }
 
 const LOCAL_THREAD_KEY = "__local__";
@@ -69,12 +71,15 @@ type StoredInvocation = {
  * Cari permintaan persetujuan yang belum diputuskan dari riwayat pesan DB.
  * Invokasi yang callId-nya sudah ada keputusan (approved/rejected/failed)
  * di pesan berikutnya dianggap selesai dan diabaikan.
+ * Bila tak ada yang pending, kembalikan putusan terakhir sebagai arsip
+ * read-only agar kartu persetujuan tetap tampil (tombol disabled).
  */
 export function findPendingInMessages(
   messages: Array<{ toolInvocations?: StoredInvocation[] | null }>,
 ): PendingApproval | null {
   const pending = new Map<string, { toolName: string; args: Record<string, unknown>; order: number }>();
   let order = 0;
+  let lastDecided: { callId: string; toolName: string; args: Record<string, unknown>; decided: "approved" | "rejected" } | null = null;
   for (const m of messages) {
     for (const inv of m.toolInvocations ?? []) {
       order += 1;
@@ -87,6 +92,14 @@ export function findPendingInMessages(
         });
       } else if (inv.status === "approved" || inv.status === "rejected" || inv.status === "failed") {
         pending.delete(inv.callId);
+        if (inv.status === "approved" || inv.status === "rejected") {
+          lastDecided = {
+            callId: inv.callId,
+            toolName: inv.toolName,
+            args: (inv.args as Record<string, unknown>) ?? {},
+            decided: inv.status,
+          };
+        }
       }
     }
   }
@@ -94,13 +107,22 @@ export function findPendingInMessages(
   for (const [callId, v] of pending) {
     if (!best || v.order > best.order) best = { callId, ...v };
   }
-  if (!best) return null;
-  return {
-    callId: best.callId,
-    toolName: best.toolName,
-    args: best.args,
-    explanation: `Akunio membutuhkan konfirmasi Anda untuk menjalankan '${best.toolName}'.`,
-  };
+  if (best) {
+    return {
+      callId: best.callId,
+      toolName: best.toolName,
+      args: best.args,
+      explanation: `Akunio membutuhkan konfirmasi Anda untuk menjalankan '${best.toolName}'.`,
+      decided: null,
+    };
+  }
+  if (lastDecided) {
+    return {
+      ...lastDecided,
+      explanation: `Permintaan menjalankan '${lastDecided.toolName}'.`,
+    };
+  }
+  return null;
 }
 
 interface UseNaraStreamChatOptions {
@@ -109,6 +131,8 @@ interface UseNaraStreamChatOptions {
   modelPreset?: ModelPreset;
   initialHitlPolicy?: "smart" | "strict" | "autonomous";
   onThreadCreated?: (threadId: string, title: string) => void;
+  /** Dipanggil tiap stream jawaban selesai (mis. untuk penamaan otomatis sesi). */
+  onThreadSettled?: (threadId: string) => void;
 }
 
 export function useNaraStreamChat({
@@ -117,6 +141,7 @@ export function useNaraStreamChat({
   modelPreset = "fast",
   initialHitlPolicy = "smart",
   onThreadCreated,
+  onThreadSettled,
 }: UseNaraStreamChatOptions) {
   const [messages, setMessages] = React.useState<MessageItem[]>([]);
   const [input, setInput] = React.useState("");
@@ -417,6 +442,7 @@ export function useNaraStreamChat({
                     createdAt: new Date().toISOString(),
                   },
                 ]);
+                if (streamThreadId) onThreadSettled?.(streamThreadId);
               }
             } catch (parseErr) {
               console.warn("Gagal parsing SSE chunk", parseErr, jsonStr);
@@ -447,6 +473,7 @@ export function useNaraStreamChat({
       allowAllForSession,
       setActiveThreadId,
       onThreadCreated,
+      onThreadSettled,
       setPendingForThread,
     ],
   );
@@ -485,7 +512,11 @@ export function useNaraStreamChat({
         // Hanya tempel pesan balasan bila user masih melihat thread yang sama.
         if (decisionThreadId === viewThreadRef.current) {
           if (data.message) {
-            setMessages((prev) => [...prev, data.message]);
+            const withSuggestions =
+              Array.isArray(data.suggestions) && data.suggestions.length > 0
+                ? { ...data.message, suggestions: data.suggestions }
+                : data.message;
+            setMessages((prev) => [...prev, withSuggestions]);
           } else if (!approved) {
             setMessages((prev) => [
               ...prev,
@@ -498,7 +529,13 @@ export function useNaraStreamChat({
             ]);
           }
         }
-        setPendingForThread(decisionThreadId, null);
+        // Kartu putusan dipertahankan sebagai arsip read-only (tombol disabled),
+        // bukan dihapus — bukti apa yang disetujui/ditolak tetap terlihat.
+        setPendingForThread(decisionThreadId, {
+          ...pendingApproval,
+          threadId: decisionThreadId,
+          decided: approved ? "approved" : "rejected",
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Gagal memproses persetujuan.";
         setErrorBanner(msg);

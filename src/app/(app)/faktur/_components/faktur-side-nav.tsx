@@ -30,7 +30,7 @@ export function FakturSideNav() {
   const active = activeKey(pathname, searchParams.get("tab"), searchParams.get("tipe"));
 
   return (
-    <aside className="flex w-full shrink-0 flex-col border-b border-rule bg-paper lg:w-64 lg:border-b-0 lg:border-r">
+    <aside className="flex w-full shrink-0 flex-col border-b border-rule bg-paper lg:h-full lg:min-h-0 lg:w-64 lg:border-b-0 lg:border-r">
       <div className="hidden items-center gap-3 border-b border-rule/70 p-4 lg:flex">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-terra/25 bg-terra/10 text-terra">
           <Receipt className="size-4" />
@@ -44,7 +44,7 @@ export function FakturSideNav() {
       <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft max-lg:hidden">
         Menu Faktur
       </div>
-      <nav className="flex flex-1 flex-row gap-1 overflow-x-auto p-2 pt-0 lg:flex-col lg:space-y-1 lg:overflow-y-auto" aria-label="Kategori faktur">
+      <nav className="flex flex-1 flex-row gap-1 overflow-x-auto p-2 pt-0 lg:min-h-0 lg:flex-col lg:space-y-1 lg:overflow-y-auto" aria-label="Kategori faktur">
         {ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = active === item.key;

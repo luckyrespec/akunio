@@ -47,7 +47,10 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
 
   return (
     <div className="py-2">
-      <InvoicePrintView invoice={detailData} />
+      <InvoicePrintView
+        invoice={detailData}
+        posted={Boolean((inv as { journalEntryId?: string | null }).journalEntryId)}
+      />
     </div>
   );
 }

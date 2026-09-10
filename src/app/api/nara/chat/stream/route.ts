@@ -27,8 +27,12 @@ import { embed } from "@/server/ai/embeddings";
 import { accounts, organizations } from "@/server/db/schema/org";
 import { orgProfiles } from "@/server/db/schema/onboarding";
 import { buildAkunioSystemPrompt } from "@/server/ai/persona";
+import { parseAiPrefs } from "@/lib/ai-prefs";
+import { generateSmartTitle } from "@/server/ai/thread-title";
 import { formatMemoriesForPrompt } from "@/server/ai/memory-extractor";
 import { listMemories } from "@/server/db/repos/assistant-memory.repo";
+import { listInventoryItems } from "@/server/db/repos/inventory.repo";
+import { findPeriodByDate } from "@/server/db/repos/periods.repo";
 import { withOrg } from "@/server/db/repos/with-org";
 import { eq } from "drizzle-orm";
 import { postedLinesThrough } from "@/server/reports/build";
@@ -43,6 +47,43 @@ interface AttachmentMeta {
   mime: string;
   fileName: string;
   sizeBytes: number;
+}
+
+/** Estimasi nominal aksi (minor) untuk batas persetujuan. null = tak terukur. */
+function maxMinorFromArgs(toolName: string, args: Record<string, unknown>): bigint | null {
+  try {
+    if (toolName === "post_journal" || toolName === "create_journal_draft") {
+      const lines = Array.isArray(args.lines) ? (args.lines as Array<Record<string, unknown>>) : [];
+      let total = 0n;
+      for (const l of lines) {
+        const raw = l.debit ?? l.debitText;
+        if (typeof raw === "string" && raw.trim() !== "" && raw.trim() !== "0") {
+          total += Money.parseIdr(raw).minor;
+        }
+      }
+      return total;
+    }
+    if (toolName === "record_cash_entry" && typeof args.amountText === "string") {
+      return Money.parseIdr(args.amountText).minor;
+    }
+    if (toolName === "create_invoice" && Array.isArray(args.items)) {
+      let total = 0n;
+      for (const it of args.items as Array<Record<string, unknown>>) {
+        const qty = Number(it.quantity ?? 0);
+        const price = Number(it.unitPrice ?? 0);
+        if (Number.isFinite(qty) && Number.isFinite(price)) {
+          total += BigInt(Math.round(qty * price)) * 100n;
+        }
+      }
+      return total;
+    }
+    if (toolName === "record_invoice_payment" && Number.isFinite(Number(args.amount))) {
+      return BigInt(Math.round(Number(args.amount))) * 100n;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 async function getLiveNumbers(orgId: string): Promise<string> {
@@ -97,21 +138,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: quota.message ?? "Kuota interaksi AI habis bulan ini." }, { status: 429 });
     }
 
-function generateSmartTitle(prompt: string): string {
-  if (!prompt) return "Percakapan Baru";
-  const clean = prompt
-    .replace(/^(tolong|mohon|bisa|coba|tolong buatkan|catat transaksi|tampilkan|apakah|bagaimana|cek|lihat)\s+/i, "")
-    .replace(/[?.!,;:]+$/g, "")
-    .trim();
-
-  const words = clean.split(/\s+/).slice(0, 3);
-  if (words.length === 0 || !words[0]) return "Percakapan Baru";
-
-  return words
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-}
-
     if (!threadId) {
       const title = generateSmartTitle(trimmedMsg);
       const newT = await db.transaction((tx) => createThread(tx, ctx.orgId, title, modelPreset));
@@ -138,6 +164,26 @@ function generateSmartTitle(prompt: string): string {
       }),
     );
 
+    // Ingatan preferensi/koreksi dari pesan user (fail-silent, tak blokir chat).
+    try {
+      const { extractExplicitMemory, extractCorrectionMemory } = await import(
+        "@/server/ai/memory-extractor"
+      );
+      const { saveMemory } = await import("@/server/db/repos/assistant-memory.repo");
+      const found =
+        extractExplicitMemory(trimmedMsg) ?? extractCorrectionMemory(trimmedMsg);
+      if (found) {
+        await db.transaction((tx) =>
+          saveMemory(tx, ctx.orgId, {
+            kind: found.kind,
+            content: found.content,
+            source: "auto",
+            sourceThreadId: threadId!,
+          }),
+        );
+      }
+    } catch {}
+
     // Check organization HITL policy
     const [orgRow] = await db.select().from(organizations).where(eq(organizations.id, ctx.orgId));
     const orgSettings = (orgRow?.settings ?? {}) as {
@@ -145,6 +191,7 @@ function generateSmartTitle(prompt: string): string {
       aiMemoryEnabled?: boolean;
     };
     const hitlPolicy = orgSettings.aiHitlPolicy ?? "smart";
+    const prefs = parseAiPrefs(orgRow?.settings);
 
     // Profil usaha untuk sudut persona (read-only, bukan tool).
     let businessType: string | null = null;
@@ -205,8 +252,11 @@ function generateSmartTitle(prompt: string): string {
       businessType,
       pageLabel: pageContext?.pathname ?? pageContext?.title ?? null,
       memoryBlock,
+      answerLength: prefs.answerLength,
+      citationsEnabled: prefs.citationsEnabled,
     });
     const systemInstruction = `${personaHeader}
+- Tanggal hari ini: ${new Date().toISOString().slice(0, 10)} (Asia/Jakarta). Semua tanggal — transaksi, jatuh tempo, opname — mengacu ke tanggal ini; "akhir bulan ini" berarti hari terakhir bulan berjalan, bukan tanggal tebakan. Bila perlu kepastian (mis. jatuh tempo penting), panggil tool 'get_server_time' lalu hitung darinya.
 - Anda memiliki akses ke berbagai Tool Akuntansi untuk membaca dan mengubah data.
 - Daftar Tool yang tersedia:
   * Pembukuan Jurnal:
@@ -215,7 +265,8 @@ function generateSmartTitle(prompt: string): string {
     - 'reverse_journal': Balikkan/batalkan entri jurnal yang salah.
     - 'search_journals', 'list_journals': Cari atau lihat riwayat entri jurnal.
   * Faktur & Tagihan:
-    - 'create_invoice': Buat faktur penjualan (INVOICE) atau tagihan pembelian (BILL).
+    - 'create_invoice': Buat faktur penjualan (INVOICE) atau tagihan pembelian (BILL). WAJIB isi catalogItemId tiap baris bila barangnya terdaftar di katalog (cari dulu via 'list_inventory_items') — tanpa itu posting jatuh ke akun default yang bisa berupa akun induk dan gagal.
+    - 'update_invoice': Koreksi faktur (jatuh tempo/catatan kapan pun; rincian barang hanya bila belum diposting). Untuk "ubah/edit/betulkan faktur", cari dulu via 'list_invoices' bila nomor belum pasti.
     - 'record_invoice_payment': Catat pelunasan faktur.
     - 'post_invoice_to_journal': Posting faktur ke jurnal buku besar.
     - 'list_invoices', 'get_invoice_detail': Daftar dan rincian faktur/tagihan (status, sisa).
@@ -257,9 +308,17 @@ function generateSmartTitle(prompt: string): string {
   * Hanya tanyakan field yang benar-benar belum ada (mis. sumber dana / tanggal beli bila belum disebut), sebutkan kembali nilai yang sudah diketahui agar user tinggal konfirmasi.
 - Aturan Pencatatan Transaksi:
   Ketika pengguna meminta mencatat transaksi (misal: "catat awal modal usaha saya 1 juta ya" atau "catat bayar sewa 5jt"):
-  Pilihlah akun yang tepat dari Daftar Akun (COA) Tersedia (misal Kas: 1110, Modal Disetor: 3100), dan gunakan 'post_journal' atau 'create_journal_draft'.
+${prefs.postDirectly
+  ? `  UTAMAKAN 'post_journal' — kartu persetujuan berisi rincian akun tetap tampil dan pengguna menyetujui sebelum posting, jadi hasilnya langsung POSTED.
+  'create_journal_draft' HANYA bila pengguna eksplisit meminta draft ("buatkan draft", "jangan posting dulu").`
+  : `  WAJIB 'create_journal_draft' — pengguna mengatur selalu draft dulu. Jangan posting langsung; draft ditinjau di menu Jurnal.`}
+  Pilihlah akun yang tepat dari Daftar Akun (COA) Tersedia (misal Kas: 1110, Modal Disetor: 3100).
   Pastikan jumlah Debit dan Kredit seimbang.
+${prefs.followupEnabled ? "" : "- Saran tindak lanjut MATI: jangan tawarkan langkah berikutnya, jangan sertakan saran/pertanyaan susulan — selesai jawab, berhenti."}
 - Aturan Pencatatan Persediaan Barang:
+  * Setiap menyebut barang yang sudah terdaftar, tulis sebagai tautan [Nama (KODE)](item:KODE) — mis. [Shampo (BRG-001)](item:BRG-001) — agar pengguna bisa membuka rincian barang.
+  * Stok opname / stok awal ("catat stok awal", "catatkan hasil hitung"): panggil 'create_stock_opname' dengan postImmediately=true (satu kartu persetujuan rinci, stok langsung bertambah + jurnal penyesuaian terposting). postImmediately=false HANYA bila pengguna eksplisit meminta draf opname. Cari itemId dulu via 'list_inventory_items'.
+  * KEJUJURAN HASIL (WAJIB): jangan pernah menyatakan draf/opname/jurnal/faktur "berhasil dibuat" kecuali hasil tool mengonfirmasinya. Tanpa hasil tool, katakan rencananya dan minta persetujuan lewat tool.
   * Jika pengguna memberikan rincian barang (misal: "tambahkan barang SKU BRG-101 Kopi Susu modal 12rb jual 18rb stok 50"), gunakan 'add_inventory_item'.
   * Jika pengguna mengunggah file spreadsheet/CSV atau memberikan daftar banyak barang, ekstrak seluruh baris barang dan panggil 'batch_add_inventory_items'.
 - Aturan Pencatatan Aset Tetap:
@@ -269,6 +328,7 @@ function generateSmartTitle(prompt: string): string {
     Jika user sudah menyetujui, siapkan pencatatan via tool jurnal/draf yang sesuai atau arahkan ke /aset/baru dengan ringkasan terisi — jangan mengulang pertanyaan umum.
 - Aturan Pengambilan Laporan / Briefing:
   Panggil tool terkait, lalu sampaikan ringkasannya secara natural dan informatif.
+  Hasil get_report OTOMATIS tampil sebagai tabel laporan baku (seksi + subtotal + status seimbang) — JANGAN tulis ulang tabelnya; cukup satu kalimat bacaan (mis. total aset, laba/rugi, seimbang atau tidak).
 - Jangan pernah mengarang angka; selalu gunakan data dari konteks atau hasil tool.`;
 
     const pageContextStr = pageContext
@@ -455,8 +515,19 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
 
                 const isSafe = SAFE_TOOLS.has(toolName);
                 const isMutating = MUTATING_TOOLS.has(toolName);
+                // Batas nominal: aksi di atas ambang selalu minta persetujuan,
+                // bahkan dalam mode autonomous / selalu-izinkan. Tak terukur = minta izin.
+                let overThreshold = false;
+                if (prefs.approvalThresholdMinor) {
+                  try {
+                    const limit = BigInt(prefs.approvalThresholdMinor);
+                    const amount = maxMinorFromArgs(toolName, args);
+                    overThreshold = amount === null || amount > limit;
+                  } catch {}
+                }
                 const shouldAutoExecute =
-                  isSafe || hitlPolicy === "autonomous" || (isMutating && allowAllForSession);
+                  !overThreshold &&
+                  (isSafe || hitlPolicy === "autonomous" || (isMutating && allowAllForSession));
 
                 if (shouldAutoExecute) {
                   send({ type: "tool_call", tool: toolName, status: "executing", args });
@@ -472,7 +543,7 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
 
                   if (exec.success && exec.data && typeof exec.data === "object") {
                     const dataObj = exec.data as Record<string, unknown>;
-                    if (Array.isArray(dataObj.suggestions) && dataObj.suggestions.length > 0) {
+                    if (prefs.followupEnabled && Array.isArray(dataObj.suggestions) && dataObj.suggestions.length > 0) {
                       send({ type: "suggestions", suggestions: dataObj.suggestions });
                     }
                     if (dataObj.batchId && Array.isArray(dataObj.items)) {
@@ -480,19 +551,58 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                     }
                   }
                 } else {
-                  // Must request HITL approval from user with COMPLETE args
+                  // Must request HITL approval from user with COMPLETE args.
+                  // Opname: perkaya dengan nama/kode barang agar kartu persetujuan
+                  // selalu rinci (bukan JSON mentah / itemId saja).
+                  let approvalArgs: Record<string, unknown> = args;
+                  if (toolName === "create_stock_opname" && Array.isArray(args.items)) {
+                    try {
+                      const allItems = await listInventoryItems(db, ctx.orgId);
+                      const byId = new Map(allItems.map((it) => [it.id, it]));
+                      approvalArgs = {
+                        ...args,
+                        itemsDetail: (args.items as Array<Record<string, unknown>>).map((it) => {
+                          const found = byId.get(String(it.itemId ?? ""));
+                          return {
+                            code: found?.code ?? "?",
+                            name: found?.name ?? String(it.itemId ?? "?"),
+                            unit: found?.unit ?? "",
+                            physicalQty:
+                              typeof it.physicalQty === "number"
+                                ? it.physicalQty
+                                : Number(it.physicalQty ?? 0),
+                            reason: typeof it.reason === "string" ? it.reason : "",
+                          };
+                        }),
+                      };
+                    } catch {}
+                  }
+                  // Posting jurnal: tandai status periode tanggal transaksi agar
+                  // kartu persetujuan bisa memperingatkan bila periode tak OPEN.
+                  if (toolName === "post_journal" && typeof args.dateISO === "string") {
+                    try {
+                      const period = await findPeriodByDate(db, ctx.orgId, args.dateISO.slice(0, 10));
+                      if (period) {
+                        approvalArgs = {
+                          ...approvalArgs,
+                          periodStatus: period.status,
+                          periodName: period.name,
+                        };
+                      }
+                    } catch {}
+                  }
                   send({
                     type: "tool_approval_request",
                     callId,
                     toolName,
-                    args,
+                    args: approvalArgs,
                     explanation: `Akunio membutuhkan konfirmasi Anda untuk menjalankan '${toolName}'.`,
                   });
                   toolInvocations.push({
                     callId,
                     toolName,
                     status: "pending_approval",
-                    args,
+                    args: approvalArgs,
                   });
 
                   if (!fullText) {
@@ -501,6 +611,11 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                       pendingMsg = `Berikut draf jurnal untuk pencatatan transaksi Anda:`;
                     } else if (toolName === "create_invoice") {
                       pendingMsg = `Berikut draf faktur yang telah saya siapkan:`;
+                    } else if (toolName === "create_stock_opname") {
+                      pendingMsg =
+                        args.postImmediately !== false
+                          ? `Berikut rincian opname yang akan langsung disahkan (stok bertambah):`
+                          : `Berikut draf opname untuk ditinjau:`;
                     }
                     fullText = pendingMsg;
                     send({ type: "text", delta: pendingMsg });
@@ -530,7 +645,7 @@ ${liveNumbers}
 Tugas:
 1. Berikan penjelasan yang hangat, ramah, dan mengalir santai dalam Bahasa Indonesia berdasarkan hasil data di atas.
 2. Hindari memberi tanda bintang tunggal (*kata*) pada kata biasa. Tuliskan secara wajar atau gunakan **teks tebal** hanya untuk judul poin utama.
-3. Jika ada daftar atau rincian poin, pisahkan tiap poin di baris baru (- item).
+3. Data terstruktur (angka laporan, mutasi, daftar) disajikan sebagai tabel markdown ringkas (maks 4 kolom, nominal Rp), bukan poin berderet. Satu kalimat bacaan sesudahnya, tanpa daftar saran.
 4. Langsung sampaikan informasi intinya secara jelas dan solutif.`;
 
               const synthStream = await ai.interactions.create({

@@ -39,12 +39,13 @@ import {
   PromptInputSubmit,
 } from "@/components/ai-elements/prompt-input";
 import { Attachments, AttachmentItem } from "@/components/ai-elements/attachments";
+import type { ModelPreset } from "@/components/ai-elements/model-selector";
 import { HitlTool } from "@/components/ai-elements/hitl-tool";
 import { getActivePageContext, type PageContext } from "@/lib/assistant-context";
 import { useNaraThreads } from "@/hooks/use-nara-threads";
 import { useNaraStreamChat, type BatchItemData, type MessageItem } from "@/hooks/use-nara-stream-chat";
-import { NaraHitlApprovalCard } from "@/components/ai-elements/nara-hitl-approval-card";
 import { NaraMessageFeed } from "@/components/ai-elements/nara-message-feed";
+import { BallTriangle } from "react-loader-spinner";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import { cn } from "@/lib/utils";
 
@@ -53,16 +54,31 @@ export type { BatchItemData };
 export function AssistantWidget() {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
-  const { threads, activeThreadId, setActiveThreadId, refresh, handleCreated } =
+  const { threads, activeThreadId, setActiveThreadId, refresh, handleCreated, maybeAutoRename } =
     useNaraThreads();
   const [pageContext, setPageContext] = React.useState<PageContext>({
     pathname: "",
     title: "",
     label: "Aplikasi",
   });
+  const [modelPreset, setModelPreset] = React.useState<ModelPreset>("fast");
+  const [loadingThread, setLoadingThread] = React.useState(false);
+  const [historyHasMore, setHistoryHasMore] = React.useState(false);
+  const [loadingHistoryMore, setLoadingHistoryMore] = React.useState(false);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const promptInputRef = React.useRef<HTMLTextAreaElement>(null);
+  const convRef = React.useRef<HTMLDivElement>(null);
+
+  // Sesi dibuka (loader selesai) → langsung ke pesan terbawah.
+  const wasLoadingThreadRef = React.useRef(false);
+  React.useEffect(() => {
+    if (wasLoadingThreadRef.current && !loadingThread) {
+      const el = convRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+    wasLoadingThreadRef.current = loadingThread;
+  }, [loadingThread]);
 
   const {
     messages,
@@ -90,11 +106,16 @@ export function AssistantWidget() {
     handleStopStreaming,
     handleToolDecision,
     restorePendingFromMessages,
+    setPendingForThread,
   } = useNaraStreamChat({
     activeThreadId,
     setActiveThreadId,
+    modelPreset,
     onThreadCreated: (threadId, title) => {
       handleCreated(threadId, title);
+    },
+    onThreadSettled: (threadId) => {
+      void maybeAutoRename(threadId);
     },
   });
 
@@ -131,10 +152,20 @@ export function AssistantWidget() {
     return () => window.removeEventListener("akunio:open-assistant", onOpen);
   }, []);
 
-  // Fetch threads list when opened (satu store dengan /asisten)
+  // Fetch threads + preferensi AI saat dibuka (satu store dengan /asisten)
   React.useEffect(() => {
     if (!open) return;
     void refresh();
+    (async () => {
+      try {
+        const res = await fetch("/api/nara/prefs");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.prefs?.defaultPreset === "deep" || data.prefs?.defaultPreset === "fast") {
+          setModelPreset(data.prefs.defaultPreset);
+        }
+      } catch {}
+    })();
   }, [open, refresh]);
 
   // NOTE: quick access diam total — tidak ada auto-kirim briefing.
@@ -146,25 +177,47 @@ export function AssistantWidget() {
       if (!activeThreadId) setMessages([]);
       return;
     }
+    let cancelled = false;
     async function loadThread() {
+      setLoadingThread(true);
+      setMessages([]);
+      setHistoryHasMore(false);
       try {
-        const res = await fetch(`/api/nara/threads/${activeThreadId}`);
-        if (res.ok) {
-          const data = await res.json();
-          const loaded = data.messages ?? [];
+        const res = await fetch(`/api/nara/threads/${activeThreadId}?limit=50`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const loaded = data.messages ?? [];
+        if (!cancelled) {
           setMessages(loaded);
+          setHistoryHasMore(data.hasMore ?? false);
           restorePendingFromMessages(activeThreadId, loaded);
         }
       } catch (e) {
         console.error("Gagal memuat percakapan", e);
+      } finally {
+        if (!cancelled) setLoadingThread(false);
       }
     }
     loadThread();
+    return () => {
+      cancelled = true;
+    };
   }, [activeThreadId, open, setMessages, restorePendingFromMessages]);
 
   // Proactive Daily Briefing dimatikan (desain diam total):
   // widget tidak pernah mengirim pesan otomatis saat dibuka.
   // Lihat NOTE di atas.
+
+  // Tombol Batalkan di stamp: buka kartu persetujuan reversal (jalur HITL biasa).
+  const handleRequestReverse = (entryId: string, number: string) => {
+    if (!activeThreadId) return;
+    setPendingForThread(activeThreadId, {
+      callId: `rev-${Date.now()}`,
+      toolName: "reverse_journal",
+      args: { entryId, reason: `Dibatalkan dari chat (${number})` },
+      explanation: `Membatalkan jurnal ${number} dengan jurnal pembalik.`,
+    });
+  };
 
   const handleNewChat = () => {
     setActiveThreadId(null);
@@ -173,6 +226,33 @@ export function AssistantWidget() {
     setAttachments([]);
     setAllowAllForSession(false);
     setErrorBanner(null);
+  };
+
+  // Riwayat mundur: 50 pesan lebih lama ditumpuk di atas, posisi scroll dipertahankan.
+  const handleLoadOlder = async () => {
+    if (!activeThreadId || loadingHistoryMore || !historyHasMore || messages.length === 0) return;
+    const oldest = messages[0];
+    if (!oldest?.id || !/^[0-9a-f-]{36}$/i.test(oldest.id) || !oldest.createdAt) return;
+    const el = convRef.current;
+    const prevHeight = el ? el.scrollHeight : 0;
+    setLoadingHistoryMore(true);
+    try {
+      const res = await fetch(
+        `/api/nara/threads/${activeThreadId}?limit=50&before=${encodeURIComponent(new Date(oldest.createdAt).toISOString())}&beforeId=${encodeURIComponent(oldest.id)}`,
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const older = data.messages ?? [];
+      setMessages((prev) => [...older, ...prev]);
+      setHistoryHasMore(data.hasMore ?? false);
+      requestAnimationFrame(() => {
+        if (el) el.scrollTop = el.scrollHeight - prevHeight;
+      });
+    } catch (e) {
+      console.error("Gagal memuat riwayat lama", e);
+    } finally {
+      setLoadingHistoryMore(false);
+    }
   };
 
   if (pathname.startsWith("/asisten")) {
@@ -229,7 +309,6 @@ export function AssistantWidget() {
         className={cn(
           "fixed inset-y-0 right-0 z-50 flex h-full w-full sm:w-[420px] md:w-[460px] max-w-full flex-col border-l border-rule bg-paper shadow-2xl transition-transform duration-300 [transition-timing-function:var(--ease-drawer,cubic-bezier(0.32,0.72,0,1))]",
           open ? "translate-x-0" : "translate-x-full pointer-events-none",
-          "relative",
         )}
       >
         {/* Panel Header */}
@@ -246,7 +325,7 @@ export function AssistantWidget() {
                   type="button"
                   className="flex items-center gap-1.5 max-w-[200px] text-xs font-semibold text-ink hover:text-terra transition-colors truncate text-left"
                 >
-                  <span className="truncate">{activeThreadTitle}</span>
+                  <span key={activeThreadTitle} className="truncate animate-in fade-in slide-in-from-left-1 duration-200">{activeThreadTitle}</span>
                   <ChevronDown className="size-3 text-ink-soft shrink-0" />
                 </button>
               </DropdownMenuTrigger>
@@ -337,8 +416,46 @@ export function AssistantWidget() {
         )}
 
         {/* Conversation Feed */}
-        <Conversation autoScroll={isStreaming} onDropFiles={handleAttachFiles} className="pb-44">
+        <Conversation ref={convRef} autoScroll={isStreaming} onDropFiles={handleAttachFiles} className="pb-44">
           <ConversationContent className="p-4 space-y-4">
+            {loadingThread ? (
+              <div
+                data-testid="assistant-thread-loader"
+                role="status"
+                aria-label="Memuat percakapan"
+                className="flex flex-1 items-center justify-center py-16 text-terra"
+              >
+                <BallTriangle
+                  visible
+                  height={60}
+                  width={60}
+                  radius={5}
+                  color="currentColor"
+                  ariaLabel="Memuat percakapan"
+                />
+              </div>
+            ) : (
+            <>
+            {historyHasMore && (
+              <div className="flex justify-center pb-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLoadOlder}
+                  disabled={loadingHistoryMore}
+                  className="h-7 text-[11px] text-ink-soft hover:text-ink"
+                >
+                  {loadingHistoryMore ? (
+                    <>
+                      <Loader2 className="mr-1.5 size-3 animate-spin" aria-hidden />
+                      Memuat...
+                    </>
+                  ) : (
+                    "Muat riwayat lama"
+                  )}
+                </Button>
+              </div>
+            )}
             <NaraMessageFeed
               messages={messages}
               isStreaming={isStreaming}
@@ -351,6 +468,10 @@ export function AssistantWidget() {
                 setInput(val);
                 promptInputRef.current?.focus();
               }}
+              onRequestReverse={handleRequestReverse}
+              pendingApproval={pendingApproval}
+              confirmingLoading={confirmingLoading}
+              onDecision={handleToolDecision}
               emptyState={
                 <ConversationEmptyState
                   icon={<Sparkles className="size-8 text-terra" />}
@@ -436,14 +557,7 @@ export function AssistantWidget() {
                 </ConversationEmptyState>
               }
             />
-
-            {/* Interactive HITL Approval Card */}
-            {pendingApproval && (
-              <NaraHitlApprovalCard
-                pendingApproval={pendingApproval}
-                confirmingLoading={confirmingLoading}
-                onDecision={handleToolDecision}
-              />
+            </>
             )}
           </ConversationContent>
           <ConversationScrollButton />

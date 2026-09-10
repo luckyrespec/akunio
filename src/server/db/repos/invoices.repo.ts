@@ -351,3 +351,88 @@ export async function getAgingReportRepo(
     itemized,
   };
 }
+
+export interface UpdateInvoiceInput {
+  dueDate?: string;
+  notes?: string | null;
+  items?: CreateInvoiceItemInput[];
+}
+
+/**
+ * Koreksi faktur: jatuh tempo/catatan kapan pun; rincian barang HANYA
+ * selama belum diposting (sudah masuk jurnal → tolak dengan pesan jelas,
+ * koreksi lewat pembalik/kredit).
+ */
+export async function updateInvoiceRepo(
+  db: Db,
+  orgId: string,
+  invoiceId: string,
+  patch: UpdateInvoiceInput,
+) {
+  const [inv] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, orgId)));
+  if (!inv) throw new Error("FAKTUR_TIDAK_DITEMUKAN");
+  const posted = Boolean(inv.journalEntryId);
+
+  if (patch.items !== undefined && posted) {
+    throw new Error(
+      "FAKTUR_SUDAH_DIPOSTING: rincian barang tak bisa diubah karena sudah masuk jurnal. Buat jurnal pembalik/koreksi sebagai gantinya.",
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    const values: Partial<typeof invoices.$inferInsert> = {};
+    if (patch.dueDate !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(patch.dueDate)) throw new Error("TANGGAL_TIDAK_VALID: gunakan YYYY-MM-DD.");
+      values.dueDate = patch.dueDate;
+    }
+    if (patch.notes !== undefined) values.notes = patch.notes;
+
+    if (patch.items !== undefined) {
+      if (patch.items.length === 0) throw new Error("ITEM_FAKTUR_KOSONG: minimal satu baris barang/jasa.");
+      for (const [idx, it] of patch.items.entries()) {
+        const qty = Number(it.quantity);
+        if (!Number.isFinite(qty) || qty <= 0) throw new Error(`ITEM_KE_${idx + 1}_QTY_TIDAK_VALID`);
+        if (it.unitPriceMinor < 0n) throw new Error(`ITEM_KE_${idx + 1}_HARGA_TIDAK_VALID`);
+      }
+      const calculated = calculateInvoiceTotals(
+        patch.items.map((it) => ({
+          quantity: it.quantity,
+          unitPriceMinor: it.unitPriceMinor,
+          discountMinor: it.discountMinor ?? 0n,
+          taxRatePercent: it.taxRatePercent ?? 0,
+        })),
+      );
+      await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, inv.id));
+      await tx.insert(invoiceItems).values(
+        calculated.items.map((item, idx) => ({
+          invoiceId: inv.id,
+          description: patch.items![idx]?.description || "Item",
+          catalogItemId: patch.items![idx]?.catalogItemId ?? null,
+          quantity: String(item.quantityNum),
+          unitPriceMinor: patch.items![idx]?.unitPriceMinor || 0n,
+          discountMinor: item.discountMinor,
+          taxRatePercent: String(item.taxRate),
+          totalMinor: item.totalMinor,
+        })),
+      );
+      values.subtotalMinor = calculated.subtotalMinor;
+      values.discountMinor = calculated.discountMinor;
+      values.taxMinor = calculated.taxMinor;
+      values.totalMinor = calculated.totalMinor;
+    }
+
+    const dueDate = (values.dueDate as string | undefined) ?? inv.dueDate;
+    const totalMinor = (values.totalMinor as bigint | undefined) ?? inv.totalMinor;
+    values.status = determineInvoiceStatus(totalMinor, inv.amountPaidMinor, dueDate);
+
+    const [updated] = await tx
+      .update(invoices)
+      .set(values)
+      .where(and(eq(invoices.id, inv.id), eq(invoices.orgId, orgId)))
+      .returning();
+    return updated;
+  });
+}

@@ -97,10 +97,10 @@ export async function updateAccount(
 
 export function postingMetaMap(
   rows: AccountRow[],
-): Map<string, { archivedAt: Date | null; hasChildren: boolean }> {
+): Map<string, { archivedAt: Date | null; hasChildren: boolean; code: string }> {
   return new Map(rows.map((a) => [
     a.id,
-    { archivedAt: a.archivedAt, hasChildren: rows.some((c) => c.parentCode === a.code) },
+    { archivedAt: a.archivedAt, hasChildren: rows.some((c) => c.parentCode === a.code), code: a.code },
   ]));
 }
 

@@ -431,3 +431,44 @@ export async function deleteItemImageAction(itemId: string) {
     return { ok: false, error: message };
   }
 }
+
+/**
+ * Rincian satu barang untuk sheet drawer (dipakai chat Akunio + reusable di app).
+ * Lookup per kode SKU (huruf besar, trim). BigInt diserialkan ke string.
+ */
+export async function getInventoryItemDetailAction(code: string) {
+  try {
+    const ctx = await requireContext();
+    const clean = code.trim().toUpperCase();
+    if (!clean) return { ok: false as const, error: "Kode barang kosong." };
+    const rows = await db
+      .select()
+      .from(inventoryItems)
+      .where(and(eq(inventoryItems.orgId, ctx.orgId), eq(inventoryItems.code, clean)))
+      .limit(1);
+    const item = rows[0];
+    if (!item) return { ok: false as const, error: `Barang ${clean} tidak ditemukan.` };
+    return {
+      ok: true as const,
+      data: {
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        itemType: item.itemType,
+        category: item.category,
+        unit: item.unit,
+        barcode: item.barcode,
+        appBarcode: item.appBarcode,
+        currentQty: item.currentQty,
+        minStockAlert: item.minStockAlert,
+        averageCostMinor: item.averageCostMinor.toString(),
+        totalCostMinor: item.totalCostMinor.toString(),
+        standardSellingPriceMinor: item.standardSellingPriceMinor.toString(),
+        hasPhoto: Boolean(item.imageStorageKey),
+      },
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal memuat barang";
+    return { ok: false as const, error: message };
+  }
+}

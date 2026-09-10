@@ -16,8 +16,10 @@ export function issueToMessage(i: IssueLike): string {
     case "PERIODE_TIDAK_DITEMUKAN":
       return "Tidak ada periode akuntansi yang cocok dengan tanggal tersebut.";
     case "UNKNOWN_ACCOUNT": return `Baris ${row}: akun tidak dikenal.`;
-    case "ARCHIVED_ACCOUNT": return `Baris ${row}: akun sudah diarsipkan.`;
-    case "GROUP_ACCOUNT": return `Baris ${row}: akun induk (kelompok) tidak dapat dipakai untuk transaksi.`;
+    case "ARCHIVED_ACCOUNT": return `Baris ${row}: akun${typeof i.accountCode === "string" ? ` ${i.accountCode}` : ""} sudah diarsipkan.`;
+    case "GROUP_ACCOUNT": return typeof i.accountCode === "string"
+      ? `Baris ${row}: akun ${i.accountCode} adalah akun induk (kelompok) — pakai salah satu akun anaknya, bukan kode kelompok.`
+      : `Baris ${row}: akun induk (kelompok) tidak dapat dipakai untuk transaksi.`;
     default: return "Data jurnal tidak valid.";
   }
 }

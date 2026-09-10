@@ -14,7 +14,7 @@ import {
   Trash2,
   Check,
   X,
-  User,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,8 +31,8 @@ import type { ThreadItem } from "./asisten-search-modal";
 interface AsistenSidebarProps {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
-  currentView: "chat" | "library";
-  setCurrentView: (view: "chat" | "library") => void;
+  currentView: "chat" | "library" | "settings";
+  setCurrentView: (view: "chat" | "library" | "settings") => void;
   threads: ThreadItem[];
   activeThreadId: string | null;
   onSelectThread: (threadId: string) => void;
@@ -41,7 +41,6 @@ interface AsistenSidebarProps {
   onRenameThread: (threadId: string, newTitle: string) => Promise<void>;
   onTogglePin: (thread: ThreadItem) => Promise<void>;
   onDeleteRequest: (threadId: string) => void;
-  userEmail?: string;
 }
 
 export function AsistenSidebar({
@@ -57,7 +56,6 @@ export function AsistenSidebar({
   onRenameThread,
   onTogglePin,
   onDeleteRequest,
-  userEmail,
 }: AsistenSidebarProps) {
   const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null);
   const [editingTitle, setEditingTitle] = React.useState("");
@@ -202,7 +200,7 @@ export function AsistenSidebar({
                       className="flex-1 truncate text-left flex items-center gap-1.5"
                     >
                       {t.pinned && <Pin className="size-3 text-terra shrink-0 fill-current" />}
-                      <span className="truncate">{t.title}</span>
+                      <span key={t.title} className="truncate animate-in fade-in slide-in-from-left-1 duration-200">{t.title}</span>
                     </button>
 
                     <DropdownMenu>
@@ -254,14 +252,21 @@ export function AsistenSidebar({
         )}
       </div>
 
-      {/* Sidebar Footer */}
-      <div className="border-t border-rule p-3 bg-paper flex items-center gap-2.5 text-xs text-ink shrink-0">
-        <div className="flex size-7 items-center justify-center rounded-full bg-terra text-white text-xs font-semibold">
-          {userEmail ? userEmail.charAt(0).toUpperCase() : <User className="size-3.5" />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-medium text-ink">{userEmail || "Akun Pengguna"}</p>
-        </div>
+      {/* Sidebar Footer: Pengaturan */}
+      <div className="border-t border-rule p-3 bg-paper shrink-0">
+        <button
+          type="button"
+          onClick={() => setCurrentView("settings")}
+          className={cn(
+            "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors text-left",
+            currentView === "settings"
+              ? "bg-canvas text-terra font-semibold shadow-2xs"
+              : "text-ink-soft hover:bg-canvas/60 hover:text-ink",
+          )}
+        >
+          <Settings2 className="size-4" />
+          <span>Pengaturan</span>
+        </button>
       </div>
     </aside>
   );

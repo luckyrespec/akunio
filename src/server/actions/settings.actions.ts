@@ -6,6 +6,8 @@ import { organizations } from "@/server/db/schema/org";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { withOrg } from "@/server/db/repos/with-org";
+import { type AiPrefs } from "@/lib/ai-prefs";
+import { Money } from "@/core/money/money";
 import {
   deleteMemory,
   listMemories,
@@ -118,6 +120,43 @@ export async function deleteMemoryAction(id: string) {
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Gagal menghapus ingatan.";
+    return { ok: false, error: msg };
+  }
+}
+
+export async function updateAiPrefsAction(patch: Partial<AiPrefs> & { approvalThresholdText?: string | null }) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, ctx.orgId));
+    const settings = ((org?.settings as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+
+    if (patch.defaultPreset === "fast" || patch.defaultPreset === "deep") {
+      settings.aiDefaultPreset = patch.defaultPreset;
+    }
+    if (patch.answerLength === "ringkas" || patch.answerLength === "lengkap") {
+      settings.aiAnswerLength = patch.answerLength;
+    }
+    if (typeof patch.followupEnabled === "boolean") settings.aiFollowupEnabled = patch.followupEnabled;
+    if (typeof patch.postDirectly === "boolean") settings.aiPostDirectly = patch.postDirectly;
+    if (typeof patch.citationsEnabled === "boolean") settings.aiCitationsEnabled = patch.citationsEnabled;
+    if (typeof patch.autoTitleEnabled === "boolean") settings.aiAutoTitleEnabled = patch.autoTitleEnabled;
+    if (patch.approvalThresholdText !== undefined) {
+      const t = (patch.approvalThresholdText ?? "").trim();
+      settings.aiApprovalThresholdMinor = t ? Money.parseIdr(t).minor.toString() : null;
+    }
+
+    await db
+      .update(organizations)
+      .set({ settings })
+      .where(eq(organizations.id, ctx.orgId));
+
+    try {
+      revalidatePath("/pengaturan");
+      revalidatePath("/asisten");
+    } catch {}
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Gagal memperbarui preferensi AI.";
     return { ok: false, error: msg };
   }
 }

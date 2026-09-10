@@ -1,4 +1,5 @@
 import { coaToolDefs, coaHandlers } from "./tools/coa.tools";
+import { datetimeToolDefs, datetimeHandlers } from "./tools/datetime.tools";
 import { journalToolDefs, journalHandlers } from "./tools/journal.tools";
 import { reportsToolDefs, reportsHandlers } from "./tools/reports.tools";
 import { invoicingToolDefs, invoicingHandlers } from "./tools/invoicing.tools";
@@ -11,8 +12,8 @@ import { cashBankToolDefs, cashBankHandlers } from "./tools/cash-bank.tools";
 import type { ToolHandler } from "./tools/types";
 
 export const SAFE_TOOLS = new Set<string>([
-  "list_accounts",
-  "search_journals",
+  "get_server_time",
+  "list_accounts",  "search_journals",
   "list_journals",
   "get_report",
   "get_financial_kpis",
@@ -49,6 +50,7 @@ export const MUTATING_TOOLS = new Set<string>([
   "open_period",
   "close_period",
   "create_invoice",
+  "update_invoice",
   "record_invoice_payment",
   "post_invoice_to_journal",
   "auto_match_bank_reconciliation",
@@ -66,6 +68,7 @@ export const MUTATING_TOOLS = new Set<string>([
 
 export const ALL_NARA_TOOLS = [
   ...coaToolDefs,
+  ...datetimeToolDefs,
   ...journalToolDefs,
   ...reportsToolDefs,
   ...invoicingToolDefs,
@@ -80,6 +83,7 @@ export const ALL_NARA_TOOLS = [
 /** Diekspor untuk test registry: setiap nama di SAFE/MUTATING wajib punya handler. */
 export const naraToolHandlers: Record<string, ToolHandler> = {
   ...coaHandlers,
+  ...datetimeHandlers,
   ...journalHandlers,
   ...reportsHandlers,
   ...invoicingHandlers,
@@ -102,9 +106,22 @@ export async function executeNaraTool(
     if (!handler) {
       return { success: false, error: `Tool ${toolName} tidak dikenali.` };
     }
-    return await handler(orgId, actorEmail, args);
+    const out = await handler(orgId, actorEmail, args);
+    // Hasil tool mengalir ke SSE (JSON.stringify), kolom jsonb, dan prompt
+    // sintesis — BigInt mentah meledak di ketiganya. Netralkan sekali di sini.
+    return { ...out, data: deBigInt(out.data) };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Terjadi kesalahan saat mengeksekusi aksi.";
     return { success: false, error: msg };
   }
+}
+
+/** BigInt → string rekursif (objek lain diteruskan apa adanya). */
+function deBigInt(v: unknown): unknown {
+  if (typeof v === "bigint") return v.toString();
+  if (Array.isArray(v)) return v.map(deBigInt);
+  if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
+    return Object.fromEntries(Object.entries(v).map(([k, val]) => [k, deBigInt(val)]));
+  }
+  return v;
 }

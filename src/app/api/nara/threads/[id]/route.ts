@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
-import { getThread, updateThread, deleteThread, listMessages } from "@/server/db/repos/chat.repo";
+import { getThread, updateThread, deleteThread, listMessagesPage } from "@/server/db/repos/chat.repo";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -13,8 +13,14 @@ export async function GET(req: NextRequest, props: RouteParams) {
     if (!thread) {
       return NextResponse.json({ error: "Percakapan tidak ditemukan." }, { status: 404 });
     }
-    const messages = await listMessages(db, threadId);
-    return NextResponse.json({ thread, messages });
+    // Riwayat dibatasi per halaman (default 50 terbaru); kursor ?before[CreatedAt|Id].
+    const sp = req.nextUrl.searchParams;
+    const { messages, hasMore } = await listMessagesPage(db, threadId, {
+      limit: Number(sp.get("limit")) || undefined,
+      beforeCreatedAt: sp.get("before") ?? undefined,
+      beforeId: sp.get("beforeId") ?? undefined,
+    });
+    return NextResponse.json({ thread, messages, hasMore });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Gagal mengambil percakapan.";
     return NextResponse.json({ error: msg }, { status: 500 });

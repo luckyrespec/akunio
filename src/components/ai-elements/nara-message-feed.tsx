@@ -7,7 +7,13 @@ import { Message, MessageContent, MessageResponse } from "@/components/ai-elemen
 import { MessageCopyButton } from "@/components/ai-elements/message-copy-button";
 import { ThinkingTrace } from "@/components/ai-elements/thinking-trace";
 import { CitationSheetProvider } from "@/components/ai-elements/citation-sheet";
+import { EntitySheetProvider, useEntitySheet } from "@/components/ai-elements/entity-sheet";
+import { ItemSheetProvider } from "@/components/ai-elements/item-sheet";
 import { postingStampFor } from "@/components/ai-elements/journal-stamp";
+import { statementWidgetFor } from "@/components/ai-elements/statement-widget";
+import { kpiStripFor } from "@/components/ai-elements/kpi-strip";
+import { NaraHitlApprovalCard } from "@/components/ai-elements/nara-hitl-approval-card";
+import type { PendingApproval } from "@/hooks/use-nara-stream-chat";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import {
   Queue,
@@ -32,6 +38,35 @@ interface NaraMessageFeedProps {
   streamingSuggestions: string[];
   onSelectSuggestion: (text: string) => void;
   emptyState?: React.ReactNode;
+  /** Dipanggil dari tombol Batalkan di stamp — pemanggil membuka kartu persetujuan reversal. */
+  onRequestReverse?: (entryId: string, number: string) => void;
+  /** Kartu persetujuan dirender menempel di pesan pemilik callId; fallback di ujung bila belum ada. */
+  pendingApproval?: PendingApproval | null;
+  confirmingLoading?: boolean;
+  onDecision?: (approved: boolean, allowAll?: boolean) => void;
+}
+
+/** Widget hasil tool, dirender di dalam provider sheet (bisa membuka drawer). */
+function ResultWidget({
+  toolName,
+  result,
+  onReverse,
+}: {
+  toolName: string;
+  result: unknown;
+  onReverse?: (entryId: string, number: string) => void;
+}) {
+  const entitySheet = useEntitySheet();
+  const node =
+    statementWidgetFor(toolName, result) ??
+    postingStampFor(toolName, result, {
+      onReverse,
+      onOpenContact: entitySheet ? (id) => entitySheet.openContact(id) : undefined,
+      onOpenInvoice: entitySheet ? (number) => entitySheet.openInvoice(number) : undefined,
+    }) ??
+    kpiStripFor(toolName, result);
+  if (!node) return null;
+  return <div className="mt-2">{node}</div>;
 }
 
 export function NaraMessageFeed({
@@ -44,9 +79,28 @@ export function NaraMessageFeed({
   streamingSuggestions,
   onSelectSuggestion,
   emptyState,
+  onRequestReverse,
+  pendingApproval,
+  confirmingLoading,
+  onDecision,
 }: NaraMessageFeedProps) {
+  const ownedCallId = pendingApproval?.callId;
+  const ownedByMessage = Boolean(
+    ownedCallId &&
+      messages.some((m) => m.toolInvocations?.some((t) => t.callId && t.callId === ownedCallId)),
+  );
+  const approvalCard =
+    pendingApproval && onDecision ? (
+      <NaraHitlApprovalCard
+        pendingApproval={pendingApproval}
+        confirmingLoading={!!confirmingLoading}
+        onDecision={onDecision}
+      />
+    ) : null;
   return (
     <CitationSheetProvider>
+    <EntitySheetProvider>
+    <ItemSheetProvider>
       {messages.length === 0 && !isStreaming ? (
         emptyState ?? null
       ) : (
@@ -63,7 +117,6 @@ export function NaraMessageFeed({
                     result: ti.result,
                     error: typeof ti.error === "string" ? ti.error : null,
                   }))}
-                  renderToolExtra={(name, result) => postingStampFor(name, result) ?? null}
                 />
               </div>
             )}
@@ -161,14 +214,27 @@ export function NaraMessageFeed({
                     </div>
                   )}
 
-                  {/* Aksi pesan asisten: salin di dalam bubble */}
-                  {m.role !== "user" && m.content && m.content.trim().length > 0 && (
-                    <div className="mt-1 flex justify-start">
-                      <MessageCopyButton text={m.content} />
-                    </div>
-                  )}
+                  {/* Stempel hasil posting/setuju: kartu jurnal + tombol Lihat, tetap terlihat walau kartu persetujuan sudah hilang */}
+                  {m.toolInvocations
+                    ?.filter((ti) => ti.status === "approved" || ti.status === "completed" || ti.status === "auto")
+                    .map((ti, idx) => (
+                      <ResultWidget
+                        key={ti.callId ?? `${ti.toolName}-${idx}`}
+                        toolName={ti.toolName}
+                        result={ti.result}
+                        onReverse={onRequestReverse}
+                      />
+                    ))}
+
                 </MessageContent>
               </Message>
+            )}
+
+            {/* Aksi pesan asisten: salin di bawah bubble (gaya ChatGPT) */}
+            {m.role !== "user" && m.content && m.content.trim().length > 0 && (
+              <div className="mt-1 flex justify-start pl-1">
+                <MessageCopyButton text={m.content} />
+              </div>
             )}
 
             {/* Aksi pesan user: salin di bawah bubble (gaya ChatGPT) */}
@@ -177,9 +243,17 @@ export function NaraMessageFeed({
                 <MessageCopyButton text={m.content} />
               </div>
             )}
+
+            {/* Kartu persetujuan menempel di pesan pemiliknya */}
+            {ownedCallId &&
+              m.toolInvocations?.some((t) => t.callId && t.callId === ownedCallId) &&
+              approvalCard}
           </div>
         ))
       )}
+
+      {/* Fallback: persetujuan yang pesannya belum tersimpan (masih stream) */}
+      {pendingApproval && !ownedByMessage && approvalCard}
 
       {/* LIVE THINKING TRACE (chain-of-thought + tool berjalan, satu dropdown) */}
       {isStreaming && (streamingReasoning.trim().length > 0 || streamingTools.length > 0) && (
@@ -193,7 +267,6 @@ export function NaraMessageFeed({
               error: st.error ?? null,
             }))}
             isStreaming
-            renderToolExtra={(name, result) => postingStampFor(name, result) ?? null}
           />
         </div>
       )}
@@ -257,6 +330,8 @@ export function NaraMessageFeed({
           </MessageContent>
         </Message>
       )}
+    </ItemSheetProvider>
+    </EntitySheetProvider>
     </CitationSheetProvider>
   );
 }

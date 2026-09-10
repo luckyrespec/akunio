@@ -23,7 +23,7 @@ export const inventoryToolDefs: ToolDefinition[] = [
   {
     type: "function",
     name: "add_inventory_item",
-    description: "Daftarkan satu barang persediaan baru ke dalam master katalog persediaan. Wajib konfirmasi user sebelum eksekusi.",
+    description: "Daftarkan satu barang persediaan baru ke dalam master katalog persediaan. Wajib konfirmasi user sebelum eksekusi. Setelah berhasil, sebutkan barang sebagai tautan [Nama (KODE)](item:KODE) agar pengguna bisa membuka rincian barang.",
     parameters: {
       type: "object",
       properties: {
@@ -61,7 +61,7 @@ export const inventoryToolDefs: ToolDefinition[] = [
   {
     type: "function",
     name: "batch_add_inventory_items",
-    description: "Daftarkan banyak barang persediaan sekaligus (batch SKU) ke master persediaan, misalnya hasil ekstraksi dari file Excel/CSV atau daftar banyak barang dari percakapan pengguna. Wajib konfirmasi user sebelum eksekusi.",
+    description: "Daftarkan banyak barang persediaan sekaligus (batch SKU) ke master persediaan, misalnya hasil ekstraksi dari file Excel/CSV atau daftar banyak barang dari percakapan pengguna. Wajib konfirmasi user sebelum eksekusi. Setelah berhasil, sebutkan setiap barang sebagai tautan [Nama (KODE)](item:KODE) agar pengguna bisa membuka rincian barang.",
     parameters: {
       type: "object",
       properties: {
@@ -105,12 +105,13 @@ export const inventoryToolDefs: ToolDefinition[] = [
     type: "function",
     name: "create_stock_opname",
     description:
-      "Buat draf stok opname dari hasil hitung fisik (berhenti di DRAF — penyesuaian stok disahkan user di menu Persediaan). Item dirujuk per itemId (cari dulu via list_inventory_items). Wajib konfirmasi user sebelum eksekusi.",
+      "Catat stok opname dari hasil hitung fisik. Item dirujuk per itemId (cari dulu via list_inventory_items). UTAMAKAN postImmediately=true bila user meminta mencatat/mencatatkan stok (satu persetujuan, stok langsung bertambah + jurnal penyesuaian terposting). postImmediately=false HANYA bila user eksplisit meminta draf opname. Wajib konfirmasi user sebelum eksekusi.",
     parameters: {
       type: "object",
       properties: {
         opnameDate: { type: "string", description: "Tanggal opname YYYY-MM-DD" },
         notes: { type: "string", description: "Catatan opname (opsional)" },
+        postImmediately: { type: "boolean", description: "true = langsung sahkan + posting (stok bertambah); false = berhenti di DRAF untuk ditinjau di menu Persediaan. Default: true" },
         items: {
           type: "array",
           description: "Daftar hasil hitung fisik",
@@ -397,9 +398,10 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
     }
   },
 
-  create_stock_opname: async (orgId, _actor, args) => {
+  create_stock_opname: async (orgId, actor, args) => {
     try {
-      const { createStockOpname } = await import("@/server/db/repos/inventory.repo");
+      const { createStockOpname, generateAdjustmentJournalDraft, postOpnameAdjustment } =
+        await import("@/server/db/repos/inventory.repo");
       const opnameDate = String(args.opnameDate ?? "").trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(opnameDate)) {
         return { success: false, error: "opnameDate harus format YYYY-MM-DD." };
@@ -430,6 +432,37 @@ export const inventoryHandlers: Record<string, ToolHandler> = {
           items,
         }),
       );
+      // postImmediately (default true): rantai sahkan + posting dalam satu
+      // persetujuan sehingga stok langsung bertambah. Gagal di rantai =
+      // draf tetap tersimpan, error dilaporkan jujur (tanpa klaim sukses).
+      if (args.postImmediately !== false) {
+        try {
+          const posted = await withOrg(orgId, async (tx) => {
+            const gen = await generateAdjustmentJournalDraft(tx, orgId, opname.id);
+            if (!gen.journalEntryId) return { journalNumber: null as string | null };
+            const out = await postOpnameAdjustment(tx, orgId, opname.id, String(actor ?? ""));
+            return { journalNumber: out.journalNumber };
+          });
+          return {
+            success: true,
+            data: {
+              id: opname.id,
+              number: opname.number,
+              status: "COMPLETED",
+              journalNumber: posted.journalNumber,
+              note: posted.journalNumber
+                ? "Opname disahkan + jurnal penyesuaian terposting, stok bertambah."
+                : "Tidak ada selisih nilai — opname selesai tanpa jurnal.",
+            },
+          };
+        } catch (postErr) {
+          const message = postErr instanceof Error ? postErr.message : "Gagal mengesahkan opname";
+          return {
+            success: false,
+            error: `Draf opname ${opname.number} tersimpan, tetapi pengesahan gagal: ${message}. Sahkan manual di menu Persediaan.`,
+          };
+        }
+      }
       return {
         success: true,
         data: {

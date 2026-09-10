@@ -2,6 +2,9 @@ import type { AssistantMemory, MemoryKind } from "@/server/db/repos/assistant-me
 
 const TRIGGER = /(ingat(?:kan)?(?: ya)?|jangan lupa|catat sebagai preferensi)[,:\s]+(.{3,500})/i;
 
+/** Koreksi implisit ("maksud saya X", "bukan X tapi Y") → preferensi agar tak terulang. */
+const CORRECTION = /(maksud saya|bukan begitu|yang benar|seharusnya|r\.?alat,?\s*yang benar)[:,.\s]+(.{3,300})/i;
+
 export function extractExplicitMemory(message: string): { kind: MemoryKind; content: string } | null {
   const m = message.match(TRIGGER);
   if (!m) return null;
@@ -13,6 +16,13 @@ export function extractExplicitMemory(message: string): { kind: MemoryKind; cont
       ? "PREFERENCE"
       : "FACT";
   return { kind, content };
+}
+
+export function extractCorrectionMemory(message: string): { kind: MemoryKind; content: string } | null {
+  const m = message.match(CORRECTION);
+  if (!m) return null;
+  const content = `Koreksi user: ${m[2].trim().slice(0, 300)}`;
+  return { kind: "PREFERENCE", content };
 }
 
 export function formatMemoriesForPrompt(mems: AssistantMemory[]): string {
