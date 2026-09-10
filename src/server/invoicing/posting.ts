@@ -10,6 +10,7 @@ import {
 import { getInvoiceByIdRepo } from "@/server/db/repos/invoices.repo";
 import { getInventorySettings, lockInventoryPolicy } from "@/server/db/repos/inventory.repo";
 import { postJournalEntry, toMinor } from "@/server/db/repos/journals.repo";
+import { resolveRevenueAccountId, resolveCogsAccountId, resolveExpenseAccountId } from "@/server/db/repos/accounts.repo";
 import { journalLines } from "@/server/db/schema/journal";
 import { calculateItemTotal } from "@/core/invoicing/calculations";
 import type { JournalLineInput } from "@/core/journals/types";
@@ -244,6 +245,7 @@ export async function postInvoiceToLedger(
             .where(and(eq(inventoryItems.orgId, orgId), inArray(inventoryItems.id, linkedIds)))
         : [];
     const masterById = new Map(masters.map((m) => [m.id, m]));
+    const orgAccounts = await tx.select().from(accounts).where(eq(accounts.orgId, orgId));
     const masterOf = (catalogItemId: string | null) => {
       if (!catalogItemId) return null;
       const m = masterById.get(catalogItemId) ?? null;
@@ -278,23 +280,17 @@ export async function postInvoiceToLedger(
         );
         const master = masterOf(line.catalogItemId);
         if (master?.itemType === "JASA") {
-          const accId =
-            master.revenueAccountId ??
-            (await getAccountByCodeOrNull(tx, orgId, "4130"))?.id ??
-            (await getAccountByCode(tx, orgId, "4100")).id;
+          const accId = resolveRevenueAccountId(orgAccounts, master.revenueAccountId);
           revenueGroups.set(accId, (revenueGroups.get(accId) ?? 0n) + calc.netSubtotalMinor);
         } else if (master) {
-          const accId =
-            master.revenueAccountId ??
-            (await getAccountByCodeOrNull(tx, orgId, "4110"))?.id ??
-            (await getAccountByCode(tx, orgId, "4100")).id;
+          const accId = resolveRevenueAccountId(orgAccounts, master.revenueAccountId);
           revenueGroups.set(accId, (revenueGroups.get(accId) ?? 0n) + calc.netSubtotalMinor);
           if (recording === "PERPETUAL") {
             barangMutations.push({ master, qty: parseQty(line.quantity, line.description) });
           }
         } else {
-          const revAccount = await getAccountByCode(tx, orgId, "4100"); // Pendapatan Usaha
-          revenueGroups.set(revAccount.id, (revenueGroups.get(revAccount.id) ?? 0n) + calc.netSubtotalMinor);
+          const revAccountId = resolveRevenueAccountId(orgAccounts, null);
+          revenueGroups.set(revAccountId, (revenueGroups.get(revAccountId) ?? 0n) + calc.netSubtotalMinor);
         }
       }
 
@@ -310,8 +306,8 @@ export async function postInvoiceToLedger(
       // Kompatibilitas: faktur tanpa baris (insert header langsung) pakai satu
       // akun pendapatan seperti perilaku lama.
       if (revenueGroups.size === 0) {
-        const revAccount = await getAccountByCode(tx, orgId, "4100"); // Pendapatan Usaha
-        revenueGroups.set(revAccount.id, inv.subtotalMinor - inv.discountMinor);
+        const revAccountId = resolveRevenueAccountId(orgAccounts, null);
+        revenueGroups.set(revAccountId, inv.subtotalMinor - inv.discountMinor);
       }
 
       // Kredit: Pendapatan per akun (Net Subtotal per grup)
@@ -339,8 +335,7 @@ export async function postInvoiceToLedger(
       // Mutasi stok barang + HPP agregat (PERPETUAL saja).
       if (barangMutations.length > 0) {
         const invAccId = await resolveInventoryControlAccountId(tx, orgId);
-        const cogsAccId =
-          settings?.cogsAccountId ?? (await getAccountByCode(tx, orgId, "5100")).id;
+        const cogsAccId = resolveCogsAccountId(orgAccounts, settings?.cogsAccountId ?? null);
         let hppTotal = 0n;
         const hppLinks: Array<{ kind: "PERSEDIAAN"; refId: string; amountMinor: bigint; qty: number }> = [];
         for (const m of barangMutations) {
@@ -399,8 +394,7 @@ export async function postInvoiceToLedger(
         );
         const master = masterOf(line.catalogItemId);
         if (master?.itemType === "JASA") {
-          const accId =
-            master.expenseAccountId ?? (await getAccountByCode(tx, orgId, "5100")).id;
+          const accId = resolveExpenseAccountId(orgAccounts, master.expenseAccountId);
           addDebit(accId, calc.netSubtotalMinor);
         } else if (master) {
           if (recording === "PERPETUAL") {
@@ -414,12 +408,12 @@ export async function postInvoiceToLedger(
             barangIns.push({ master, qty, unitCostMinor });
           } else {
             purchaseAccountId ??=
-              settings?.cogsAccountId ?? (await getAccountByCode(tx, orgId, "5100")).id;
+              resolveCogsAccountId(orgAccounts, settings?.cogsAccountId ?? null);
             addDebit(purchaseAccountId, calc.netSubtotalMinor);
           }
         } else {
-          const expAccount = await getAccountByCode(tx, orgId, "5100"); // Beban/Pembelian
-          addDebit(expAccount.id, calc.netSubtotalMinor);
+          const expAccountId = resolveExpenseAccountId(orgAccounts, null); // Beban/Pembelian
+          addDebit(expAccountId, calc.netSubtotalMinor);
         }
       }
 
@@ -436,9 +430,9 @@ export async function postInvoiceToLedger(
 
       // Kompatibilitas: tagihan tanpa baris pakai satu akun beban seperti perilaku lama.
       if (![...debitGroups.values()].some((v) => v !== 0n)) {
-        const expAccount = await getAccountByCode(tx, orgId, "5100"); // Beban/Pembelian
+        const expAccountId = resolveExpenseAccountId(orgAccounts, null); // Beban/Pembelian
         lines.push({
-          accountId: expAccount.id,
+          accountId: expAccountId,
           debitMinor: inv.subtotalMinor - inv.discountMinor,
           creditMinor: 0n,
           memo: `Beban/Pembelian ${inv.invoiceNumber}`,
@@ -604,7 +598,7 @@ export async function voidInvoiceWithReversal(
         .select()
         .from(inventoryItems)
         .where(and(eq(inventoryItems.orgId, orgId), inArray(inventoryItems.id, ids)));
-      const masterById = new Map(masters.map((m) => [m.id, m]));
+    const masterById = new Map(masters.map((m) => [m.id, m]));
       for (const m of moves) {
         const master = masterById.get(m.itemId);
         if (!master) continue;

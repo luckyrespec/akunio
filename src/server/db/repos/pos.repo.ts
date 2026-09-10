@@ -7,6 +7,7 @@ import { accounts } from "../schema/org";
 import { inventoryItems } from "../schema/inventory";
 import { journalEntries } from "../schema/journal";
 import { postJournalEntry, createDraftJournalEntry, postDraftEntry } from "./journals.repo";
+import { resolveRevenueAccountId, resolveCogsAccountId } from "./accounts.repo";
 import { getInventorySettings, lockInventoryPolicy } from "./inventory.repo";
 import { findPeriodByDate } from "./periods.repo";
 import {
@@ -56,48 +57,6 @@ async function getAccountByCodeOrNull(q: Queryable, orgId: string, code: string)
     .from(accounts)
     .where(and(eq(accounts.orgId, orgId), eq(accounts.code, code)));
   return row ?? null;
-}
-
-type OrgAccount = typeof accounts.$inferSelect;
-
-/** Akun pendapatan siap posting: preferensi item → 4110 → detail PENDAPATAN-K pertama.
- *  Fallback kode mentah (4100) bisa berupa akun GRUP pada COA hasil onboarding
- *  (punya anak) sehingga ditolak guard GROUP_ACCOUNT — karenanya seleksi eksplisit. */
-function resolveRevenueAccountId(orgAccounts: OrgAccount[], preferredId: string | null): string {
-  const byId = new Map(orgAccounts.map((a) => [a.id, a]));
-  const hasChildren = (code: string) => orgAccounts.some((a) => a.parentCode === code);
-  const postable = (a: OrgAccount) => !a.archivedAt && !hasChildren(a.code);
-  if (preferredId) {
-    const p = byId.get(preferredId);
-    if (p && postable(p)) return p.id;
-  }
-  const c4110 = orgAccounts.find((a) => a.code === "4110");
-  if (c4110 && postable(c4110)) return c4110.id;
-  const first = orgAccounts
-    .filter((a) => a.type === "PENDAPATAN" && a.normal === "K" && !a.contra && postable(a))
-    .sort((x, y) => x.code.localeCompare(y.code))[0];
-  if (first) return first.id;
-  throw new Error("AKUN_PENDAPATAN_TIDAK_ADA: tidak ada akun pendapatan siap posting di COA");
-}
-
-/** Akun HPP siap posting: setting → detail BEBAN 51xx pertama → BEBAN-D pertama. */
-function resolveCogsAccountId(orgAccounts: OrgAccount[], preferredId: string | null): string {
-  const byId = new Map(orgAccounts.map((a) => [a.id, a]));
-  const hasChildren = (code: string) => orgAccounts.some((a) => a.parentCode === code);
-  const postable = (a: OrgAccount) => !a.archivedAt && !hasChildren(a.code);
-  if (preferredId) {
-    const p = byId.get(preferredId);
-    if (p && postable(p)) return p.id;
-  }
-  const child51 = orgAccounts
-    .filter((a) => a.type === "BEBAN" && a.code.startsWith("51") && postable(a))
-    .sort((x, y) => x.code.localeCompare(y.code))[0];
-  if (child51) return child51.id;
-  const anyBeban = orgAccounts
-    .filter((a) => a.type === "BEBAN" && a.normal === "D" && !a.contra && postable(a))
-    .sort((x, y) => x.code.localeCompare(y.code))[0];
-  if (anyBeban) return anyBeban.id;
-  throw new Error("AKUN_HPP_TIDAK_ADA: tidak ada akun beban siap posting di COA");
 }
 
 async function nextPosNumber(q: Queryable, orgId: string, soldDate: string): Promise<string> {

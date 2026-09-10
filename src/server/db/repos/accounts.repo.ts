@@ -4,7 +4,7 @@ import { eq, asc, and, ilike, or } from "drizzle-orm";
 import type { ReportAccountMeta } from "@/core/reports/aggregates";
 import { checkPostingAccounts } from "@/core/journals/validate";
 
-type AccountRow = typeof accounts.$inferSelect;
+export type AccountRow = typeof accounts.$inferSelect;
 
 export async function listAccounts(q: Queryable, orgId: string, keyword?: string): Promise<AccountRow[]> {
   const term = keyword?.trim();
@@ -102,6 +102,59 @@ export function postingMetaMap(
     a.id,
     { archivedAt: a.archivedAt, hasChildren: rows.some((c) => c.parentCode === a.code), code: a.code },
   ]));
+}
+
+/** Akun siap posting = tak-diarsip dan bukan induk (kriteria identik guard GROUP_ACCOUNT).
+ *  Fallback kode mentah (cth. 4100/5100) bisa berupa akun GRUP pada COA hasil
+ *  onboarding (punya anak) — resolver di bawah memilih detail postable. */
+export function isPostableAccount(rows: AccountRow[], a: AccountRow): boolean {
+  return !a.archivedAt && !rows.some((c) => c.parentCode === a.code);
+}
+
+function firstByCode(rows: AccountRow[]): AccountRow | undefined {
+  return [...rows].sort((x, y) => x.code.localeCompare(y.code))[0];
+}
+
+/** Pendapatan: preferensi item → 4110 → detail PENDAPATAN-K pertama. */
+export function resolveRevenueAccountId(rows: AccountRow[], preferredId: string | null): string {
+  const byId = new Map(rows.map((a) => [a.id, a]));
+  const pref = preferredId ? byId.get(preferredId) : undefined;
+  if (pref && isPostableAccount(rows, pref)) return pref.id;
+  const c4110 = rows.find((a) => a.code === "4110");
+  if (c4110 && isPostableAccount(rows, c4110)) return c4110.id;
+  const first = firstByCode(rows.filter(
+    (a) => a.type === "PENDAPATAN" && a.normal === "K" && !a.contra && isPostableAccount(rows, a),
+  ));
+  if (first) return first.id;
+  throw new Error("AKUN_PENDAPATAN_TIDAK_ADA: tidak ada akun pendapatan siap posting di COA");
+}
+
+/** HPP: setting → detail BEBAN 51xx pertama → BEBAN-D pertama. */
+export function resolveCogsAccountId(rows: AccountRow[], preferredId: string | null): string {
+  const byId = new Map(rows.map((a) => [a.id, a]));
+  const pref = preferredId ? byId.get(preferredId) : undefined;
+  if (pref && isPostableAccount(rows, pref)) return pref.id;
+  const child51 = firstByCode(rows.filter(
+    (a) => a.type === "BEBAN" && a.code.startsWith("51") && isPostableAccount(rows, a),
+  ));
+  if (child51) return child51.id;
+  const anyBeban = firstByCode(rows.filter(
+    (a) => a.type === "BEBAN" && a.normal === "D" && !a.contra && isPostableAccount(rows, a),
+  ));
+  if (anyBeban) return anyBeban.id;
+  throw new Error("AKUN_HPP_TIDAK_ADA: tidak ada akun beban siap posting di COA");
+}
+
+/** Beban umum (jasa beli): preferensi item → BEBAN-D pertama. */
+export function resolveExpenseAccountId(rows: AccountRow[], preferredId: string | null): string {
+  const byId = new Map(rows.map((a) => [a.id, a]));
+  const pref = preferredId ? byId.get(preferredId) : undefined;
+  if (pref && isPostableAccount(rows, pref)) return pref.id;
+  const first = firstByCode(rows.filter(
+    (a) => a.type === "BEBAN" && a.normal === "D" && !a.contra && isPostableAccount(rows, a),
+  ));
+  if (first) return first.id;
+  throw new Error("AKUN_BEBAN_TIDAK_ADA: tidak ada akun beban siap posting di COA");
 }
 
 export function reportMetaMap(rows: AccountRow[]): Map<string, ReportAccountMeta> {
