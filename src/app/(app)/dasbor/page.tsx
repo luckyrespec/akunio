@@ -19,6 +19,7 @@ import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
 import { AkunioBriefingCard } from "@/components/dasbor/akunio-briefing-card";
 import { DecisionStrip } from "@/components/dasbor/decision-strip";
+import { OpsReminders } from "@/components/dasbor/ops-reminders";
 import { avgDailyExpense, decideCashSafety, dueWithinDays, momDelta, topExpenses } from "@/core/dasbor/decisions";
 import {
   AlertCircle,
@@ -251,6 +252,8 @@ export default async function DasborPage() {
           </div>
         }
       />
+
+      <OpsReminders />
 
       {yearEnd && (yearEnd.showBanner || yearEnd.showModal) && (
         <YearEndReminder
