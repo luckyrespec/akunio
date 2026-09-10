@@ -126,7 +126,7 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
   totalCostMinor: numeric("total_cost_minor", { precision: 18, scale: 0, mode: "bigint" }).notNull(),
   resultingQty: numeric("resulting_qty", { precision: 12, scale: 4 }).notNull(),
   resultingTotalCostMinor: numeric("resulting_total_cost_minor", { precision: 18, scale: 0, mode: "bigint" }).notNull(),
-  sourceType: text("source_type", { enum: ["INVOICE", "JOURNAL", "OPNAME", "MANUAL"] }).notNull(),
+  sourceType: text("source_type", { enum: ["INVOICE", "JOURNAL", "OPNAME", "MANUAL", "POS"] }).notNull(),
   sourceId: uuid("source_id"),
   memo: text("memo"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

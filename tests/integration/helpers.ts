@@ -30,7 +30,8 @@ export async function truncateAll(): Promise<void> {
               journal_documents, documents,
               invoice_items, invoice_payments, invoices, contacts,
                inventory_layers, inventory_transactions, stock_opname_items, stock_opnames,
-               inventory_settings, inventory_items,
+                inventory_settings, inventory_items,
+                pos_sale_items, pos_sales, pos_shifts, pos_sale_seq_counters,
                asset_depreciation_lines, asset_disposals, fixed_assets,
                accounts, fiscal_periods, memberships, organizations,
               org_profiles, onboarding_messages CASCADE
