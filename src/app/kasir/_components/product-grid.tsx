@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Search } from "lucide-react";
 import { Money } from "@/core/money/money";
 import { cn } from "@/lib/utils";
@@ -100,8 +101,8 @@ export function ProductGrid({
                 disabled={empty}
                 onClick={() => onAdd(c)}
                 className={cn(
-                  "group flex items-center gap-2.5 rounded-xl border border-rule bg-paper p-2.5 text-left shadow-2xs transition-all",
-                  empty ? "opacity-45" : "hover:-translate-y-px hover:border-terra/50 hover:shadow-xs active:translate-y-0",
+                  "group flex items-center gap-2.5 rounded-xl border border-rule bg-paper p-2.5 text-left shadow-2xs transition-colors motion-safe:duration-150",
+                  empty ? "opacity-45" : "hover:border-terra/50 hover:shadow-xs",
                 )}
               >
                 <span
@@ -132,6 +133,14 @@ export function ProductGrid({
             Barang tidak ditemukan. Tambah dulu di Persediaan.
           </p>
         )}
+      </div>
+      <div className="shrink-0 px-3 pb-3 sm:px-4">
+        <Link
+          href="/kas-bank/pembayaran/baru"
+          className="block text-center text-[11px] font-medium text-ink-soft hover:text-terra"
+        >
+          Belanja operasional? Catat di Pembayaran
+        </Link>
       </div>
     </div>
   );

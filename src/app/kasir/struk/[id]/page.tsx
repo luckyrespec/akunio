@@ -13,7 +13,7 @@ export default async function StrukPage({ params }: { params: Promise<{ id: stri
   const res = await getPosSaleAction(id);
 
   return (
-    <section className="mx-auto w-full max-w-md space-y-4">
+    <section className="mx-auto w-full max-w-md space-y-4 px-4 sm:px-0">
       <div className="print:hidden">
         <Link
           href="/kasir"

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Money } from "@/core/money/money";
 import { cn } from "@/lib/utils";
@@ -13,7 +12,11 @@ const METHODS: Array<{ id: PosPaymentMethod; label: string }> = [
   { id: "TRANSFER", label: "Transfer" },
 ];
 
-const QUICK_CASH = [10_000n, 20_000n, 50_000n, 100_000n, 200_000n];
+const QUICK_CASH = [1_000_000n, 2_000_000n, 5_000_000n, 10_000_000n, 20_000_000n];
+
+function groupRibuan(digits: string): string {
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
 
 function lineTotal(r: CartRow): bigint {
   return (r.unitPriceMinor * BigInt(Math.round(r.qty * 10000))) / 10000n - r.discountMinor;
@@ -65,10 +68,20 @@ export function CartPanel({
   onSubmit: () => void;
 }) {
   const count = cart.reduce((a, r) => a + r.qty, 0);
-  const quickOptions = QUICK_CASH.filter((d) => d >= total).slice(0, 4);
+  const quickOptions = QUICK_CASH.filter((d) => d >= total).slice(0, 3);
+  // Genap ke Rp10rb terdekat (minor): 1_000_000n minor = Rp10.000.
+  const genap = total > 0n ? ((total + 999_999n) / 1_000_000n) * 1_000_000n : 0n;
+  const showQuick = method === "TUNAI" && total > 0n;
+  // cashReceived adalah digit rupiah utuh (bukan minor) — preview dihitung di sini.
+  const receivedMinor = method === "TUNAI" && /^\d+$/.test(cashReceived)
+    ? BigInt(cashReceived) * 100n
+    : null;
+  const changeMinor = receivedMinor === null ? null : receivedMinor - total;
+  const kurang = changeMinor !== null && changeMinor < 0n;
+  const canPay = !loading && cart.length > 0 && !kurang;
 
   return (
-    <aside className="flex min-h-0 w-full flex-col border-t border-rule bg-paper lg:w-[400px] lg:shrink-0 lg:border-l lg:border-t-0">
+    <aside className="flex min-h-0 w-full flex-col border-t border-rule bg-paper pb-20 lg:w-[400px] lg:shrink-0 lg:border-l lg:border-t-0 lg:pb-0">
       <div className="flex shrink-0 items-center justify-between border-b border-rule/60 px-4 py-2.5">
         <h2 className="text-sm font-semibold text-ink">
           Keranjang
@@ -95,9 +108,9 @@ export function CartPanel({
                   type="button"
                   aria-label={`Hapus ${item.name}`}
                   onClick={() => onRemove(r.id)}
-                  className="shrink-0 text-ink-soft transition-colors hover:text-red-600"
+                  className="shrink-0 rounded-md p-1.5 text-ink-soft transition-colors hover:text-red-600"
                 >
-                  <Trash2 className="size-3.5" />
+                  <Trash2 className="size-4" />
                 </button>
               </div>
               <div className="mt-1.5 flex items-center justify-between">
@@ -106,18 +119,18 @@ export function CartPanel({
                     type="button"
                     data-testid={`kasir-qty-minus-${item.code}`}
                     onClick={() => onQty(r.id, -1)}
-                    className="rounded-md border border-rule bg-paper px-1.5 py-1 text-ink-soft transition-colors hover:text-ink"
+                    className="flex h-10 min-w-10 items-center justify-center rounded-md border border-rule bg-paper px-2 text-ink-soft transition-colors hover:text-ink"
                   >
-                    <Minus className="size-3" />
+                    <Minus className="size-4" />
                   </button>
                   <span className="tnum min-w-8 text-center text-xs font-bold">{r.qty}</span>
                   <button
                     type="button"
                     data-testid={`kasir-qty-plus-${item.code}`}
                     onClick={() => onQty(r.id, 1)}
-                    className="rounded-md border border-rule bg-paper px-1.5 py-1 text-ink-soft transition-colors hover:text-ink"
+                    className="flex h-10 min-w-10 items-center justify-center rounded-md border border-rule bg-paper px-2 text-ink-soft transition-colors hover:text-ink"
                   >
-                    <Plus className="size-3" />
+                    <Plus className="size-4" />
                   </button>
                 </div>
                 <span className="tnum text-xs font-bold text-ink">{Money.formatIdr(lineTotal(r))}</span>
@@ -136,7 +149,7 @@ export function CartPanel({
               data-testid={`kasir-pay-${m.id}`}
               onClick={() => onMethod(m.id)}
               className={cn(
-                "h-9 rounded-lg border text-xs font-bold transition-colors",
+                "h-11 rounded-lg border text-xs font-bold transition-colors",
                 method === m.id
                   ? "border-terra bg-terra/15 text-terra"
                   : "border-rule text-ink-soft hover:text-ink",
@@ -181,34 +194,56 @@ export function CartPanel({
               <span className="text-[11px] font-medium text-ink-soft">Uang diterima</span>
               <input
                 data-testid="kasir-cash-received"
-                value={cashReceived}
-                onChange={(e) => onCashReceived(e.target.value)}
+                value={groupRibuan(cashReceived)}
+                onChange={(e) => onCashReceived(e.target.value.replace(/[^\d]/g, ""))}
                 inputMode="numeric"
-                placeholder="cth 100000"
+                placeholder="cth 100.000"
                 className="tnum mt-1 h-10 w-full rounded-lg border border-rule bg-canvas px-2.5 text-sm font-bold text-ink"
               />
             </label>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                data-testid="kasir-quick-cash-pas"
-                onClick={() => onQuickCash(total)}
-                className="h-7 rounded-full border border-terra/40 bg-terra/10 px-3 text-[11px] font-bold text-terra transition-colors hover:bg-terra/20"
-              >
-                Uang Pas
-              </button>
-              {quickOptions.map((d) => (
+            {showQuick && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
                 <button
-                  key={d.toString()}
                   type="button"
-                  data-testid={`kasir-quick-cash-${d.toString()}`}
-                  onClick={() => onQuickCash(d)}
-                  className="tnum h-7 rounded-full border border-rule px-3 text-[11px] font-semibold text-ink-soft transition-colors hover:text-ink"
+                  data-testid="kasir-quick-cash-pas"
+                  onClick={() => onQuickCash(total)}
+                  className="h-8 rounded-full border border-terra/40 bg-terra/10 px-3 text-[11px] font-bold text-terra transition-colors hover:bg-terra/20"
                 >
-                  {Money.formatIdr(d)}
+                  Uang Pas
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  data-testid="kasir-quick-cash-genap"
+                  onClick={() => onQuickCash(genap)}
+                  className="tnum h-8 rounded-full border border-terra/40 bg-terra/10 px-3 text-[11px] font-bold text-terra transition-colors hover:bg-terra/20"
+                >
+                  {Money.formatIdr(genap)}
+                </button>
+                {quickOptions
+                  .filter((d) => d !== genap)
+                  .map((d) => (
+                    <button
+                      key={d.toString()}
+                      type="button"
+                      data-testid={`kasir-quick-cash-${d.toString()}`}
+                      onClick={() => onQuickCash(d)}
+                      className="tnum h-8 rounded-full border border-rule px-3 text-[11px] font-semibold text-ink-soft transition-colors hover:text-ink"
+                    >
+                      {Money.formatIdr(d)}
+                    </button>
+                  ))}
+              </div>
+            )}
+            {changeMinor !== null && (
+              <p
+                data-testid="kasir-change-preview"
+                className={`tnum mt-1.5 text-xs font-bold ${kurang ? "text-red-600" : "text-emerald-700"}`}
+              >
+                {kurang
+                  ? `Kurang ${Money.formatIdr(-changeMinor)}`
+                  : `Kembalian ${Money.formatIdr(changeMinor)}`}
+              </p>
+            )}
           </div>
         ) : (
           <p className="rounded-lg bg-canvas px-2.5 py-2 text-[11px] text-ink-soft">
@@ -230,22 +265,16 @@ export function CartPanel({
           <span className="text-xs text-ink-soft">Total bayar</span>
           <span className="tnum font-display text-xl font-bold text-ink">{Money.formatIdr(total)}</span>
         </div>
-        {error && <p data-testid="kasir-error" className="text-xs font-medium text-red-600">{error}</p>}
+        {error && <p data-testid="kasir-error" role="alert" className="text-xs font-medium text-red-600">{error}</p>}
         <button
           type="button"
           data-testid="kasir-submit"
-          disabled={loading || cart.length === 0}
+          disabled={!canPay}
           onClick={onSubmit}
           className="h-11 w-full rounded-xl bg-terra text-sm font-bold text-paper shadow-xs transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {loading ? "Menyimpan..." : `Bayar ${Money.formatIdr(total)}`}
         </button>
-        <Link
-          href="/kas-bank/pembayaran/baru"
-          className="block text-center text-[11px] font-medium text-ink-soft hover:text-terra"
-        >
-          Belanja operasional? Catat di Pembayaran
-        </Link>
       </div>
     </aside>
   );

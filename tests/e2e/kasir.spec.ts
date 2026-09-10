@@ -33,7 +33,8 @@ test("kasir: tambah barang lalu checkout tunai sampai struk", async ({ page }) =
   await itemBtn.click();
   await expect(page.locator('[data-testid^="kasir-cart-row-"]').first()).toBeVisible({ timeout: 5000 });
   await page.getByTestId("kasir-quick-cash-pas").click();
-  await expect(page.getByTestId("kasir-cash-received")).toHaveValue("10000", { timeout: 5000 });
+  await expect(page.getByTestId("kasir-cash-received")).toHaveValue("10.000", { timeout: 5000 });
+  await expect(page.getByTestId("kasir-change-preview")).toHaveText("Kembalian Rp0", { timeout: 5000 });
   await page.getByTestId("kasir-submit").click();
   try {
     await expect(page).toHaveURL(/\/kasir\/struk\/[0-9a-f-]{36}/, { timeout: 60000 });

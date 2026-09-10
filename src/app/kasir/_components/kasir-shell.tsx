@@ -32,6 +32,11 @@ export function KasirShell({
   const [error, setError] = React.useState<string | null>(null);
   const idemRef = React.useRef(crypto.randomUUID());
 
+  // Preselect shift bila hanya satu yang terbuka — kasir sibuk tak boleh lupa memilih.
+  React.useEffect(() => {
+    if (!shiftId && shifts.length === 1) setShiftId(shifts[0].id);
+  }, [shifts, shiftId]);
+
   const byId = React.useMemo(() => new Map(catalog.map((c) => [c.id, c])), [catalog]);
 
   function addToCart(item: KasirCatalogItem) {
@@ -121,6 +126,7 @@ export function KasirShell({
           onCategory={setCategory}
           onAdd={addToCart}
         />
+        {/* minor → rupiah utuh: JANGAN kirim minor mentah ke input/parseIdr (inflasi 100×). */}
         <CartPanel
           cart={cart}
           byId={byId}

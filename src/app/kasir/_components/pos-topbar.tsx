@@ -25,11 +25,14 @@ export function PosTopbar({ shiftLabel }: { shiftLabel: string }) {
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-rule bg-paper px-3 sm:px-5">
       <div className="flex min-w-0 items-center gap-2.5">
         <p className="font-display text-lg font-semibold tracking-tight text-ink">Kasir</p>
-        <span className="hidden rounded-full border border-rule bg-canvas px-2.5 py-0.5 text-[11px] font-medium text-ink-soft sm:inline">
+        <span className="max-w-32 truncate rounded-full border border-rule bg-canvas px-2.5 py-0.5 text-[11px] font-medium text-ink-soft">
           {shiftLabel}
         </span>
-        <span className="tnum hidden text-[11px] text-ink-soft md:inline">
-          {DATE_FMT.format(now)} · {TIME_FMT.format(now)}
+        <span className="tnum hidden text-[11px] text-ink-soft sm:inline">
+          {DATE_FMT.format(now)}
+        </span>
+        <span className="tnum text-[11px] font-semibold text-ink-soft">
+          {TIME_FMT.format(now)}
         </span>
       </div>
       <Link
