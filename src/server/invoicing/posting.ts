@@ -35,16 +35,17 @@ function costForQty(unitCostMinor: bigint, qty: number): bigint {
   return (unitCostMinor * BigInt(Math.round(Math.abs(qty) * 10000))) / 10000n;
 }
 
-/** Mutasi OUT satu item barang untuk faktur penjualan. Mengembalikan HPP (biaya) terpakai.
- *  Stok boleh minus (warning di UI, bukan blokir): shortfall FIFO dihargai rata-rata. */
-async function applyInvoiceStockOut(
+/** Mutasi OUT satu item barang untuk faktur penjualan maupun kasir POS. Mengembalikan HPP (biaya) terpakai.
+ *  Stok boleh minus (warning di UI, bukan blokir): shortfall FIFO dihargai rata-rata.
+ *  Catatan: pemanggil POS memvalidasi kecukupan stok sendiri sebelum memanggil (kasir menolak stok kurang). */
+export async function applyCatalogStockOut(
   tx: Queryable,
   orgId: string,
   master: CatalogMaster,
   qty: number,
   valuation: "WEIGHTED_AVERAGE" | "FIFO",
   dateISO: string,
-  sourceId: string,
+  source: { type: "INVOICE" | "POS"; id: string },
   memo: string,
 ): Promise<bigint> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`inv-item:${master.id}`}))`);
@@ -119,8 +120,8 @@ async function applyInvoiceStockOut(
     totalCostMinor: consumedCostMinor,
     resultingQty: qtyToDb(newQty),
     resultingTotalCostMinor: newTotal,
-    sourceType: "INVOICE",
-    sourceId,
+    sourceType: source.type,
+    sourceId: source.id,
     memo,
   });
   return consumedCostMinor;
@@ -197,7 +198,7 @@ async function getAccountByCode(q: Queryable, orgId: string, code: string) {
 }
 
 /** Akun kontrol persediaan dari registry subledger; fallback kode untuk org lama. */
-async function resolveInventoryControlAccountId(tx: Queryable, orgId: string): Promise<string> {
+export async function resolveInventoryControlAccountId(tx: Queryable, orgId: string): Promise<string> {
   const { getSubledgerControls } = await import("@/server/db/repos/subledger.repo");
   const controls = await getSubledgerControls(tx, orgId);
   const id = controls.find((c) => c.kind === "PERSEDIAAN")?.controlAccountId ?? null;
@@ -343,14 +344,14 @@ export async function postInvoiceToLedger(
         let hppTotal = 0n;
         const hppLinks: Array<{ kind: "PERSEDIAAN"; refId: string; amountMinor: bigint; qty: number }> = [];
         for (const m of barangMutations) {
-          const cost = await applyInvoiceStockOut(
+          const cost = await applyCatalogStockOut(
             tx,
             orgId,
             m.master,
             m.qty,
             valuation,
             inv.issueDate,
-            inv.id,
+            { type: "INVOICE", id: inv.id },
             `Jual ${inv.invoiceNumber} (${m.master.code})`,
           );
           hppTotal += cost;
@@ -614,8 +615,8 @@ export async function voidInvoiceWithReversal(
             `Reversal ${inv.invoiceNumber} (${master.code})`,
           );
         } else {
-          await applyInvoiceStockOut(
-            tx, orgId, master, qty, valuation, todayISO, reversal.id,
+          await applyCatalogStockOut(
+            tx, orgId, master, qty, valuation, todayISO, { type: "INVOICE", id: reversal.id },
             `Reversal ${inv.invoiceNumber} (${master.code})`,
           );
         }
