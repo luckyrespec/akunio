@@ -57,6 +57,7 @@ export function ProductGrid({
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
           <input
+            id="kasir-search"
             data-testid="kasir-search"
             value={query}
             onChange={(e) => onQuery(e.target.value)}
@@ -65,13 +66,12 @@ export function ProductGrid({
             className="h-11 w-full rounded-xl border border-rule bg-paper pl-9 pr-3 text-sm text-ink shadow-xs placeholder:text-ink-soft/60 focus-ring"
           />
         </label>
-        <div role="tablist" aria-label="Kategori barang" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+        <div role="group" aria-label="Kategori barang" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
           {categories.map((c) => (
             <button
               key={c}
-              role="tab"
-              aria-selected={category === c}
               type="button"
+              aria-pressed={category === c}
               data-testid={`kasir-category-${categorySlug(c)}`}
               onClick={() => onCategory(c)}
               className={cn(

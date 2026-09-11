@@ -70,7 +70,9 @@ export function CartPanel({
   const count = cart.reduce((a, r) => a + r.qty, 0);
   const quickOptions = QUICK_CASH.filter((d) => d >= total).slice(0, 3);
   // Genap ke Rp10rb terdekat (minor): 1_000_000n minor = Rp10.000.
+  // Disembunyikan bila identik dengan total (duplikat Uang Pas).
   const genap = total > 0n ? ((total + 999_999n) / 1_000_000n) * 1_000_000n : 0n;
+  const showGenap = genap > 0n && genap !== total;
   const showQuick = method === "TUNAI" && total > 0n;
   // cashReceived adalah digit rupiah utuh (bukan minor) — preview dihitung di sini.
   const receivedMinor = method === "TUNAI" && /^\d+$/.test(cashReceived)
@@ -78,7 +80,8 @@ export function CartPanel({
     : null;
   const changeMinor = receivedMinor === null ? null : receivedMinor - total;
   const kurang = changeMinor !== null && changeMinor < 0n;
-  const canPay = !loading && cart.length > 0 && !kurang;
+  const receivedEmpty = method === "TUNAI" && receivedMinor === null;
+  const canPay = !loading && cart.length > 0 && !kurang && !receivedEmpty;
 
   return (
     <aside className="flex min-h-0 w-full flex-col border-t border-rule bg-paper pb-20 lg:w-[400px] lg:shrink-0 lg:border-l lg:border-t-0 lg:pb-0">
@@ -95,7 +98,7 @@ export function CartPanel({
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
         {cart.length === 0 && (
           <p className="py-6 text-center text-xs text-ink-soft">
-            Belum ada barang. Klik barang di kiri atau scan barcode.
+            Belum ada barang. Pilih barang atau scan barcode.
           </p>
         )}
         {cart.map((r) => {
@@ -140,7 +143,7 @@ export function CartPanel({
         })}
       </div>
 
-      <div className="shrink-0 space-y-2.5 border-t border-rule/70 p-3">
+      <div className="sticky bottom-0 z-10 shrink-0 space-y-2.5 border-t border-rule/70 bg-paper p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:static">
         <div className="grid grid-cols-3 gap-1.5">
           {METHODS.map((m) => (
             <button
@@ -215,7 +218,7 @@ export function CartPanel({
                   type="button"
                   data-testid="kasir-quick-cash-genap"
                   onClick={() => onQuickCash(genap)}
-                  className="tnum h-8 rounded-full border border-terra/40 bg-terra/10 px-3 text-[11px] font-bold text-terra transition-colors hover:bg-terra/20"
+                  className={`tnum h-8 rounded-full border border-terra/40 bg-terra/10 px-3 text-[11px] font-bold text-terra transition-colors hover:bg-terra/20 ${showGenap ? "" : "hidden"}`}
                 >
                   {Money.formatIdr(genap)}
                 </button>
@@ -237,6 +240,7 @@ export function CartPanel({
             {changeMinor !== null && (
               <p
                 data-testid="kasir-change-preview"
+                role="status"
                 className={`tnum mt-1.5 text-xs font-bold ${kurang ? "text-red-600" : "text-emerald-700"}`}
               >
                 {kurang

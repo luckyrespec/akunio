@@ -32,6 +32,8 @@ test("kasir: tambah barang lalu checkout tunai sampai struk", async ({ page }) =
   await itemBtn.click();
   await itemBtn.click();
   await expect(page.locator('[data-testid^="kasir-cart-row-"]').first()).toBeVisible({ timeout: 5000 });
+  await page.keyboard.press("/");
+  await expect(page.getByTestId("kasir-search")).toBeFocused({ timeout: 5000 });
   await page.getByTestId("kasir-quick-cash-pas").click();
   await expect(page.getByTestId("kasir-cash-received")).toHaveValue("10.000", { timeout: 5000 });
   await expect(page.getByTestId("kasir-change-preview")).toHaveText("Kembalian Rp0", { timeout: 5000 });

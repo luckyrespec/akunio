@@ -64,10 +64,45 @@ export function KasirShell({
   const discount = cart.reduce((a, r) => a + r.discountMinor, 0n);
   const total = subtotal - discount;
 
+  // Syarat bayar versi shell (cermin CartPanel.canPay) untuk shortcut keyboard.
+  function shellCanPay(): boolean {
+    if (loading || cart.length === 0) return false;
+    if (method !== "TUNAI") return true;
+    try {
+      return Money.parseIdr(cashReceived).minor >= total;
+    } catch {
+      return false;
+    }
+  }
+
   const activeShift = shifts.find((s) => s.id === shiftId);
   const shiftLabel = activeShift
     ? `Shift ${activeShift.cashCode} · ${activeShift.cashName}`
     : "Tanpa shift";
+
+  // Shortcut kasir: "/" fokus search, Enter bayar (di luar input teks), Escape blur.
+  // Guard ganda via shellCanPay + loading agar tak ada double-submit.
+  const payRef = React.useRef(() => {});
+  payRef.current = () => {
+    if (shellCanPay()) void doCheckout();
+  };
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+      if (e.key === "/" && !typing) {
+        e.preventDefault();
+        document.getElementById("kasir-search")?.focus();
+      } else if (e.key === "Escape" && typing) {
+        t?.blur();
+      } else if (e.key === "Enter" && !typing) {
+        e.preventDefault();
+        payRef.current();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   async function doCheckout() {
     if (cart.length === 0) {
