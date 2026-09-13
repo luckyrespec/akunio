@@ -1,5 +1,5 @@
-import { db } from "@/server/db";
 import { eq } from "drizzle-orm";
+import { withOrg } from "@/server/db/repos/with-org";
 import { accounts } from "@/server/db/schema/org";
 import { listEntriesWithLines } from "@/server/db/repos/journals.repo";
 import { listDrafts } from "@/server/db/repos/drafts.repo";
@@ -97,16 +97,16 @@ async function collectSignals(orgId: string) {
   const started = Date.now();
   try {
     const [accRows, drafts, periods] = await Promise.all([
-      db.select().from(accounts).where(eq(accounts.orgId, orgId)),
-      listDrafts(db, orgId).catch(() => []),
-      listPeriods(db, orgId).catch(() => []),
+      withOrg(orgId, (tx) => tx.select().from(accounts).where(eq(accounts.orgId, orgId))),
+      withOrg(orgId, (tx) => listDrafts(tx, orgId)).catch(() => []),
+      withOrg(orgId, (tx) => listPeriods(tx, orgId)).catch(() => []),
     ]);
     const leafAccs = accRows.filter((a) => !accRows.some((c) => c.parentCode === a.code));
     const topAccounts = leafAccs.slice(0, 8).map((a) => `${a.code} ${a.name}`).join(", ") || "Belum ada akun";
 
     let recentMemos = "Belum ada jurnal";
     try {
-      const journals = await db.transaction((tx) => listEntriesWithLines(tx, orgId, 5));
+      const journals = await withOrg(orgId, (tx) => listEntriesWithLines(tx, orgId, 5));
       if (journals.length > 0) recentMemos = journals.map((j) => `${j.number}: ${j.memo}`).join(" | ");
     } catch {}
 
@@ -120,7 +120,7 @@ async function collectSignals(orgId: string) {
       const year = new Date().getFullYear();
       const accRows2 = accRows;
       const metas = reportMetaMap(accRows2);
-      const cashLines = await postedLinesThrough(db, orgId, `${year}-12-31`);
+      const cashLines = await withOrg(orgId, (tx) => postedLinesThrough(tx, orgId, `${year}-12-31`));
       const aggs = aggregateFromLines(cashLines, metas);
       const cashMinor = aggs.filter((a) => a.meta.isCash || a.meta.isBank).reduce((s, a) => s + signed(a.meta, a), 0n);
       const ytd = incomeStatement(aggs);

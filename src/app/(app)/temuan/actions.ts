@@ -503,7 +503,7 @@ export async function proposeCorrectionAction(findingId: string) {
       if (process.env.AI_MOCK !== "1" && process.env.GEMINI_API_KEY) {
         const { embed } = await import("@/server/ai/embeddings");
         const { hybridSearch } = await import("@/server/db/repos/rag-search");
-        const hits = await hybridSearch(ctx.orgId, await embed(queryText), queryText, 4);
+        const hits = await hybridSearch(ctx.orgId, await embed(queryText), queryText, 4, tx);
         sakHits = hits
           .filter((h) => isSakSection(h.section ?? ""))
           .map((h) => ({ id: h.id, section: h.section as string, content: h.content }));

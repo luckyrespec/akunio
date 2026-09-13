@@ -1,6 +1,6 @@
-import { db } from "@/server/db";
 import { eq } from "drizzle-orm";
 import { accounts } from "@/server/db/schema/org";
+import { withOrg } from "@/server/db/repos/with-org";
 import { postedLinesThrough } from "@/server/reports/build";
 import { aggregateFromLines, signed } from "@/core/reports/aggregates";
 import { incomeStatement } from "@/core/reports/statements";
@@ -32,26 +32,28 @@ export async function askAdvisor(
   question: string,
 ): Promise<AskAdvisorResult> {
   // Quota check
-  const quota = await checkAdvisorQuota(db, orgId);
+  const quota = await withOrg(orgId, (tx) => checkAdvisorQuota(tx, orgId));
   if (!quota.allowed) throw new Error(quota.message ?? "Kuota habis");
 
   // Save user message
-  await db.transaction((tx) => addMessage(tx, threadId, "user", question, null));
+  await withOrg(orgId, (tx) => addMessage(tx, threadId, "user", question, null));
 
   // Embed question
   const queryEmbedding = await embed(question);
 
-  // Hybrid search
-  const hits = await hybridSearch(orgId, queryEmbedding, question, 6);
+  // Hybrid search — tenant-half lewat tx scope withOrg
+  const hits = await withOrg(orgId, (tx) => hybridSearch(orgId, queryEmbedding, question, 6, tx));
 
   // Live numbers (saldo kas, laba YTD) — same as Dasbor
   let liveNumbers = "";
   try {
     const year = new Date().getFullYear();
     const yearEndISO = `${year}-12-31`;
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const { accRows, cashLines } = await withOrg(orgId, async (tx) => ({
+      accRows: await tx.select().from(accounts).where(eq(accounts.orgId, orgId)),
+      cashLines: await postedLinesThrough(tx, orgId, yearEndISO),
+    }));
     const metas = reportMetaMap(accRows);
-    const cashLines = await postedLinesThrough(db, orgId, yearEndISO);
     const aggs = aggregateFromLines(cashLines, metas);
     const cashMinor = aggs
       .filter((a) => a.meta.isCash || a.meta.isBank)
@@ -65,11 +67,11 @@ export async function askAdvisor(
 
   // Build context
   const context = hits.map((h, i) => `[${i + 1}] (${h.kind}) ${h.excerpt}`).join("\n");
-  const history = await listMessages(db, threadId);
+  const history = await withOrg(orgId, (tx) => listMessages(tx, threadId));
   const lastMessages = history.slice(-12).map((m) => `${m.role}: ${m.content}`).join("\n");
   let previousInteractionId: string | null = null;
   try {
-    const tRow = await getThread(db, orgId, threadId);
+    const tRow = await withOrg(orgId, (tx) => getThread(tx, orgId, threadId));
     previousInteractionId = (tRow as { geminiInteractionId?: string | null } | null)?.geminiInteractionId ?? null;
   } catch {}
 
@@ -124,7 +126,7 @@ Pertanyaan: ${question}`;
   } catch {}
 
   // Save assistant message
-  await db.transaction((tx) =>
+  await withOrg(orgId, (tx) =>
     addMessage(tx, threadId, "assistant", answer, citations),
   );
 

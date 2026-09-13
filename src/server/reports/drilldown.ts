@@ -1,5 +1,5 @@
-import { db } from "@/server/db";
 import { eq, and, gte, lte } from "drizzle-orm";
+import { withOrg } from "@/server/db/repos/with-org";
 import { journalEntries, journalLines } from "@/server/db/schema/journal";
 import { accounts } from "@/server/db/schema/org";
 import { toMinor } from "@/server/db/repos/journals.repo";
@@ -43,8 +43,9 @@ export async function drilldownAccountDetails(
   periodStr: string,
   comparePeriodStr?: string
 ): Promise<DrilldownResult> {
+  return withOrg(orgId, async (tx) => {
   // 1. Fetch account info
-  const [acc] = await db
+  const [acc] = await tx
     .select()
     .from(accounts)
     .where(and(eq(accounts.orgId, orgId), eq(accounts.code, accountCode)));
@@ -64,7 +65,7 @@ export async function drilldownAccountDetails(
 
   // 2. Fetch lines for current period
   const curr = getPeriodDates(periodStr);
-  const currRows = await db
+  const currRows = await tx
     .select({
       id: journalLines.id,
       entryDate: journalEntries.entryDate,
@@ -111,7 +112,7 @@ export async function drilldownAccountDetails(
 
   if (comparePeriodStr) {
     const comp = getPeriodDates(comparePeriodStr);
-    const compRows = await db
+    const compRows = await tx
       .select({
         memo: journalEntries.memo,
         lineMemo: journalLines.memo,
@@ -170,4 +171,5 @@ export async function drilldownAccountDetails(
     items,
     newExpenses,
   };
+  });
 }

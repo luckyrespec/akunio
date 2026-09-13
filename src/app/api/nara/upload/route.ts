@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   ALLOWED_MIMES,
   MAX_DOCUMENT_BYTES,
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     for (const file of files) {
       const buffer = Buffer.from(await file.arrayBuffer());
       const { storageKey } = await putDocument(ctx.orgId, { buffer, mime: file.type });
-      const row = await db.transaction((tx) =>
+      const row = await withOrg(ctx.orgId, (tx) =>
         createDocumentRow(tx, {
           orgId: ctx.orgId,
           storageKey,

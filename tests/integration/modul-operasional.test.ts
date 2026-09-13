@@ -611,3 +611,87 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
     });
   }
 );
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
+  "B8 withOrg read-path: isolasi antar-org",
+  () => {
+    const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+    let orgA = "",
+      orgB = "";
+
+    beforeAll(async () => {
+      await truncateAll();
+      orgA = (await makeOrg("PT B8 Alpha")).orgId;
+      orgB = (await makeOrg("PT B8 Beta")).orgId;
+      await admin.query(
+        `INSERT INTO accounts (org_id, code, name, type, normal) VALUES
+          ($1, 'B8A0001', 'Kas Isolasi Alpha', 'ASET', 'D'),
+          ($2, 'B8B0001', 'Kas Isolasi Beta', 'ASET', 'D')`,
+        [orgA, orgB]
+      );
+      await admin.query(
+        `INSERT INTO tenant_chunks (org_id, source_kind, content, embedding) VALUES
+          ($1, 'DOCUMENT', 'memo unik alpha zxqw', '[]'),
+          ($2, 'DOCUMENT', 'memo unik beta qwer', '[]')`,
+        [orgA, orgB]
+      );
+    });
+    afterAll(async () => {
+      await admin.end();
+      await truncateAll();
+    });
+
+    it("read antar-org terisolasi predikat", async () => {
+      const { coaHandlers } = await import("@/server/ai/tools/coa.tools");
+      const a = await coaHandlers.list_accounts(orgA, "", {});
+      const b = await coaHandlers.list_accounts(orgB, "", {});
+      expect(a.success).toBe(true);
+      expect(b.success).toBe(true);
+      const codesA = ((a.data ?? []) as Array<{ code: string }>).map(
+        (r) => r.code
+      );
+      const codesB = ((b.data ?? []) as Array<{ code: string }>).map(
+        (r) => r.code
+      );
+      expect(codesA).toContain("B8A0001");
+      expect(codesA).not.toContain("B8B0001");
+      expect(codesB).toContain("B8B0001");
+      expect(codesB).not.toContain("B8A0001");
+    });
+
+    it("hybridSearch tenant-half lewat tx pemanggil + hasil tenant-only", async () => {
+      const { withOrg } = await import("@/server/db/repos/with-org");
+      const { hybridSearch } = await import("@/server/db/repos/rag-search");
+      let tenantExecs = 0;
+      const hits = await withOrg(orgA, async (tx) => {
+        const probe = new Proxy(tx, {
+          get(t, p, r) {
+            if (p === "execute") {
+              return async (...args: Array<unknown>) => {
+                tenantExecs += 1;
+                return (t.execute as (...a: Array<unknown>) => unknown)(
+                  ...args
+                );
+              };
+            }
+            const v = Reflect.get(t, p, r);
+            return typeof v === "function"
+              ? (v as (...a: Array<unknown>) => unknown).bind(t)
+              : v;
+          },
+        });
+        return hybridSearch(
+          orgA,
+          [],
+          "zxqw",
+          6,
+          probe as never
+        );
+      });
+      expect(tenantExecs).toBeGreaterThanOrEqual(1);
+      const contents = hits.map((h) => h.content);
+      expect(contents.some((c) => c.includes("alpha"))).toBe(true);
+      expect(contents.some((c) => c.includes("beta"))).toBe(false);
+    });
+  }
+);

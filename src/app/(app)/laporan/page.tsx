@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { accounts, organizations } from "@/server/db/schema/org";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { getProfile } from "@/server/db/repos/onboarding.repo";
@@ -35,18 +35,21 @@ export default async function LaporanIndex() {
   let entityName = "Entitas Usaha Akunio";
 
   try {
-    const [org] = await db
-      .select({ name: organizations.name })
-      .from(organizations)
-      .where(eq(organizations.id, ctx.orgId))
-      .limit(1);
-    const profile = await getProfile(db, ctx.orgId);
+    const { org, profile, accRows, lines } = await withOrg(ctx.orgId, async (tx) => {
+      const [org] = await tx
+        .select({ name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.id, ctx.orgId))
+        .limit(1);
+      const profile = await getProfile(tx, ctx.orgId);
+      const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
+      const lines = await postedLinesBetween(tx, ctx.orgId, `${year}-01-01`, `${year}-12-31`);
+      return { org, profile, accRows, lines };
+    });
     if (profile?.businessName) entityName = profile.businessName;
     else if (org?.name) entityName = org.name;
 
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
     const metas = reportMetaMap(accRows);
-    const lines = await postedLinesBetween(db, ctx.orgId, `${year}-01-01`, `${year}-12-31`);
     const aggs = aggregateFromLines(lines, metas);
 
     const is = buildSakEmkmIncomeStatement(aggs);

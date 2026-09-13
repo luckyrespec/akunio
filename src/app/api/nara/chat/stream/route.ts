@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
 import {
   createThread,
   getThread,
@@ -90,9 +89,11 @@ async function getLiveNumbers(orgId: string): Promise<string> {
   try {
     const year = new Date().getFullYear();
     const yearEndISO = `${year}-12-31`;
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const { accRows, cashLines } = await withOrg(orgId, async (tx) => ({
+      accRows: await tx.select().from(accounts).where(eq(accounts.orgId, orgId)),
+      cashLines: await postedLinesThrough(tx, orgId, yearEndISO),
+    }));
     const metas = reportMetaMap(accRows);
-    const cashLines = await postedLinesThrough(db, orgId, yearEndISO);
     const aggs = aggregateFromLines(cashLines, metas);
     const cashMinor = aggs
       .filter((a) => a.meta.isCash || a.meta.isBank)
@@ -133,17 +134,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Pesan atau lampiran tidak boleh kosong." }, { status: 400 });
     }
 
-    const quota = await checkAssistantQuota(db, ctx.orgId);
+    const quota = await withOrg(ctx.orgId, (tx) => checkAssistantQuota(tx, ctx.orgId));
     if (!quota.allowed) {
       return NextResponse.json({ error: quota.message ?? "Kuota interaksi AI habis bulan ini." }, { status: 429 });
     }
 
     if (!threadId) {
       const title = generateSmartTitle(trimmedMsg);
-      const newT = await db.transaction((tx) => createThread(tx, ctx.orgId, title, modelPreset));
+      const newT = await withOrg(ctx.orgId, (tx) => createThread(tx, ctx.orgId, title, modelPreset));
       threadId = newT.id;
     } else {
-      const existingT = await getThread(db, ctx.orgId, threadId);
+      const tid: string = threadId;
+      const existingT = await withOrg(ctx.orgId, (tx) => getThread(tx, ctx.orgId, tid));
       if (!existingT) {
         return NextResponse.json({ error: "Percakapan tidak ditemukan." }, { status: 404 });
       }
@@ -153,12 +155,12 @@ export async function POST(req: NextRequest) {
     // combinasikan dengan riwayat lokal di bawah sebagai cadangan anti-lupa.
     let previousInteractionId: string | null = null;
     try {
-      const tRow = await getThread(db, ctx.orgId, threadId!);
+      const tRow = await withOrg(ctx.orgId, (tx) => getThread(tx, ctx.orgId, threadId!));
       previousInteractionId = (tRow as { geminiInteractionId?: string | null } | null)?.geminiInteractionId ?? null;
     } catch {}
 
     // Save user message to database
-    await db.transaction((tx) =>
+    await withOrg(ctx.orgId, (tx) =>
       addMessage(tx, threadId!, "user", trimmedMsg || "Lampiran dikirim", {
         attachments: attachments.length > 0 ? attachments : null,
       }),
@@ -173,7 +175,7 @@ export async function POST(req: NextRequest) {
       const found =
         extractExplicitMemory(trimmedMsg) ?? extractCorrectionMemory(trimmedMsg);
       if (found) {
-        await db.transaction((tx) =>
+        await withOrg(ctx.orgId, (tx) =>
           saveMemory(tx, ctx.orgId, {
             kind: found.kind,
             content: found.content,
@@ -185,7 +187,9 @@ export async function POST(req: NextRequest) {
     } catch {}
 
     // Check organization HITL policy
-    const [orgRow] = await db.select().from(organizations).where(eq(organizations.id, ctx.orgId));
+    const [orgRow] = await withOrg(ctx.orgId, (tx) =>
+      tx.select().from(organizations).where(eq(organizations.id, ctx.orgId)),
+    );
     const orgSettings = (orgRow?.settings ?? {}) as {
       aiHitlPolicy?: "smart" | "strict" | "autonomous";
       aiMemoryEnabled?: boolean;
@@ -196,7 +200,9 @@ export async function POST(req: NextRequest) {
     // Profil usaha untuk sudut persona (read-only, bukan tool).
     let businessType: string | null = null;
     try {
-      const [prof] = await db.select().from(orgProfiles).where(eq(orgProfiles.orgId, ctx.orgId));
+      const [prof] = await withOrg(ctx.orgId, (tx) =>
+        tx.select().from(orgProfiles).where(eq(orgProfiles.orgId, ctx.orgId)),
+      );
       businessType = prof?.businessType ?? null;
     } catch {}
 
@@ -212,7 +218,9 @@ export async function POST(req: NextRequest) {
     let citations: Array<{ kind: string; ref: string; excerpt: string; score: number; section?: string }> = [];
     try {
       const queryEmbedding = await embed(trimmedMsg || "akuntansi");
-      const hits = await hybridSearch(ctx.orgId, queryEmbedding, trimmedMsg || "akuntansi", 5);
+      const hits = await withOrg(ctx.orgId, (tx) =>
+        hybridSearch(ctx.orgId, queryEmbedding, trimmedMsg || "akuntansi", 5, tx),
+      );
       ragContext = hits.map((h, i) => `[${i + 1}] (${h.kind}) ${h.excerpt}`).join("\n");
       citations = hits.map((h) => ({
         kind: h.kind,
@@ -224,13 +232,15 @@ export async function POST(req: NextRequest) {
     } catch {}
 
     const liveNumbers = await getLiveNumbers(ctx.orgId);
-    const history = await listMessages(db, threadId!);
+    const history = await withOrg(ctx.orgId, (tx) => listMessages(tx, threadId!));
     // 12 pesan terakhir agar konfirmasi singkat ("ok catatkan ya") tetap
     // punya konteks objeknya (mis. aset laptop 10jt + metode Garis Lurus).
     const lastMessages = history.slice(-12).map((m) => `${m.role}: ${m.content}`).join("\n");
 
     // Fetch Chart of Accounts (COA) leaf accounts so Gemini knows exact codes
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
+    const accRows = await withOrg(ctx.orgId, (tx) =>
+      tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId)),
+    );
     const leafAccs = accRows.filter((a) => !accRows.some((c) => c.parentCode === a.code));
     const coaSummary = leafAccs
       .map((a) => `${a.code}: ${a.name} (${a.type}, normal ${a.normal})`)
@@ -557,7 +567,7 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                   let approvalArgs: Record<string, unknown> = args;
                   if (toolName === "create_stock_opname" && Array.isArray(args.items)) {
                     try {
-                      const allItems = await listInventoryItems(db, ctx.orgId);
+                      const allItems = await withOrg(ctx.orgId, (tx) => listInventoryItems(tx, ctx.orgId));
                       const byId = new Map(allItems.map((it) => [it.id, it]));
                       approvalArgs = {
                         ...args,
@@ -581,7 +591,10 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                   // kartu persetujuan bisa memperingatkan bila periode tak OPEN.
                   if (toolName === "post_journal" && typeof args.dateISO === "string") {
                     try {
-                      const period = await findPeriodByDate(db, ctx.orgId, args.dateISO.slice(0, 10));
+                      const dateISO: string = args.dateISO;
+                      const period = await withOrg(ctx.orgId, (tx) =>
+                        findPeriodByDate(tx, ctx.orgId, dateISO.slice(0, 10)),
+                      );
                       if (period) {
                         approvalArgs = {
                           ...approvalArgs,
@@ -689,7 +702,7 @@ Tugas:
           }
 
           // Persist assistant message to database + simpan memory Gemini per thread
-          const assistantMsg = await db.transaction((tx) =>
+          const assistantMsg = await withOrg(ctx.orgId, (tx) =>
             addMessage(tx, threadId!, "assistant", fullText || "(Menunggu tindakan)", {
               reasoning: fullReasoning || undefined,
               toolInvocations: toolInvocations.length > 0 ? toolInvocations : null,

@@ -43,7 +43,9 @@ function fail(e: unknown): ActionResult {
 }
 
 async function leafAccounts(orgId: string) {
-  const rows = await db.select().from(accountsTable).where(eq(accountsTable.orgId, orgId));
+  const rows = await withOrg(orgId, (tx) =>
+    tx.select().from(accountsTable).where(eq(accountsTable.orgId, orgId)),
+  );
   return rows.filter((a) => !rows.some((c) => c.parentCode === a.code));
 }
 
@@ -61,7 +63,7 @@ export async function createDraftAction(
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
 
     const { checkAssistantQuota } = await import("@/server/db/repos/chat.repo");
-    const quota = await checkAssistantQuota(db, ctx.orgId);
+    const quota = await withOrg(ctx.orgId, (tx) => checkAssistantQuota(tx, ctx.orgId));
     if (!quota.allowed) return { ok: false, error: quota.message };
 
     let kind: "TEXT" | "DOCUMENT" = "TEXT";
@@ -72,7 +74,10 @@ export async function createDraftAction(
     if (input.documentId) {
       kind = "DOCUMENT";
       documentId = input.documentId;
-      const row = await getDocumentRow(db, ctx.orgId, input.documentId);
+      const docId: string = input.documentId;
+      const row = await withOrg(ctx.orgId, (tx) =>
+        getDocumentRow(tx, ctx.orgId, docId),
+      );
       if (!row) return { ok: false, error: "Dokumen tidak ditemukan." };
       const bytes = await getDocument(row.storageKey);
       document = { dataBase64: bytes.toString("base64"), mime: row.mime };
@@ -83,17 +88,19 @@ export async function createDraftAction(
 
     // Cegah duplikasi draf jika dokumen yang sama sudah pernah diekstrak dan masih PENDING
     if (documentId) {
-      const [existing] = await db
-        .select({ id: aiDrafts.id })
-        .from(aiDrafts)
-        .where(
-          and(
-            eq(aiDrafts.orgId, ctx.orgId),
-            eq(aiDrafts.documentId, documentId),
-            eq(aiDrafts.status, "PENDING"),
-          ),
-        )
-        .limit(1);
+      const [existing] = await withOrg(ctx.orgId, (tx) =>
+        tx
+          .select({ id: aiDrafts.id })
+          .from(aiDrafts)
+          .where(
+            and(
+              eq(aiDrafts.orgId, ctx.orgId),
+              eq(aiDrafts.documentId, documentId),
+              eq(aiDrafts.status, "PENDING"),
+            ),
+          )
+          .limit(1),
+      );
       if (existing?.id) {
         return { ok: true, draftId: existing.id };
       }

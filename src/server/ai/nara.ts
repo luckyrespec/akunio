@@ -1,4 +1,3 @@
-import { db } from "@/server/db";
 import { eq } from "drizzle-orm";
 import { accounts } from "@/server/db/schema/org";
 import { postedLinesThrough } from "@/server/reports/build";
@@ -170,9 +169,11 @@ async function getLiveNumbers(orgId: string): Promise<string> {
   try {
     const year = new Date().getFullYear();
     const yearEndISO = `${year}-12-31`;
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const { accRows, cashLines } = await withOrg(orgId, async (tx) => ({
+      accRows: await tx.select().from(accounts).where(eq(accounts.orgId, orgId)),
+      cashLines: await postedLinesThrough(tx, orgId, yearEndISO),
+    }));
     const metas = reportMetaMap(accRows);
-    const cashLines = await postedLinesThrough(db, orgId, yearEndISO);
     const aggs = aggregateFromLines(cashLines, metas);
     const cashMinor = aggs
       .filter((a) => a.meta.isCash || a.meta.isBank)
@@ -192,11 +193,11 @@ export async function askNara(
   opts?: { document?: { dataBase64: string; mime: string } },
 ): Promise<AskNaraResult> {
   // Unified quota
-  const quota = await checkAssistantQuota(db, orgId);
+  const quota = await withOrg(orgId, (tx) => checkAssistantQuota(tx, orgId));
   if (!quota.allowed) throw new Error(quota.message ?? "Kuota habis");
 
   // Save user message
-  await db.transaction((tx) => addMessage(tx, threadId, "user", question, null));
+  await withOrg(orgId, (tx) => addMessage(tx, threadId, "user", question, null));
 
   // Simpan lampiran sebagai baris documents agar tool (mis. thumbnail
   // persediaan via imageDocumentId) bisa merujuknya. Tanpa ini lampiran
@@ -209,7 +210,7 @@ export async function askNara(
       const { createDocumentRow } = await import("@/server/db/repos/documents.repo");
       const buffer = Buffer.from(opts.document.dataBase64, "base64");
       const { storageKey } = await putDocument(orgId, { buffer, mime: opts.document.mime });
-      const docRow = await db.transaction((tx) =>
+      const docRow = await withOrg(orgId, (tx) =>
         createDocumentRow(tx, { orgId, storageKey, mime: opts.document!.mime, sizeBytes: buffer.length }),
       );
       attachmentId = docRow.id;
@@ -221,20 +222,22 @@ export async function askNara(
 
   // Gather context
   const queryEmbedding = await embed(question);
-  const hits = await hybridSearch(orgId, queryEmbedding, question, 6);
+  const hits = await withOrg(orgId, (tx) => hybridSearch(orgId, queryEmbedding, question, 6, tx));
   const liveNumbers = await getLiveNumbers(orgId);
-  const history = await listMessages(db, threadId);
+  const history = await withOrg(orgId, (tx) => listMessages(tx, threadId));
   // 12 pesan terakhir + memory server-side agar "ok catatkan ya" tidak lupa objeknya.
   const lastMessages = history.slice(-12).map((m) => `${m.role}: ${m.content}`).join("\n");
   let previousInteractionId: string | null = null;
   try {
-    const tRow = await getThread(db, orgId, threadId);
+    const tRow = await withOrg(orgId, (tx) => getThread(tx, orgId, threadId));
     previousInteractionId = (tRow as { geminiInteractionId?: string | null } | null)?.geminiInteractionId ?? null;
   } catch {}
   const context = hits.map((h, i) => `[${i + 1}] (${h.kind}) ${h.excerpt}`).join("\n");
 
   // Load accounts for prompt
-  const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+  const accRows = await withOrg(orgId, (tx) =>
+    tx.select().from(accounts).where(eq(accounts.orgId, orgId)),
+  );
   const leafAccs = accRows.filter((a) => !accRows.some((c) => c.parentCode === a.code));
   const promptAccounts = leafAccs.map((a) => ({ code: a.code, name: a.name, normal: a.normal === "D" ? ("D" as const) : ("K" as const) }));
   const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
@@ -362,14 +365,14 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
             const { createDocumentRow } = await import("@/server/db/repos/documents.repo");
             const buffer = Buffer.from(doc.dataBase64, "base64");
             const { storageKey } = await putDocument(orgId, { buffer, mime: doc.mime });
-            const docRow = await db.transaction((tx) => createDocumentRow(tx, { orgId, storageKey, mime: doc.mime, sizeBytes: buffer.length }));
+            const docRow = await withOrg(orgId, (tx) => createDocumentRow(tx, { orgId, storageKey, mime: doc.mime, sizeBytes: buffer.length }));
             documentId = docRow.id;
           } catch (e) {
             console.warn("akunio document persist failed", e);
           }
         }
         // Persist draft as PENDING for human review
-        const row = await db.transaction(async (tx) => {
+        const row = await withOrg(orgId, async (tx) => {
           const d = await createDraft(tx, {
             orgId,
             kind: opts?.document ? "DOCUMENT" : "TEXT",
@@ -381,7 +384,6 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
           // audit
           try {
             const { appendAudit } = await import("@/server/db/repos/audit.repo");
-            const { db: dbInner } = await import("@/server/db");
             // Use same tx for audit if possible; appendAudit uses advisory lock, but tx is fine
             await appendAudit(tx, {
               orgId,
@@ -402,7 +404,7 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
         else answer = `${answer}\n\n[Draft ${row.id} dibuat — silakan review]`;
       } else if (call.name === "search_journals") {
         const args = call.arguments as { query: string; limit?: number };
-        const rows = await db.transaction((tx) => searchJournals(tx, orgId, args.query, args.limit ?? 5));
+        const rows = await withOrg(orgId, (tx) => searchJournals(tx, orgId, args.query, args.limit ?? 5));
         toolResults.push({ tool: call.name!, result: rows });
         // If no final answer yet, synthesize one via second model call
       } else if (call.name === "list_accounts") {
@@ -415,8 +417,11 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
           const { loadPeriodOrDefault, postedLinesThrough } = await import("@/server/reports/build");
           const { aggregateFromLines } = await import("@/core/reports/aggregates");
           const { balanceSheet, incomeStatement: incStmt, cashFlowIndirect, changesInEquity } = await import("@/core/reports/statements");
-          const period = await db.transaction((tx) => loadPeriodOrDefault(tx, orgId, args.period));
-          const lines = await postedLinesThrough(db, orgId, period.endsOn);
+          const { period, lines } = await withOrg(orgId, async (tx) => {
+            const period = await loadPeriodOrDefault(tx, orgId, args.period);
+            const lines = await postedLinesThrough(tx, orgId, period.endsOn);
+            return { period, lines };
+          });
           const metas = reportMetaMap(accRows);
           const aggs = aggregateFromLines(lines, metas);
           const ytd = incStmt(aggs);
@@ -452,12 +457,12 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
       } else if (call.name === "list_drafts") {
         const args = call.arguments as { status?: string; limit?: number };
         const { listDrafts } = await import("@/server/db/repos/drafts.repo");
-        const rows = await listDrafts(db, orgId);
+        const rows = await withOrg(orgId, (tx) => listDrafts(tx, orgId));
         const filtered = args.status ? rows.filter((r) => r.status === args.status) : rows;
         const lim = args.limit ?? 5;
         toolResults.push({ tool: call.name!, result: filtered.slice(0, lim).map((r) => ({ id: r.id, memo: (r.draft as { memo?: string }).memo, status: r.status, kind: r.kind, createdAt: r.createdAt })) });
       } else if (call.name === "list_journals") {
-        const rows = await db.transaction((tx) => listEntriesWithLines(tx, orgId, 10));
+        const rows = await withOrg(orgId, (tx) => listEntriesWithLines(tx, orgId, 10));
         toolResults.push({ tool: call.name!, result: rows.map((r) => ({ number: r.number, date: r.entryDate, memo: r.memo, lines: r.lines.map((l) => ({ code: l.accountCode, debit: l.debitMinor.toString(), credit: l.creditMinor.toString() })) })) });
       }
     } catch (e) {
@@ -505,7 +510,7 @@ Tugas: Jawab user dalam Bahasa Indonesia natural, ringkas, gunakan angka dari to
   }
 
   // Save assistant message
-  await db.transaction((tx) => addMessage(tx, threadId, "assistant", answer, citations));
+  await withOrg(orgId, (tx) => addMessage(tx, threadId, "assistant", answer, citations));
 
   return { answer, citations, draft, draftId, toolResults: toolResults.length ? toolResults : undefined };
 }

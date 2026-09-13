@@ -40,7 +40,15 @@ vi.mock("@/server/ai/interaction-memory", async (importOriginal) => {
   return { ...actual, saveThreadInteractionId: saveInteractionSpy };
 });
 vi.mock("@/server/db", () => ({
-  db: { select: () => ({ from: () => ({ where: async () => [] }) }) },
+  db: {
+    select: () => ({ from: () => ({ where: async () => [] }) }),
+    // withOrg seam (B8): transaction + set_config via tx.execute.
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        select: () => ({ from: () => ({ where: async () => [] }) }),
+        execute: async () => ({ rows: [] }),
+      }),
+  },
 }));
 vi.mock("@/server/storage/storage", () => ({
   putDocument: vi.fn(),

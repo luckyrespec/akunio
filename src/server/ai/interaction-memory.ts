@@ -1,4 +1,4 @@
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { updateThread } from "@/server/db/repos/chat.repo";
 
 /**
@@ -33,7 +33,7 @@ export async function saveThreadInteractionId(
 ): Promise<void> {
   if (!interactionId) return;
   try {
-    await db.transaction((tx) => updateThread(tx, orgId, threadId, { geminiInteractionId: interactionId }));
+    await withOrg(orgId, (tx) => updateThread(tx, orgId, threadId, { geminiInteractionId: interactionId }));
   } catch (e) {
     console.warn("gagal menyimpan gemini_interaction_id", e);
   }
@@ -41,7 +41,7 @@ export async function saveThreadInteractionId(
 
 export async function clearThreadInteractionId(orgId: string, threadId: string): Promise<void> {
   try {
-    await db.transaction((tx) => updateThread(tx, orgId, threadId, { geminiInteractionId: null }));
+    await withOrg(orgId, (tx) => updateThread(tx, orgId, threadId, { geminiInteractionId: null }));
   } catch {
     // best-effort
   }

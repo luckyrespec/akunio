@@ -1,6 +1,6 @@
-import { db } from "@/server/db";
 import { eq, and } from "drizzle-orm";
 import { accounts } from "@/server/db/schema/org";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   createAccount,
   updateAccount,
@@ -67,7 +67,7 @@ export const coaToolDefs: ToolDefinition[] = [
 
 export const coaHandlers: Record<string, ToolHandler> = {
   list_accounts: async (orgId) => {
-    const accs = await listAccountsRepo(db, orgId);
+    const accs = await withOrg(orgId, (tx) => listAccountsRepo(tx, orgId));
     return {
       success: true,
       data: accs.map((a) => ({
@@ -87,7 +87,7 @@ export const coaHandlers: Record<string, ToolHandler> = {
     const normal = String(args.normal) === "K" ? "K" : "D";
     const parentCode = args.parentCode ? String(args.parentCode) : undefined;
 
-    const res = await db.transaction(async (tx) => {
+    const res = await withOrg(orgId, async (tx) => {
       const acc = await createAccount(tx, {
         orgId,
         code,
@@ -112,14 +112,16 @@ export const coaHandlers: Record<string, ToolHandler> = {
 
   update_account: async (orgId, _actorEmail, args) => {
     const code = String(args.code ?? "").trim();
-    const accRows = await db.select().from(accounts).where(and(eq(accounts.orgId, orgId), eq(accounts.code, code)));
-    const target = accRows[0];
+    const target = await withOrg(orgId, async (tx) => {
+      const accRows = await tx.select().from(accounts).where(and(eq(accounts.orgId, orgId), eq(accounts.code, code)));
+      return accRows[0];
+    });
     if (!target) return { success: false, error: `Akun dengan kode ${code} tidak ditemukan.` };
 
     const name = args.name ? String(args.name) : undefined;
     const parentCode = args.parentCode !== undefined ? (args.parentCode ? String(args.parentCode) : null) : undefined;
 
-    const res = await db.transaction(async (tx) => {
+    const res = await withOrg(orgId, async (tx) => {
       const upd = await updateAccount(tx, orgId, target.id, { name, parentCode });
       await appendAudit(tx, {
         orgId,
@@ -138,11 +140,13 @@ export const coaHandlers: Record<string, ToolHandler> = {
   archive_account: async (orgId, _actorEmail, args) => {
     const code = String(args.code ?? "").trim();
     const archive = Boolean(args.archive);
-    const accRows = await db.select().from(accounts).where(and(eq(accounts.orgId, orgId), eq(accounts.code, code)));
-    const target = accRows[0];
+    const target = await withOrg(orgId, async (tx) => {
+      const accRows = await tx.select().from(accounts).where(and(eq(accounts.orgId, orgId), eq(accounts.code, code)));
+      return accRows[0];
+    });
     if (!target) return { success: false, error: `Akun dengan kode ${code} tidak ditemukan.` };
 
-    const res = await db.transaction(async (tx) => {
+    const res = await withOrg(orgId, async (tx) => {
       const upd = await setAccountArchived(tx, orgId, target.id, archive ? new Date() : null);
       await appendAudit(tx, {
         orgId,

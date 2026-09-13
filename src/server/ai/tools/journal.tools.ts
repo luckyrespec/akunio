@@ -1,6 +1,6 @@
-import { db } from "@/server/db";
 import { eq } from "drizzle-orm";
 import { accounts } from "@/server/db/schema/org";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   listEntriesWithLines,
   postJournalEntry,
@@ -114,13 +114,13 @@ export const journalHandlers: Record<string, ToolHandler> = {
   search_journals: async (orgId, _actorEmail, args) => {
     const query = String(args.query ?? "").trim();
     const limit = Number(args.limit ?? 5);
-    const rows = await db.transaction((tx) => searchJournals(tx, orgId, query, limit));
+    const rows = await withOrg(orgId, (tx) => searchJournals(tx, orgId, query, limit));
     return { success: true, data: rows };
   },
 
   list_journals: async (orgId, _actorEmail, args) => {
     const limit = Number(args.limit ?? 10);
-    const rows = await db.transaction((tx) => listEntriesWithLines(tx, orgId, limit));
+    const rows = await withOrg(orgId, (tx) => listEntriesWithLines(tx, orgId, limit));
     return {
       success: true,
       data: rows.map((r) => ({
@@ -152,9 +152,11 @@ export const journalHandlers: Record<string, ToolHandler> = {
       };
     }
     const draft = parsed.data;
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const accRows = await withOrg(orgId, (tx) =>
+      tx.select().from(accounts).where(eq(accounts.orgId, orgId)),
+    );
     const mapping = resolveDraftAccounts(draft, accRows);
-    const row = await db.transaction(async (tx) => {
+    const row = await withOrg(orgId, async (tx) => {
       const d = await createDraft(tx, {
         orgId,
         kind: "TEXT",
@@ -180,7 +182,9 @@ export const journalHandlers: Record<string, ToolHandler> = {
     const dateISO = String(args.dateISO ?? "").slice(0, 10);
     const rawLines = (args.lines as Array<{ accountCode: string; debit: string; credit: string; memo?: string }>) ?? [];
 
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const accRows = await withOrg(orgId, (tx) =>
+      tx.select().from(accounts).where(eq(accounts.orgId, orgId)),
+    );
     const codeMap = new Map(accRows.map((a) => [a.code, a]));
 
     let totalDebit = 0n;
@@ -211,7 +215,7 @@ export const journalHandlers: Record<string, ToolHandler> = {
       };
     }
 
-    const res = await db.transaction(async (tx) => {
+    const res = await withOrg(orgId, async (tx) => {
       const posted = await postJournalEntry(tx, orgId, actorEmail, {
         memo,
         dateISO,
@@ -237,7 +241,7 @@ export const journalHandlers: Record<string, ToolHandler> = {
     const reason = String(args.reason ?? "Pembalikan jurnal via Akunio AI");
     const dateISO = args.dateISO ? String(args.dateISO).slice(0, 10) : new Date().toISOString().slice(0, 10);
 
-    const rows = await listEntriesWithLines(db, orgId, 100);
+    const rows = await withOrg(orgId, (tx) => listEntriesWithLines(tx, orgId, 100));
     const target = rows.find((r) => r.id === entryIdOrNum || r.number === entryIdOrNum);
     if (!target) {
       return { success: false, error: `Jurnal ${entryIdOrNum} tidak ditemukan.` };
@@ -251,7 +255,7 @@ export const journalHandlers: Record<string, ToolHandler> = {
       memo: `Reversal: ${l.memo ?? target.memo}`,
     }));
 
-    const res = await db.transaction(async (tx) => {
+    const res = await withOrg(orgId, async (tx) => {
       const posted = await postJournalEntry(
         tx,
         orgId,

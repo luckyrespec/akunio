@@ -1,5 +1,5 @@
-import { db } from "@/server/db";
 import { eq, and, isNull, count } from "drizzle-orm";
+import { withOrg } from "@/server/db/repos/with-org";
 import { accounts } from "@/server/db/schema/org";
 import { journalEntries } from "@/server/db/schema/journal";
 import { aiDrafts, documents } from "@/server/db/schema/ai";
@@ -27,38 +27,39 @@ export interface DailyBriefingResponse {
 }
 
 export async function getDailyBriefingData(orgId: string): Promise<DailyBriefingResponse> {
+  return withOrg(orgId, async (tx) => {
   const now = new Date();
   const todayISO = now.toISOString().slice(0, 10);
 
   // 1. Calculate Live Cash & Bank Balance
-  const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+  const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, orgId));
   const metas = reportMetaMap(accRows);
-  const cashLines = await postedLinesThrough(db, orgId, todayISO);
+  const cashLines = await postedLinesThrough(tx, orgId, todayISO);
   const aggs = aggregateFromLines(cashLines, metas);
   const cashMinor = aggs
     .filter((a) => a.meta.isCash || a.meta.isBank)
     .reduce((s, a) => s + signed(a.meta, a), 0n);
 
   // 2. Count Pending Drafts (both journal drafts and AI drafts)
-  const [draftCountRes] = await db
+  const [draftCountRes] = await tx
     .select({ count: count() })
     .from(journalEntries)
     .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.status, "DRAFT")));
-  const [aiDraftCountRes] = await db
+  const [aiDraftCountRes] = await tx
     .select({ count: count() })
     .from(aiDrafts)
     .where(and(eq(aiDrafts.orgId, orgId), eq(aiDrafts.status, "PENDING")));
   const pendingDraftsCount = Number(draftCountRes?.count ?? 0) + Number(aiDraftCountRes?.count ?? 0);
 
   // 3. Count Unrecorded Documents in Library
-  const [unrecordedDocsRes] = await db
+  const [unrecordedDocsRes] = await tx
     .select({ count: count() })
     .from(documents)
     .where(and(eq(documents.orgId, orgId), eq(documents.status, "UPLOADED")));
   const unrecordedDocumentsCount = Number(unrecordedDocsRes?.count ?? 0);
 
   // 4. Current Fiscal Period info
-  const activePeriod = await db.transaction((tx) => loadPeriodOrDefault(tx, orgId, undefined));
+  const activePeriod = await loadPeriodOrDefault(tx, orgId, undefined);
   let periodInfo = null;
   if (activePeriod) {
     const end = new Date(activePeriod.endsOn);
@@ -98,4 +99,5 @@ export async function getDailyBriefingData(orgId: string): Promise<DailyBriefing
     currentPeriod: periodInfo,
     suggestions: suggestions.slice(0, 4),
   };
+  });
 }

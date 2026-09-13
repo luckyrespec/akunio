@@ -1,5 +1,5 @@
-import { db } from "@/server/db";
 import { eq } from "drizzle-orm";
+import { withOrg } from "@/server/db/repos/with-org";
 import { accounts, fiscalPeriods } from "@/server/db/schema/org";
 import { postedLinesThrough, loadPeriodOrDefault } from "@/server/reports/build";
 import { aggregateFromLines, signed } from "@/core/reports/aggregates";
@@ -103,9 +103,12 @@ export const reportsHandlers: Record<string, ToolHandler> = {
   get_report: async (orgId, _actorEmail, args) => {
     const reportType = String(args.type);
     const periodStr = args.period ? String(args.period) : undefined;
-    const period = await db.transaction((tx) => loadPeriodOrDefault(tx, orgId, periodStr));
-    const lines = await postedLinesThrough(db, orgId, period.endsOn);
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const { period, lines, accRows } = await withOrg(orgId, async (tx) => {
+      const period = await loadPeriodOrDefault(tx, orgId, periodStr);
+      const lines = await postedLinesThrough(tx, orgId, period.endsOn);
+      const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, orgId));
+      return { period, lines, accRows };
+    });
     const metas = reportMetaMap(accRows);
     const aggs = aggregateFromLines(lines, metas);
     const ytd = incomeStatement(aggs);
@@ -139,9 +142,11 @@ export const reportsHandlers: Record<string, ToolHandler> = {
   get_financial_kpis: async (orgId) => {
     const year = new Date().getFullYear();
     const yearEndISO = `${year}-12-31`;
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const { accRows, cashLines } = await withOrg(orgId, async (tx) => ({
+      accRows: await tx.select().from(accounts).where(eq(accounts.orgId, orgId)),
+      cashLines: await postedLinesThrough(tx, orgId, yearEndISO),
+    }));
     const metas = reportMetaMap(accRows);
-    const cashLines = await postedLinesThrough(db, orgId, yearEndISO);
     const aggs = aggregateFromLines(cashLines, metas);
     const cashMinor = aggs
       .filter((a) => a.meta.isCash || a.meta.isBank)
@@ -173,7 +178,7 @@ export const reportsHandlers: Record<string, ToolHandler> = {
   },
 
   list_periods: async (orgId) => {
-    const periods = await listPeriodsRepo(db, orgId);
+    const periods = await withOrg(orgId, (tx) => listPeriodsRepo(tx, orgId));
     return {
       success: true,
       data: periods.map((p) => ({
@@ -188,11 +193,11 @@ export const reportsHandlers: Record<string, ToolHandler> = {
 
   open_period: async (orgId, _actorEmail, args) => {
     const name = String(args.name ?? "").trim();
-    const periods = await listPeriodsRepo(db, orgId);
+    const periods = await withOrg(orgId, (tx) => listPeriodsRepo(tx, orgId));
     const existing = periods.find((p) => p.name === name);
 
     if (existing) {
-      await db.transaction(async (tx) => {
+      await withOrg(orgId, async (tx) => {
         await setPeriodStatus(tx, orgId, existing.id, "OPEN");
         await appendAudit(tx, {
           orgId,
@@ -207,7 +212,7 @@ export const reportsHandlers: Record<string, ToolHandler> = {
     } else {
       const startsOn = args.startsOn ? String(args.startsOn) : `${name}-01`;
       const endsOn = args.endsOn ? String(args.endsOn) : `${name}-28`;
-      const [created] = await db.transaction(async (tx) => {
+      const [created] = await withOrg(orgId, async (tx) => {
         const [p] = await tx.insert(fiscalPeriods).values({
           orgId,
           name,
@@ -231,11 +236,11 @@ export const reportsHandlers: Record<string, ToolHandler> = {
 
   close_period: async (orgId, _actorEmail, args) => {
     const name = String(args.name ?? "").trim();
-    const periods = await listPeriodsRepo(db, orgId);
+    const periods = await withOrg(orgId, (tx) => listPeriodsRepo(tx, orgId));
     const existing = periods.find((p) => p.name === name);
     if (!existing) return { success: false, error: `Periode ${name} tidak ditemukan.` };
 
-    await db.transaction(async (tx) => {
+    await withOrg(orgId, async (tx) => {
       await setPeriodStatus(tx, orgId, existing.id, "CLOSED");
       await appendAudit(tx, {
         orgId,
@@ -251,7 +256,7 @@ export const reportsHandlers: Record<string, ToolHandler> = {
   },
 
   check_accounting_health: async (orgId) => {
-    const findings = await listFindings(db, orgId, "open");
+    const findings = await withOrg(orgId, (tx) => listFindings(tx, orgId, "open"));
     return {
       success: true,
       data: {

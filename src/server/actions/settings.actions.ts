@@ -1,7 +1,6 @@
 "use server";
 
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
 import { organizations } from "@/server/db/schema/org";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -19,14 +18,16 @@ import {
 export async function updateHitlPolicyAction(policy: "smart" | "strict" | "autonomous") {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const [org] = await db.select().from(organizations).where(eq(organizations.id, ctx.orgId));
-    const settings = ((org?.settings as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
-    settings.aiHitlPolicy = policy;
+    await withOrg(ctx.orgId, async (tx) => {
+      const [org] = await tx.select().from(organizations).where(eq(organizations.id, ctx.orgId));
+      const settings = ((org?.settings as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+      settings.aiHitlPolicy = policy;
 
-    await db
-      .update(organizations)
-      .set({ settings })
-      .where(eq(organizations.id, ctx.orgId));
+      await tx
+        .update(organizations)
+        .set({ settings })
+        .where(eq(organizations.id, ctx.orgId));
+    });
 
     try {
       revalidatePath("/pengaturan");
@@ -60,14 +61,16 @@ function toDTO(m: AssistantMemory): MemoryItemDTO {
 export async function updateMemoryEnabledAction(enabled: boolean) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const [org] = await db.select().from(organizations).where(eq(organizations.id, ctx.orgId));
-    const settings = ((org?.settings as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
-    settings.aiMemoryEnabled = enabled;
+    await withOrg(ctx.orgId, async (tx) => {
+      const [org] = await tx.select().from(organizations).where(eq(organizations.id, ctx.orgId));
+      const settings = ((org?.settings as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+      settings.aiMemoryEnabled = enabled;
 
-    await db
-      .update(organizations)
-      .set({ settings })
-      .where(eq(organizations.id, ctx.orgId));
+      await tx
+        .update(organizations)
+        .set({ settings })
+        .where(eq(organizations.id, ctx.orgId));
+    });
 
     try {
       revalidatePath("/pengaturan");
@@ -127,28 +130,30 @@ export async function deleteMemoryAction(id: string) {
 export async function updateAiPrefsAction(patch: Partial<AiPrefs> & { approvalThresholdText?: string | null }) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const [org] = await db.select().from(organizations).where(eq(organizations.id, ctx.orgId));
-    const settings = ((org?.settings as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    await withOrg(ctx.orgId, async (tx) => {
+      const [org] = await tx.select().from(organizations).where(eq(organizations.id, ctx.orgId));
+      const settings = ((org?.settings as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
 
-    if (patch.defaultPreset === "fast" || patch.defaultPreset === "deep") {
-      settings.aiDefaultPreset = patch.defaultPreset;
-    }
-    if (patch.answerLength === "ringkas" || patch.answerLength === "lengkap") {
-      settings.aiAnswerLength = patch.answerLength;
-    }
-    if (typeof patch.followupEnabled === "boolean") settings.aiFollowupEnabled = patch.followupEnabled;
-    if (typeof patch.postDirectly === "boolean") settings.aiPostDirectly = patch.postDirectly;
-    if (typeof patch.citationsEnabled === "boolean") settings.aiCitationsEnabled = patch.citationsEnabled;
-    if (typeof patch.autoTitleEnabled === "boolean") settings.aiAutoTitleEnabled = patch.autoTitleEnabled;
-    if (patch.approvalThresholdText !== undefined) {
-      const t = (patch.approvalThresholdText ?? "").trim();
-      settings.aiApprovalThresholdMinor = t ? Money.parseIdr(t).minor.toString() : null;
-    }
+      if (patch.defaultPreset === "fast" || patch.defaultPreset === "deep") {
+        settings.aiDefaultPreset = patch.defaultPreset;
+      }
+      if (patch.answerLength === "ringkas" || patch.answerLength === "lengkap") {
+        settings.aiAnswerLength = patch.answerLength;
+      }
+      if (typeof patch.followupEnabled === "boolean") settings.aiFollowupEnabled = patch.followupEnabled;
+      if (typeof patch.postDirectly === "boolean") settings.aiPostDirectly = patch.postDirectly;
+      if (typeof patch.citationsEnabled === "boolean") settings.aiCitationsEnabled = patch.citationsEnabled;
+      if (typeof patch.autoTitleEnabled === "boolean") settings.aiAutoTitleEnabled = patch.autoTitleEnabled;
+      if (patch.approvalThresholdText !== undefined) {
+        const t = (patch.approvalThresholdText ?? "").trim();
+        settings.aiApprovalThresholdMinor = t ? Money.parseIdr(t).minor.toString() : null;
+      }
 
-    await db
-      .update(organizations)
-      .set({ settings })
-      .where(eq(organizations.id, ctx.orgId));
+      await tx
+        .update(organizations)
+        .set({ settings })
+        .where(eq(organizations.id, ctx.orgId));
+    });
 
     try {
       revalidatePath("/pengaturan");

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/server/db";
+import type { Queryable } from "./queryable";
 
 export interface SearchHit {
   id: string;
@@ -34,9 +35,12 @@ export async function hybridSearch(
   queryEmbedding: number[],
   queryText: string,
   limit = 6,
+  tx?: Queryable,
 ): Promise<SearchHit[]> {
-  // Fetch tenant chunks
-  const tenantRes = await db.execute(sql`
+  // Fetch tenant chunks — lewat tx pemanggil (scope withOrg) agar
+  // app.current_org terpasang di bawah app_user; tanpa tx (legacy) pakai db.
+  const tenantQ = tx ?? db;
+  const tenantRes = await tenantQ.execute(sql`
     SELECT id, content, embedding, source_kind,
            ts_rank(tsv, plainto_tsquery('english', ${queryText})) AS rank
     FROM tenant_chunks

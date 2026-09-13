@@ -1,5 +1,6 @@
 "use server";
 import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
 import { countDraftsThisMonth, checkQuota, createDraft } from "@/server/db/repos/drafts.repo";
@@ -29,7 +30,7 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
 
     // Unified quota check
-    const quota = await checkAssistantQuota(db, ctx.orgId);
+    const quota = await withOrg(ctx.orgId, (tx) => checkAssistantQuota(tx, ctx.orgId));
     // Allow chat even when quota exceeded if it's just a question (no draft), but block if draft would be created
     // For simplicity, block all chat when quota exceeded and message looks like draft request
     // We check after we know if draft was requested via function call, but for now check upfront for any chat that might create draft
@@ -60,7 +61,9 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
       document = { dataBase64: buffer.toString("base64"), mime: file.type };
     }
 
-    const allAccounts = await db.select().from(accountsTable).where(eq(accountsTable.orgId, ctx.orgId));
+    const allAccounts = await withOrg(ctx.orgId, (tx) =>
+      tx.select().from(accountsTable).where(eq(accountsTable.orgId, ctx.orgId)),
+    );
     const leaves = allAccounts.filter((a) => !allAccounts.some((c) => c.parentCode === a.code));
 
     // Unified quota blocks all if exceeded
@@ -81,7 +84,7 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
     let previousInteractionId: string | null = null;
     if (threadId) {
       try {
-        const t = await getThread(db, ctx.orgId, threadId);
+        const t = await withOrg(ctx.orgId, (tx) => getThread(tx, ctx.orgId, threadId));
         previousInteractionId = t?.geminiInteractionId ?? null;
       } catch {
         previousInteractionId = null;
@@ -104,7 +107,7 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
     // If function was called and draft exists, persist it
     if (result.draft && result.functionCalled) {
       // Re-check unified quota at persist time (race)
-      const q2 = await checkAssistantQuota(db, ctx.orgId);
+      const q2 = await withOrg(ctx.orgId, (tx) => checkAssistantQuota(tx, ctx.orgId));
       if (!q2.allowed) return { ok: false, error: q2.message };
 
       const mapping = resolveDraftAccounts(
