@@ -3,6 +3,8 @@ import { withOrg } from "@/server/db/repos/with-org";
 import { journalEntries, journalLines } from "@/server/db/schema/journal";
 import { accounts } from "@/server/db/schema/org";
 import { toMinor } from "@/server/db/repos/journals.repo";
+import { signed } from "@/core/reports/aggregates";
+import type { ReportAccountMeta } from "@/core/reports/aggregates";
 import { Money } from "@/core/money/money";
 
 export interface DrilldownLineItem {
@@ -50,9 +52,8 @@ export async function drilldownAccountDetails(
     .from(accounts)
     .where(and(eq(accounts.orgId, orgId), eq(accounts.code, accountCode)));
   const accountName = acc?.name ?? accountCode;
-  const accountId = acc?.id;
 
-  if (!accountId) {
+  if (!acc) {
     return {
       accountCode,
       accountName,
@@ -62,6 +63,7 @@ export async function drilldownAccountDetails(
       newExpenses: [],
     };
   }
+  const accountId = acc.id;
 
   // 2. Fetch lines for current period
   const curr = getPeriodDates(periodStr);
@@ -87,12 +89,26 @@ export async function drilldownAccountDetails(
       )
     );
 
+  // Neto bertanda per baris via signed() D1 (normal D → debit−kredit,
+  // normal K → kredit−debit; akun kontra dinegasi) sehingga total drilldown
+  // == angka statement. Heuristik memo di bawah hanya untuk label
+  // "beban baru", bukan untuk total.
+  const meta: ReportAccountMeta = {
+    id: accountId,
+    code: accountCode,
+    name: accountName,
+    type: acc.type,
+    normal: acc.normal === "D" ? "D" : "K",
+    contra: acc.contra || undefined,
+  };
+  const netOf = (debit: bigint, credit: bigint) =>
+    signed(meta, { debitMinor: debit, creditMinor: credit });
+
   let currTotalMinor = 0n;
   const items: DrilldownLineItem[] = currRows.map((r) => {
     const debit = toMinor(r.debit);
     const credit = toMinor(r.credit);
-    // For normal debit accounts (expenses/assets), net debit > 0
-    const net = debit > 0n ? debit : credit;
+    const net = netOf(debit, credit);
     currTotalMinor += net;
     return {
       id: r.id,
@@ -136,7 +152,7 @@ export async function drilldownAccountDetails(
     for (const r of compRows) {
       const debit = toMinor(r.debit);
       const credit = toMinor(r.credit);
-      compTotalMinor += debit > 0n ? debit : credit;
+      compTotalMinor += netOf(debit, credit);
       const m = (r.lineMemo || r.memo).toLowerCase().trim();
       compMemos.add(m);
     }

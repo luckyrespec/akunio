@@ -5,7 +5,7 @@ import { withOrg } from "@/server/db/repos/with-org";
 import { accounts, organizations } from "@/server/db/schema/org";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { getProfile } from "@/server/db/repos/onboarding.repo";
-import { postedLinesBetween } from "@/server/reports/build";
+import { postedLinesBetween, postedLinesThrough } from "@/server/reports/build";
 import { aggregateFromLines, signed } from "@/core/reports/aggregates";
 import { buildSakEmkmBalanceSheet, buildSakEmkmIncomeStatement } from "@/core/reports/sak-emkm";
 import { Money } from "@/core/money/money";
@@ -35,7 +35,8 @@ export default async function LaporanIndex() {
   let entityName = "Entitas Usaha Akunio";
 
   try {
-    const { org, profile, accRows, lines } = await withOrg(ctx.orgId, async (tx) => {
+    const yearEndISO = `${year}-12-31`;
+    const { org, profile, accRows, linesThrough, linesYtd } = await withOrg(ctx.orgId, async (tx) => {
       const [org] = await tx
         .select({ name: organizations.name })
         .from(organizations)
@@ -43,23 +44,30 @@ export default async function LaporanIndex() {
         .limit(1);
       const profile = await getProfile(tx, ctx.orgId);
       const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
-      const lines = await postedLinesBetween(tx, ctx.orgId, `${year}-01-01`, `${year}-12-31`);
-      return { org, profile, accRows, lines };
+      // Neraca/ekuitas/kas kumulatif s.d. akhir tahun (== halaman detail);
+      // L/R tetap YTD tahun berjalan.
+      const [linesThrough, linesYtd] = await Promise.all([
+        postedLinesThrough(tx, ctx.orgId, yearEndISO),
+        postedLinesBetween(tx, ctx.orgId, `${year}-01-01`, yearEndISO),
+      ]);
+      return { org, profile, accRows, linesThrough, linesYtd };
     });
     if (profile?.businessName) entityName = profile.businessName;
     else if (org?.name) entityName = org.name;
 
     const metas = reportMetaMap(accRows);
-    const aggs = aggregateFromLines(lines, metas);
+    const aggsCum = aggregateFromLines(linesThrough, metas);
+    const aggsYtd = aggregateFromLines(linesYtd, metas);
 
-    const is = buildSakEmkmIncomeStatement(aggs);
-    netIncome = is.netIncomeMinor;
+    const isYtd = buildSakEmkmIncomeStatement(aggsYtd);
+    netIncome = isYtd.netIncomeMinor;
 
-    cashPosition = aggs
+    cashPosition = aggsCum
       .filter((a) => a.meta.isCash || a.meta.isBank)
       .reduce((s, a) => s + signed(a.meta, a), 0n);
 
-    const bs = buildSakEmkmBalanceSheet(aggs, is.netIncomeMinor);
+    const isCum = buildSakEmkmIncomeStatement(aggsCum);
+    const bs = buildSakEmkmBalanceSheet(aggsCum, isCum.netIncomeMinor);
     totalAssets = bs.totalAssetsMinor;
     totalEquity = bs.totalEquityMinor;
     isBalanced = bs.isBalanced;
