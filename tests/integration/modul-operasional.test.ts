@@ -265,3 +265,51 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
     });
   }
 );
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
+  "modul operasional: counter faktur dalam tx (B4)",
+  () => {
+    let orgId: string;
+    let contactId = "";
+    const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+    const year = new Date().getFullYear();
+
+    beforeAll(async () => {
+      await truncateAll();
+      orgId = (await makeOrg("PT Faktur Counter Tx")).orgId;
+      const { db } = await import("@/server/db");
+      const { contacts } = await import("@/server/db/schema/invoicing");
+      const [c] = await db
+        .insert(contacts)
+        .values({ orgId, type: "CUSTOMER", name: "PT Counter" })
+        .returning();
+      contactId = c.id;
+    });
+    afterAll(async () => {
+      await admin.end();
+      await truncateAll();
+    });
+
+    it("faktur tanpa nomor otomatis berurutan dari counter dalam tx", async () => {
+      const { createInvoiceRepo } = await import(
+        "@/server/db/repos/invoices.repo"
+      );
+      const { db } = await import("@/server/db");
+      const base = {
+        type: "INVOICE" as const,
+        contactId,
+        issueDate: `${year}-06-01`,
+        dueDate: `${year}-06-30`,
+      };
+      const a = await createInvoiceRepo(db, orgId, base, []);
+      const b = await createInvoiceRepo(db, orgId, base, []);
+      expect(a.invoiceNumber).toBe(`INV-${year}-0001`);
+      expect(b.invoiceNumber).toBe(`INV-${year}-0002`);
+      const c = await admin.query<{ last_seq: number }>(
+        `SELECT last_seq FROM invoice_seq_counters WHERE org_id=$1 AND year=$2 AND type='INVOICE'`,
+        [orgId, year]
+      );
+      expect(Number(c.rows[0]?.last_seq)).toBe(2);
+    });
+  }
+);
