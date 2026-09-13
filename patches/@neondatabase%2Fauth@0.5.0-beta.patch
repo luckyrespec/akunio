@@ -1,0 +1,42 @@
+diff --git a/dist/server-b0OzGjXl.mjs b/dist/server-b0OzGjXl.mjs
+index f9a8ab87b7f03dc5594d9d71f1cbcd276c6ce319..939eeb7e9681c455f2fc8654186ff1472ec67350 100644
+--- a/dist/server-b0OzGjXl.mjs
++++ b/dist/server-b0OzGjXl.mjs
+@@ -991,18 +991,26 @@ function createAuthServer(config) {
+ 		});
+ 		const setCookieHeaders = response.headers.getSetCookie();
+ 		if (setCookieHeaders.length > 0) {
+-			for (const setCookieHeader of setCookieHeaders) {
+-				const parsedCookies = parseSetCookies(setCookieHeader);
+-				for (const cookie of parsedCookies) {
+-					const cookieOptions = {
+-						...cookie,
+-						domain,
+-						partitioned: void 0,
+-						sameSite: effectiveSameSite,
+-						secure: true
+-					};
+-					await ctx.setCookie(cookie.name, cookie.value, cookieOptions);
++			try {
++				for (const setCookieHeader of setCookieHeaders) {
++					const parsedCookies = parseSetCookies(setCookieHeader);
++					for (const cookie of parsedCookies) {
++						const cookieOptions = {
++							...cookie,
++							domain,
++							partitioned: void 0,
++							sameSite: effectiveSameSite,
++							secure: true
++						};
++						await ctx.setCookie(cookie.name, cookie.value, cookieOptions);
++					}
+ 				}
++			} catch (error) {
++				log?.warn("[neon-auth] Failed to forward upstream Set-Cookie (read-only context)", {
++					component: "server-api",
++					detail: error instanceof Error ? error.message : String(error),
++					err: error
++				});
+ 			}
+ 			try {
+ 				const sessionDataCookie = await mintSessionDataFromResponse(response.headers, baseUrl, {
