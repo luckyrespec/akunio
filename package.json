@@ -12,6 +12,7 @@
     "db:up": "docker compose up -d db",
     "db:migrate": "drizzle-kit migrate",
     "test:db:setup": "bun scripts/test-db-setup.mjs",
+    "test:rls": "vitest run tests/integration/rls-isolation.test.ts",
     "weed:dev": "cmd /c scripts\\weed-dev.cmd",
     "db:sql": "bun src/server/db/scripts/apply-sql.mjs"
   },

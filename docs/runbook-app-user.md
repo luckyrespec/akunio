@@ -119,3 +119,31 @@ bunx vitest run tests/integration/posting-foundation.test.ts
   `tenant_isolation_*` memfilter ke `NULL`); setelah
   `SELECT set_config('app.current_org', '<org-uuid>', true)` hanya baris org
   tersebut yang terlihat.
+
+## 7. Peran `rls_test_user` untuk suite isolasi (cabang `vitest`, Plan E task E1b)
+
+Suite `tests/integration/rls-isolation.test.ts` (`bun run test:rls`)
+berjalan sebagai `rls_test_user`, bukan `app_user`, agar kredensial suite
+terpisah dari runtime aplikasi. Peran dibuat via SQL di
+`scripts/test-db-setup.mjs` (bagian 4: blok `DO` + `ALTER ROLE ...
+NOBYPASSRLS` + GRANT + verifikasi `rolbypassrls=false`), bukan via Neon
+Console, karena:
+
+- Console menolak password lemah dan mengharuskan klik manual per cabang;
+  via SQL, `bun run test:db:setup` secara idempoten membuat/menyinkronkan
+  peran dalam satu langkah bersama migrasi + `rls.sql`.
+- Password diambil dari `RLS_TEST_PASSWORD`, fallback literal test-only
+  `RlsT3st!Local-Only-2026-vitEST` — kredensial test-branch, BUKAN rahasia
+  prod. Jangan commit password asli ke repo.
+
+Menjalankan suite (DATABASE tetap `ledger_test`; hanya user yang diganti):
+
+```powershell
+$m = Select-String -Path .env -Pattern '^TEST_DATABASE_URL=(.*)$'
+$testUrl = $m.Matches[0].Groups[1].Value.Trim().Trim('"')
+$env:TEST_APP_DATABASE_URL = $testUrl -replace '^(postgresql://).*@', '${1}rls_test_user:<pwd>@'
+bun run test:rls
+Remove-Item Env:\TEST_APP_DATABASE_URL
+```
+
+(`<pwd>` = isi `RLS_TEST_PASSWORD` atau fallback di atas.)
