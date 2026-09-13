@@ -11,7 +11,7 @@ import {
   validateEntry, checkPostingAccounts, journalNumber,
 } from "@/core/journals/validate";
 import type { JournalEntryInput } from "@/core/journals/types";
-import { validateSubledgerControl, moduleLabelForKind } from "@/core/subledger/guard";
+import { validateSubledgerControl } from "@/core/subledger/guard";
 import { getControlKindByAccount, insertSubledgerLinks, listLinksForEntry } from "./subledger.repo";
 import type { SubledgerKind } from "../schema/subledger";
 
@@ -25,7 +25,6 @@ async function assertSubledgerControl(
   q: Queryable,
   orgId: string,
   input: JournalEntryInput,
-  orgAccounts: Array<{ id: string; code: string }>,
 ): Promise<void> {
   const controlByAccountId = await getControlKindByAccount(q, orgId);
   const issues = validateSubledgerControl({
@@ -40,19 +39,9 @@ async function assertSubledgerControl(
     isOpeningBalance: input.isOpeningBalance,
     isLegacyReversal: input.isLegacyReversal,
   });
-  if (issues.length === 0) return;
-  const first = issues[0];
-  const code = orgAccounts.find((a) => a.id === input.lines[first.index].accountId)?.code ?? "?";
-  if (first.code === "AKUN_KONTROL_WAJIB_VIA_MODUL") {
-    throw new Error(`AKUN_KONTROL_WAJIB_VIA_MODUL: akun ${code} hanya boleh dimutasi via ${moduleLabelForKind(first.kind)}, bukan jurnal manual`);
-  }
-  if (first.code === "SUBLEDGER_REF_WAJIB") {
-    throw new Error(`SUBLEDGER_REF_WAJIB: baris ${code} wajib membawa rincian ${first.kind}`);
-  }
-  if (first.code === "SUBLEDGER_KIND_TIDAK_COCOK") {
-    throw new Error(`SUBLEDGER_KIND_TIDAK_COCOK: baris ${code} mengharapkan ${first.expected}, dapat ${first.actual}`);
-  }
-  throw new Error(`SUBLEDGER_TOTAL_TIDAK_COCok: total rincian tidak sama dengan nominal baris ${code}`);
+  // Guard modul selalu PostingError agar server action memetakan ke pesan
+  // ramah via issueToMessage, bukan "kesalahan tak terduga".
+  if (issues.length > 0) throw new PostingError(issues);
 }
 
 async function persistSubledgerLinks(
@@ -130,6 +119,7 @@ export interface EntryView {
   number: string;
   entryDate: string;
   memo: string;
+  source: string;
   status: string;
   reversalOfId: string | null;
   lines: LineView[];
@@ -166,7 +156,7 @@ async function assemble(
   for (const e of entries) {
     byEntry.set(e.id, {
       id: e.id, number: e.number, entryDate: e.entryDate, memo: e.memo,
-      status: e.status, reversalOfId: e.reversalOfId, lines: [],
+      source: e.source, status: e.status, reversalOfId: e.reversalOfId, lines: [],
     });
   }
   for (const l of lineRows) {
@@ -435,7 +425,7 @@ export async function postJournalEntry(
     const origLinks = await listLinksForEntry(q, orgId, opts.reversalOfId);
     legacyReversal = !origLinks.some((r) => r.linkId);
   }
-  await assertSubledgerControl(q, orgId, { ...input, isLegacyReversal: legacyReversal }, orgAccounts);
+  await assertSubledgerControl(q, orgId, { ...input, isLegacyReversal: legacyReversal });
 
   const { seq, number } = await nextJournalNumber(q, orgId, period);
 
@@ -519,7 +509,7 @@ export async function createDraftJournalEntry(
   const acctIssues = checkPostingAccounts(input.lines, postingMetaMap(orgAccounts));
   if (acctIssues.length > 0) throw new PostingError(acctIssues);
 
-  await assertSubledgerControl(q, orgId, input, orgAccounts);
+  await assertSubledgerControl(q, orgId, input);
 
   const { seq, number } = await nextJournalNumber(q, orgId, period);
 
@@ -604,7 +594,7 @@ export async function postDraftEntry(
   if (draftIssues.length > 0) throw new PostingError(draftIssues);
   const draftAcctIssues = checkPostingAccounts(draftInput.lines, postingMetaMap(draftOrgAccounts));
   if (draftAcctIssues.length > 0) throw new PostingError(draftAcctIssues);
-  await assertSubledgerControl(q, orgId, draftInput, draftOrgAccounts);
+  await assertSubledgerControl(q, orgId, draftInput);
   const [updated] = await q.update(journalEntries)
     .set({ status: "POSTED", postedAt: new Date(), postedBy: actorEmail })
     .where(and(eq(journalEntries.id, entry.id), eq(journalEntries.status, "DRAFT")))

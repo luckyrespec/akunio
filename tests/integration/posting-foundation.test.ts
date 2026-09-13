@@ -373,3 +373,96 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("dedup baris pelunasan (Rulin
     }
   });
 });
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("reversal warisi source + mirror links", () => {
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+
+  beforeAll(async () => {
+    await truncateAll();
+  });
+
+  afterAll(async () => {
+    await truncateAll();
+    await admin.end();
+  });
+
+  // Helper test lokal: org + seedOrgData + item stok + faktur jual 1 barang
+  // via postInvoiceToLedger → Dr 1200+link / Cr pendapatan / Dr HPP / Cr persediaan+link.
+  async function postInvoiceWithStock(): Promise<{ orgId: string; journalEntryId: string }> {
+    const { seedOrgData } = await import("@/server/bootstrap/seed-org");
+    const { withOrg } = await import("@/server/db/repos/with-org");
+    const { createInventoryItem, upsertInventorySettings } = await import("@/server/db/repos/inventory.repo");
+    const { seedSubledgerControls } = await import("@/server/db/repos/subledger.repo");
+    const { createContactRepo } = await import("@/server/db/repos/contacts.repo");
+    const { createInvoiceRepo } = await import("@/server/db/repos/invoices.repo");
+    const { postInvoiceToLedger } = await import("@/server/invoicing/posting");
+    const { accounts } = await import("@/server/db/schema/org");
+    const { db } = await import("@/server/db");
+    const { eq } = await import("drizzle-orm");
+
+    const { orgId } = await makeOrg("Reversal Doc Co");
+    await seedOrgData(orgId);
+    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
+    const byCode = (c: string) => accRows.find((a) => a.code === c)!;
+    await withOrg(orgId, (tx) =>
+      upsertInventorySettings(tx, orgId, {
+        valuationMethod: "WEIGHTED_AVERAGE",
+        recordingMethod: "PERPETUAL",
+        cogsAccountId: byCode("5100").id,
+      }),
+    );
+    await withOrg(orgId, (tx) =>
+      seedSubledgerControls(tx, orgId, {
+        receivableAccountId: byCode("1200").id,
+        payableAccountId: byCode("2100").id,
+        inventoryAccountId: byCode("1300").id,
+      }),
+    );
+    const item = await withOrg(orgId, (tx) =>
+      createInventoryItem(tx, orgId, {
+        name: "Kopi A7",
+        initialQty: 10,
+        initialCostMinor: 60_000n,
+        standardSellingPriceMinor: 100_000n,
+      }),
+    );
+    const contact = await createContactRepo(db as never, orgId, { type: "CUSTOMER", name: "PT A7" });
+    const inv = await createInvoiceRepo(db as never, orgId, {
+      type: "INVOICE",
+      contactId: contact.id,
+      issueDate: "2026-09-06",
+      dueDate: "2026-09-20",
+    }, [{ description: "Kopi A7", quantity: 1, unitPriceMinor: 100_000n, catalogItemId: item.id }]);
+    const journalEntryId = await postInvoiceToLedger(db as never, orgId, inv.id, "tester@test.id");
+    return { orgId, journalEntryId };
+  }
+
+  it("reversal faktur DOCUMENT lolos guard kontrol", async () => {
+    const { orgId, journalEntryId } = await postInvoiceWithStock();
+    // reverseEntryAction via seam TEST_CTX_ORG (pola suite idempotency A6).
+    process.env.TEST_CTX_ORG = orgId;
+    try {
+      const { reverseEntryAction } = await import("@/server/actions/journal.actions");
+      const out = await reverseEntryAction(journalEntryId, "2026-09-07");
+      expect(out.ok, `reverseEntryAction gagal: ${out.error ?? "?"}`).toBe(true);
+      const rev = await admin.query<{ status: string; source: string }>(
+        `SELECT status, source FROM journal_entries WHERE id = $1`, [out.id]);
+      expect(rev.rows[0].status).toBe("POSTED");
+      expect(rev.rows[0].source).toBe("DOCUMENT");
+      // Mirror links: himpunan (kind, ref_id, amount_minor) sama dengan aslinya.
+      const links = await admin.query<{ entry_id: string; kind: string; ref_id: string; amount_minor: string }>(
+        `SELECT l.entry_id, s.kind, s.ref_id, s.amount_minor::text AS amount_minor
+         FROM subledger_journal_links s JOIN journal_lines l ON l.id = s.journal_line_id
+         WHERE l.entry_id = $1 OR l.entry_id = $2`,
+        [journalEntryId, out.id]);
+      const sig = (r: { kind: string; ref_id: string; amount_minor: string }) =>
+        `${r.kind}|${r.ref_id}|${r.amount_minor}`;
+      const orig = links.rows.filter((r) => r.entry_id === journalEntryId).map(sig).sort();
+      const mirr = links.rows.filter((r) => r.entry_id === out.id).map(sig).sort();
+      expect(orig.length).toBeGreaterThan(0);
+      expect(mirr).toEqual(orig);
+    } finally {
+      delete process.env.TEST_CTX_ORG;
+    }
+  });
+});

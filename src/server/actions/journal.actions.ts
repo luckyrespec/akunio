@@ -10,6 +10,9 @@ import {
   findReversalEntries,
 } from "@/server/db/repos/journals.repo";
 import { makeReversal } from "@/core/journals/validate";
+import type { JournalSource } from "@/core/journals/types";
+import type { SubledgerLinkInput } from "@/core/subledger/guard";
+import { listLinksForEntry } from "@/server/db/repos/subledger.repo";
 import { issueToMessage } from "@/core/journals/messages";
 import { Money } from "@/core/money/money";
 import {
@@ -101,11 +104,27 @@ export async function reverseEntryAction(entryId: string, dateISO: string): Prom
       // Idempoten: balikan ganda (double-klik / retry) kembali ke record sama.
       const [existing] = await findReversalEntries(tx, ctx.orgId, original.id);
       if (existing) return { id: existing.id, number: existing.number };
+      // Reversal mewarisi source + mirror links entri asal (refId dan
+      // amountMinor sama) agar lolos guard kontrol modul (mis. DOCUMENT).
+      const origLinkRows = await listLinksForEntry(tx, ctx.orgId, original.id);
+      const linksByLine = new Map<string, SubledgerLinkInput[]>();
+      for (const r of origLinkRows) {
+        if (!r.linkId) continue;
+        const arr = linksByLine.get(r.lineId) ?? [];
+        arr.push({
+          kind: r.kind as SubledgerLinkInput["kind"],
+          refId: r.refId!,
+          amountMinor: r.amountMinor!,
+        });
+        linksByLine.set(r.lineId, arr);
+      }
       const reversalInput = makeReversal(
         {
           number: original.number,
+          source: (original.source ?? "MANUAL") as JournalSource,
           lines: original.lines.map((l) => ({
             accountId: l.accountId, debitMinor: l.debitMinor, creditMinor: l.creditMinor,
+            ...(linksByLine.get(l.id)?.length ? { subledgerLinks: linksByLine.get(l.id)! } : {}),
           })),
         },
         dateISO,

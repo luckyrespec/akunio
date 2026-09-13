@@ -1,4 +1,5 @@
-import type { JournalEntryInput, JournalLineInput, PeriodStatus } from "./types";
+import type { JournalEntryInput, JournalLineInput, JournalSource, PeriodStatus } from "./types";
+import type { SubledgerLinkInput } from "@/core/subledger/guard";
 
 export type ValidationIssue =
   | { code: "BAD_DATE" }
@@ -78,20 +79,24 @@ export function journalNumber(periodName: string, seq: number): string {
 
 export interface PostedRef {
   number: string;
-  lines: Array<Pick<JournalLineInput, "accountId" | "debitMinor" | "creditMinor">>;
+  source?: JournalSource;
+  lines: Array<Pick<JournalLineInput, "accountId" | "debitMinor" | "creditMinor" | "subledgerLinks">>;
 }
 
 export function makeReversal(posted: PostedRef, dateISO: string, memo?: string): JournalEntryInput {
   return {
     dateISO,
     memo: memo ?? `Balikan ${posted.number}`,
-    source: "MANUAL",
+    source: posted.source ?? "MANUAL",
     lines: [...posted.lines]
       .reverse()
       .map((l) => ({
         accountId: l.accountId,
         debitMinor: l.creditMinor,
         creditMinor: l.debitMinor,
+        ...(l.subledgerLinks?.length
+          ? { subledgerLinks: l.subledgerLinks.map((x: SubledgerLinkInput) => ({ ...x })) }
+          : {}),
       })),
   };
 }
