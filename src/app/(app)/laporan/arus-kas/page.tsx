@@ -18,9 +18,10 @@ import {
 
 export default async function ArusKasPage({
   searchParams,
-}: { searchParams: Promise<{ period?: string }> }) {
+}: { searchParams: Promise<{ period?: string; mode?: string }> }) {
   const ctx = await requireContext();
   const sp = await searchParams;
+  const cumulative = sp.mode === "ytd";
 
   const data = await db.transaction(async (tx) => {
     const [org] = await tx
@@ -32,7 +33,8 @@ export default async function ArusKasPage({
     const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
     const period = await loadPeriodOrDefault(tx, ctx.orgId, sp.period);
     const options = await listPeriods(tx, ctx.orgId);
-    const lines = await postedLinesBetween(tx, ctx.orgId, period.startsOn, period.endsOn);
+    const fromISO = cumulative ? `${period.endsOn.slice(0, 4)}-01-01` : period.startsOn;
+    const lines = await postedLinesBetween(tx, ctx.orgId, fromISO, period.endsOn);
     return { org, profile, accRows, period, options, lines };
   });
 
@@ -72,6 +74,7 @@ export default async function ArusKasPage({
       periodName={data.period.name}
       options={data.options.map((p) => ({ name: p.name }))}
       periodDateRange={{ startsOn: data.period.startsOn, endsOn: data.period.endsOn }}
+      enableCumulative
     >
       <div className="space-y-6">
         {/* 1. AKTIVITAS OPERASI */}

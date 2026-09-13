@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowUpRight,
   Printer,
   Calendar,
   CheckCircle2,
@@ -34,6 +35,9 @@ export interface StatementShellProps {
   periodName: string;
   options: PeriodOption[];
   periodDateRange?: { startsOn: string; endsOn: string };
+  /** Laporan aliran (laba rugi, arus kas, perubahan ekuitas) boleh memilih
+   *  mode Kumulatif: 1 Januari s.d. akhir periode terpilih. */
+  enableCumulative?: boolean;
   isBalanced?: boolean;
   hideTableHeader?: boolean;
   actions?: React.ReactNode;
@@ -64,6 +68,7 @@ export function StatementShell({
   periodName,
   options,
   periodDateRange,
+  enableCumulative = false,
   isBalanced,
   hideTableHeader,
   actions,
@@ -74,6 +79,8 @@ export function StatementShell({
   const searchParams = useSearchParams();
   const [isPending, startTransition] = React.useTransition();
 
+  const cumulative = enableCumulative && searchParams.get("mode") === "ytd";
+
   const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newPeriod = e.target.value;
     const params = new URLSearchParams(searchParams.toString());
@@ -83,9 +90,16 @@ export function StatementShell({
     });
   };
 
+  const handleModeChange = (isYtd: boolean) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (isYtd) params.set("mode", "ytd");
+    else params.delete("mode");
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
+
   const handleExportCsv = () => {
-    // Ekstrak teks laporan ke CSV sederhana
-    const rows = Array.from(document.querySelectorAll("article .group, article header, article footer"));
     let csvContent = `data:text/csv;charset=utf-8,"LAPORAN KEUANGAN","${title}"\n`;
     csvContent += `"ENTITAS","${entityName}"\n`;
     csvContent += `"PERIODE","${periodName}"\n\n`;
@@ -160,7 +174,9 @@ export function StatementShell({
           </h1>
           <p className="text-xs sm:text-sm font-semibold text-ink-soft">
             {periodDateRange
-              ? `Untuk Periode yang Berakhir pada ${formatIndonesianDate(periodDateRange.endsOn)}`
+              ? cumulative
+                ? `Kumulatif ${formatIndonesianDate(`${periodDateRange.endsOn.slice(0, 4)}-01-01`)} s.d. ${formatIndonesianDate(periodDateRange.endsOn)}`
+                : `Untuk Periode yang Berakhir pada ${formatIndonesianDate(periodDateRange.endsOn)}`
               : `Periode Buku ${periodName}`}
           </p>
           <div className="pt-3 flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[11px] text-ink-soft italic border-t border-rule/70 mt-3">
@@ -240,6 +256,47 @@ export function StatementShell({
                   </option>
                 ))}
               </select>
+
+              {enableCumulative && (
+                <div className="space-y-1.5 pt-1">
+                  <div
+                    className="grid grid-cols-2 gap-1 rounded-xl border-2 border-rule bg-canvas p-1"
+                    role="group"
+                    aria-label="Rentang laporan"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={!cumulative}
+                      disabled={isPending}
+                      onClick={() => handleModeChange(false)}
+                      className={cn(
+                        "h-8 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50",
+                        !cumulative ? "bg-ink text-paper" : "text-ink-soft hover:text-ink",
+                      )}
+                    >
+                      Bulan Terpilih
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={cumulative}
+                      disabled={isPending}
+                      onClick={() => handleModeChange(true)}
+                      className={cn(
+                        "h-8 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50",
+                        cumulative ? "bg-ink text-paper" : "text-ink-soft hover:text-ink",
+                      )}
+                    >
+                      Kumulatif Jan
+                      {periodDateRange
+                        ? `–${new Intl.DateTimeFormat("id-ID", { month: "short" }).format(new Date(`${periodDateRange.endsOn}T00:00:00`))}`
+                        : ""}
+                    </button>
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-ink-soft">
+                    Kumulatif menghitung 1 Januari s.d. akhir bulan terpilih.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Status Keseimbangan (Balanced Check) */}
@@ -339,6 +396,7 @@ export function ReportRowView({
   isTotal,
   isGrandTotal,
   tooltip,
+  href,
   variant = "normal",
 }: {
   code?: string;
@@ -349,6 +407,8 @@ export function ReportRowView({
   isTotal?: boolean;
   isGrandTotal?: boolean;
   tooltip?: string;
+  /** Tautan telusur rincian akun (mis. kartu pendapatan & beban). */
+  href?: string;
   variant?: "normal" | "subtotal" | "header" | "grand-total";
 }) {
   const indentClass =
@@ -370,12 +430,30 @@ export function ReportRowView({
       )}
     >
       <div className="flex items-center gap-1.5 sm:gap-2 truncate pr-2 sm:pr-4">
-        {code && (
-          <span className="font-mono text-[11px] text-ink-soft font-normal shrink-0">
-            {code}
-          </span>
+        {href ? (
+          <Link
+            href={href}
+            title={`Telusuri rincian ${label}`}
+            className="group/row-link flex min-w-0 items-center gap-1.5 sm:gap-2 transition-colors hover:text-terra"
+          >
+            {code && (
+              <span className="font-mono text-[11px] text-ink-soft font-normal shrink-0 group-hover/row-link:text-terra">
+                {code}
+              </span>
+            )}
+            <span className="truncate">{label}</span>
+            <ArrowUpRight className="size-3 shrink-0 opacity-0 transition-opacity print:hidden group-hover/row-link:opacity-60" />
+          </Link>
+        ) : (
+          <>
+            {code && (
+              <span className="font-mono text-[11px] text-ink-soft font-normal shrink-0">
+                {code}
+              </span>
+            )}
+            <span className="truncate">{label}</span>
+          </>
         )}
-        <span className="truncate">{label}</span>
         {tooltip && (
           <Tooltip>
             <TooltipTrigger asChild>

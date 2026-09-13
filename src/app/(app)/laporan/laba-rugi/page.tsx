@@ -18,10 +18,11 @@ import {
 export default async function LabaRugiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; mode?: string }>;
 }) {
   const ctx = await requireContext();
   const sp = await searchParams;
+  const cumulative = sp.mode === "ytd";
 
   const data = await db.transaction(async (tx) => {
     const [org] = await tx
@@ -33,7 +34,8 @@ export default async function LabaRugiPage({
     const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
     const period = await loadPeriodOrDefault(tx, ctx.orgId, sp.period);
     const options = await listPeriods(tx, ctx.orgId);
-    const lines = await postedLinesBetween(tx, ctx.orgId, period.startsOn, period.endsOn);
+    const fromISO = cumulative ? `${period.endsOn.slice(0, 4)}-01-01` : period.startsOn;
+    const lines = await postedLinesBetween(tx, ctx.orgId, fromISO, period.endsOn);
     return { org, profile, accRows, period, options, lines };
   });
 
@@ -41,7 +43,21 @@ export default async function LabaRugiPage({
     data.profile?.businessName || data.org?.name || "Entitas Usaha Akunio";
 
   const metas = reportMetaMap(data.accRows);
+  const idByCode = new Map(data.accRows.map((a) => [a.code, a.id]));
   const is = buildSakEmkmIncomeStatement(aggregateFromLines(data.lines, metas));
+
+  const periodYear = data.period.endsOn.slice(0, 4);
+  const shortMonth = new Intl.DateTimeFormat("id-ID", { month: "short" }).format(
+    new Date(`${data.period.endsOn}T00:00:00`),
+  );
+  const periodLabel = cumulative ? `Jan–${shortMonth} ${periodYear}` : `${shortMonth} ${periodYear}`;
+
+  const cardParams = new URLSearchParams({ period: data.period.name });
+  if (cumulative) cardParams.set("mode", "ytd");
+  const cardHref = (code: string) => {
+    const id = idByCode.get(code);
+    return id ? `/buku-pembantu/laba-rugi/${id}?${cardParams.toString()}` : undefined;
+  };
 
   return (
     <StatementShell
@@ -51,6 +67,7 @@ export default async function LabaRugiPage({
       periodName={data.period.name}
       options={data.options.map((p) => ({ name: p.name }))}
       periodDateRange={{ startsOn: data.period.startsOn, endsOn: data.period.endsOn }}
+      enableCumulative
     >
       <div className="space-y-6">
         {/* 1. PENDAPATAN USAHA */}
@@ -66,6 +83,7 @@ export default async function LabaRugiPage({
                 code={r.code}
                 label={r.name}
                 minor={r.movementMinor}
+                href={cardHref(r.code)}
               />
             ))
           )}
@@ -91,6 +109,7 @@ export default async function LabaRugiPage({
                 code={r.code}
                 label={r.name}
                 minor={r.movementMinor}
+                href={cardHref(r.code)}
               />
             ))
           )}
@@ -126,6 +145,7 @@ export default async function LabaRugiPage({
                 code={r.code}
                 label={r.name}
                 minor={r.movementMinor}
+                href={cardHref(r.code)}
               />
             ))
           )}
@@ -159,6 +179,7 @@ export default async function LabaRugiPage({
                 code={r.code}
                 label={r.name}
                 minor={r.movementMinor}
+                href={cardHref(r.code)}
               />
             ))}
             {is.otherExpenseRows.map((r) => (
@@ -168,6 +189,7 @@ export default async function LabaRugiPage({
                 code={r.code}
                 label={r.name}
                 minor={-r.movementMinor}
+                href={cardHref(r.code)}
               />
             ))}
           </section>
@@ -184,6 +206,7 @@ export default async function LabaRugiPage({
                 code={r.code}
                 label={r.name}
                 minor={r.movementMinor}
+                href={cardHref(r.code)}
               />
             ))}
             <ReportRowView
@@ -196,12 +219,12 @@ export default async function LabaRugiPage({
           </section>
         )}
 
-        {/* 6. LABA (RUGI) BERSIH TAHUN/PERIODE BERJALAN */}
+        {/* 6. LABA (RUGI) BERSIH PERIODE TERPILIH */}
         <div className="pt-4">
           <ReportRowView
             bold
             isGrandTotal
-            label="LABA (RUGI) BERSIH PERIODE BERJALAN"
+            label={`LABA (RUGI) BERSIH — ${periodLabel}`}
             minor={is.netIncomeMinor}
             variant="grand-total"
           />

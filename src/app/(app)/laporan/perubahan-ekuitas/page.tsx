@@ -19,9 +19,10 @@ import {
 
 export default async function PerubahanEkuitasPage({
   searchParams,
-}: { searchParams: Promise<{ period?: string }> }) {
+}: { searchParams: Promise<{ period?: string; mode?: string }> }) {
   const ctx = await requireContext();
   const sp = await searchParams;
+  const cumulative = sp.mode === "ytd";
 
   const data = await db.transaction(async (tx) => {
     const [org] = await tx
@@ -34,11 +35,12 @@ export default async function PerubahanEkuitasPage({
     const period = await loadPeriodOrDefault(tx, ctx.orgId, sp.period);
     const options = await listPeriods(tx, ctx.orgId);
 
-    // Tanggal sebelum periode mulai untuk menghitung saldo awal ekuitas
-    const prevDate = new Date(new Date(period.startsOn).getTime() - 86400000).toISOString().slice(0, 10);
+    // Tanggal sebelum rentang mulai untuk menghitung saldo awal ekuitas
+    const fromISO = cumulative ? `${period.endsOn.slice(0, 4)}-01-01` : period.startsOn;
+    const prevDate = new Date(new Date(fromISO).getTime() - 86400000).toISOString().slice(0, 10);
     const [priorLines, periodLines] = await Promise.all([
       postedLinesThrough(tx, ctx.orgId, prevDate),
-      postedLinesBetween(tx, ctx.orgId, period.startsOn, period.endsOn),
+      postedLinesBetween(tx, ctx.orgId, fromISO, period.endsOn),
     ]);
 
     return { org, profile, accRows, period, options, priorLines, periodLines };
@@ -78,6 +80,7 @@ export default async function PerubahanEkuitasPage({
       periodName={data.period.name}
       options={data.options.map((p) => ({ name: p.name }))}
       periodDateRange={{ startsOn: data.period.startsOn, endsOn: data.period.endsOn }}
+      enableCumulative
     >
       <div className="space-y-6">
         <section className="space-y-2">
