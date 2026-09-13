@@ -241,11 +241,9 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("rekonsiliasi POSTED-only", (
   });
 });
 
-// D3: kartu index == halaman detail (kumulatif Through) + drilldown neto +
-// kas dasbor posisi hari ini. Komposisi tiap `it` memakai builder yang SAMA
-// dengan halaman produksi (postedLinesBetween/Through → aggregateFromLines +
-// reportMetaMap → buildSakEmkm*), dengan argumen setara — tanpa duplikasi
-// logika halaman di test.
+// D3: kartu index + kas dasbor + aktivitas via helper produksi bersama
+// (@/server/reports/cards, dipakai halaman + test) — test memanggil helper
+// langsung, bukan memodel ulang jendela query halaman.
 async function ensureMonthPeriod(admin: Pool, orgId: string, ym: string): Promise<void> {
   const y = Number(ym.slice(0, 4));
   const m = Number(ym.slice(5, 7));
@@ -310,48 +308,21 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("kartu index kumulatif samaka
   });
   afterAll(async () => { await admin.end(); await truncateAll(); });
 
-  it("neraca index kumulatif samakan halaman neraca", async () => {
+  it("kartu index == helper produksi (kumulatif, bukan YTD)", async () => {
     const { db } = await import("@/server/db");
-    const { accounts } = await import("@/server/db/schema/org");
-    const { reportMetaMap } = await import("@/server/db/repos/accounts.repo");
-    const { aggregateFromLines, signed } = await import("@/core/reports/aggregates");
-    const { buildSakEmkmBalanceSheet, buildSakEmkmIncomeStatement } =
-      await import("@/core/reports/sak-emkm");
-    const { postedLinesBetween, postedLinesThrough } =
-      await import("@/server/reports/build");
+    const { getLaporanIndexCards } = await import("@/server/reports/cards");
 
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
-    const metas = reportMetaMap(accRows);
-    const cashOf = (lines: { accountId: string; debitMinor: bigint; creditMinor: bigint }[]) =>
-      aggregateFromLines(lines, metas)
-        .filter((a) => a.meta.isCash || a.meta.isBank)
-        .reduce((s, a) => s + signed(a.meta, a), 0n);
+    // Helper produksi yang SAMA dipakai laporan/page.tsx — tanpa model
+    // ulang jendela di test. Data: modal 2jt tahun lalu + jual 500rb
+    // tahun berjalan.
+    const cards = await db.transaction((tx) =>
+      getLaporanIndexCards(tx as never, orgId, year));
 
-    // Komposisi kartu index — argumen setara src/app/(app)/laporan/page.tsx
-    // (kumulatif Through akhir tahun, == halaman detail).
-    const indexLines = await db.transaction((tx) =>
-      postedLinesThrough(tx as never, orgId, `${year}-12-31`));
-    const indexAggs = aggregateFromLines(indexLines, metas);
-    const indexCards = {
-      totalAssets: buildSakEmkmBalanceSheet(
-        indexAggs, buildSakEmkmIncomeStatement(indexAggs).netIncomeMinor).totalAssetsMinor,
-      totalEquity: buildSakEmkmBalanceSheet(
-        indexAggs, buildSakEmkmIncomeStatement(indexAggs).netIncomeMinor).totalEquityMinor,
-      cashPosition: cashOf(indexLines),
-    };
-
-    // Komposisi halaman detail — argumen setara neraca/page.tsx (Through endsOn).
-    const detailLines = await db.transaction((tx) =>
-      postedLinesThrough(tx as never, orgId, `${year}-12-31`));
-    const detailAggs = aggregateFromLines(detailLines, metas);
-    const detailBS = buildSakEmkmBalanceSheet(
-      detailAggs, buildSakEmkmIncomeStatement(detailAggs).netIncomeMinor);
-
-    expect(detailBS.totalAssetsMinor).toBe(2_500_000n);
-    expect(indexCards.totalAssets).toBe(2_500_000n); // bukan 500_000n
-    expect(indexCards.totalAssets).toBe(detailBS.totalAssetsMinor);
-    expect(indexCards.totalEquity).toBe(detailBS.totalEquityMinor);
-    expect(indexCards.cashPosition).toBe(cashOf(detailLines));
+    expect(cards.totalAssets).toBe(2_500_000n); // bukan 500_000n
+    expect(cards.cashPosition).toBe(2_500_000n); // bukan 500_000n
+    expect(cards.totalEquity).toBe(2_500_000n);
+    expect(cards.netIncome).toBe(500_000n); // YTD tahun berjalan saja
+    expect(cards.isBalanced).toBe(true);
   });
 });
 
@@ -440,7 +411,6 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("kas dasbor posisi hari ini +
   const byCode = new Map<string, string>();
   let past = "";
   let future = "";
-  let endISO = "";
   let postedId1 = "";
   let postedId2 = "";
   let draftJournalId = "";
@@ -469,7 +439,6 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("kas dasbor posisi hari ini +
       future = `${today.slice(0, 4)}-12-31`;
       if (!(future > today)) future = `${Number(today.slice(0, 4)) + 1}-01-07`;
     }
-    endISO = `${future.slice(0, 4)}-12-31`;
     await ensureMonthPeriod(admin, orgId, past.slice(0, 7));
     await ensureMonthPeriod(admin, orgId, future.slice(0, 7));
 
@@ -516,32 +485,21 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("kas dasbor posisi hari ini +
   it("kas dasbor posisi hari ini + aktivitas POSTED", async () => {
     const { todayISO } = await import("@/lib/date");
     const { db } = await import("@/server/db");
-    const { accounts } = await import("@/server/db/schema/org");
-    const { reportMetaMap } = await import("@/server/db/repos/accounts.repo");
-    const { aggregateFromLines, signed } = await import("@/core/reports/aggregates");
-    const { postedLinesThrough } = await import("@/server/reports/build");
-    const { listEntriesWithLinesFiltered } =
-      await import("@/server/db/repos/journals.repo");
+    const { getDasborCash, getDasborRecentActivity } =
+      await import("@/server/reports/cards");
 
     const today = todayISO();
-    const accRows = await db.select().from(accounts).where(eq(accounts.orgId, orgId));
-    const metas = reportMetaMap(accRows);
-    const cashOf = async (through: string) => {
-      const lines = await db.transaction((tx) =>
-        postedLinesThrough(tx as never, orgId, through));
-      return aggregateFromLines(lines, metas)
-        .filter((a) => a.meta.isCash || a.meta.isBank)
-        .reduce((s, a) => s + signed(a.meta, a), 0n);
-    };
+    // Helper produksi yang SAMA dipakai dasbor/page.tsx — tanpa model
+    // ulang jendela di test.
+    const cash = await db.transaction((tx) =>
+      getDasborCash(tx as never, orgId, today));
 
     expect(past < today).toBe(true);
     expect(today < future).toBe(true);
-    expect(await cashOf(today)).toBe(1_000_000n); // bukan 1_777_000n
-    expect(await cashOf(endISO)).toBe(1_777_000n);
+    expect(cash).toBe(1_000_000n); // bukan 1_777_000n (masa depan tak ikut)
 
-    // Aktivitas — helper berfilter POSTED seperti dasbor/page.tsx pasca-fix.
-    const activity = await listEntriesWithLinesFiltered(
-      db as never, orgId, { status: "POSTED" }, 10);
+    // Aktivitas — helper POSTED-only seperti dasbor/page.tsx pasca-fix.
+    const activity = await getDasborRecentActivity(db as never, orgId, 10);
     const activityIds = activity.map((e) => e.id);
     expect(activityIds).toContain(postedId1);
     expect(activityIds).toContain(postedId2);

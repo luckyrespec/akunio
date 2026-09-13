@@ -2,12 +2,9 @@ import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
 import { withOrg } from "@/server/db/repos/with-org";
-import { accounts, organizations } from "@/server/db/schema/org";
-import { reportMetaMap } from "@/server/db/repos/accounts.repo";
+import { organizations } from "@/server/db/schema/org";
 import { getProfile } from "@/server/db/repos/onboarding.repo";
-import { postedLinesBetween, postedLinesThrough } from "@/server/reports/build";
-import { aggregateFromLines, signed } from "@/core/reports/aggregates";
-import { buildSakEmkmBalanceSheet, buildSakEmkmIncomeStatement } from "@/core/reports/sak-emkm";
+import { getLaporanIndexCards } from "@/server/reports/cards";
 import { Money } from "@/core/money/money";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
@@ -35,42 +32,26 @@ export default async function LaporanIndex() {
   let entityName = "Entitas Usaha Akunio";
 
   try {
-    const yearEndISO = `${year}-12-31`;
-    const { org, profile, accRows, linesThrough, linesYtd } = await withOrg(ctx.orgId, async (tx) => {
+    const { org, profile, cards } = await withOrg(ctx.orgId, async (tx) => {
       const [org] = await tx
         .select({ name: organizations.name })
         .from(organizations)
         .where(eq(organizations.id, ctx.orgId))
         .limit(1);
       const profile = await getProfile(tx, ctx.orgId);
-      const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
-      // Neraca/ekuitas/kas kumulatif s.d. akhir tahun (== halaman detail);
-      // L/R tetap YTD tahun berjalan.
-      const [linesThrough, linesYtd] = await Promise.all([
-        postedLinesThrough(tx, ctx.orgId, yearEndISO),
-        postedLinesBetween(tx, ctx.orgId, `${year}-01-01`, yearEndISO),
-      ]);
-      return { org, profile, accRows, linesThrough, linesYtd };
+      // Seluruh query+agregasi kartu milik getLaporanIndexCards (Through
+      // kumulatif untuk neraca/ekuitas/kas, Between YTD untuk L/R).
+      const cards = await getLaporanIndexCards(tx, ctx.orgId, year);
+      return { org, profile, cards };
     });
     if (profile?.businessName) entityName = profile.businessName;
     else if (org?.name) entityName = org.name;
 
-    const metas = reportMetaMap(accRows);
-    const aggsCum = aggregateFromLines(linesThrough, metas);
-    const aggsYtd = aggregateFromLines(linesYtd, metas);
-
-    const isYtd = buildSakEmkmIncomeStatement(aggsYtd);
-    netIncome = isYtd.netIncomeMinor;
-
-    cashPosition = aggsCum
-      .filter((a) => a.meta.isCash || a.meta.isBank)
-      .reduce((s, a) => s + signed(a.meta, a), 0n);
-
-    const isCum = buildSakEmkmIncomeStatement(aggsCum);
-    const bs = buildSakEmkmBalanceSheet(aggsCum, isCum.netIncomeMinor);
-    totalAssets = bs.totalAssetsMinor;
-    totalEquity = bs.totalEquityMinor;
-    isBalanced = bs.isBalanced;
+    netIncome = cards.netIncome;
+    cashPosition = cards.cashPosition;
+    totalAssets = cards.totalAssets;
+    totalEquity = cards.totalEquity;
+    isBalanced = cards.isBalanced;
   } catch {
     // Fallback bila data/DB belum ada jurnal posted
   }

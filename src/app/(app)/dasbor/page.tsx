@@ -9,12 +9,12 @@ import { evaluatePeriodReadiness } from "@/server/db/repos/periods-closing.repo"
 import { getYearEndPromptState } from "@/core/periods/year-end";
 import { YearEndReminder } from "@/components/dasbor/year-end-reminder";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
-import { postedLinesBetween, postedLinesThrough } from "@/server/reports/build";
-import { aggregateFromLines, signed } from "@/core/reports/aggregates";
+import { postedLinesBetween } from "@/server/reports/build";
+import { getDasborCash, getDasborRecentActivity } from "@/server/reports/cards";
+import { aggregateFromLines } from "@/core/reports/aggregates";
 import { incomeStatement } from "@/core/reports/statements";
 import { Money } from "@/core/money/money";
 import { listDrafts } from "@/server/db/repos/drafts.repo";
-import { listEntriesWithLinesFiltered } from "@/server/db/repos/journals.repo";
 import { getAgingReportRepo } from "@/server/db/repos/invoices.repo";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
@@ -56,21 +56,20 @@ export default async function DasborPage() {
   const data = await withOrg(ctx.orgId, async (tx) => {
     const period = await findPeriodByDate(tx, ctx.orgId, today);
     const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
-    const cashLines = await postedLinesThrough(tx, ctx.orgId, today);
+    // Posisi kas hari ini milik getDasborCash (Through today; jurnal
+    // bertanggal masa depan tak ikut).
+    const cashMinor = await getDasborCash(tx, ctx.orgId, today);
     const ytdLines = await postedLinesBetween(tx, ctx.orgId, yearStartISO, yearEndISO);
     let findings: Array<{ id: string; type: string; severity: string }> = [];
     try {
       const { listFindings } = await import("@/server/db/repos/findings.repo");
       findings = (await listFindings(tx, ctx.orgId, "open")) as never;
     } catch {}
-    return { period, accRows, cashLines, ytdLines, findings };
+    return { period, accRows, cashMinor, ytdLines, findings };
   });
 
   const metas = reportMetaMap(data.accRows);
-
-  const cashMinor = aggregateFromLines(data.cashLines, metas)
-    .filter((a) => a.meta.isCash || a.meta.isBank)
-    .reduce((s, a) => s + signed(a.meta, a), 0n);
+  const { cashMinor } = data;
 
   const ytd = incomeStatement(aggregateFromLines(data.ytdLines, metas));
 
@@ -89,7 +88,7 @@ export default async function DasborPage() {
 
   const [drafts, recent, agingAR, agingAP] = await Promise.all([
     listDrafts(db, ctx.orgId),
-    listEntriesWithLinesFiltered(db, ctx.orgId, { status: "POSTED" }, 5),
+    getDasborRecentActivity(db, ctx.orgId, 5),
     getAgingReportRepo(db, ctx.orgId, "INVOICE"),
     getAgingReportRepo(db, ctx.orgId, "BILL"),
   ]);
