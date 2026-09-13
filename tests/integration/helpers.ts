@@ -28,11 +28,11 @@ export async function truncateAll(): Promise<void> {
               kas_bank_entries, kas_bank_seq_counters, inventory_sku_counters,
               bank_statement_lines, bank_reconciliations,
               journal_documents, documents,
-              invoice_items, invoice_payments, invoices, contacts,
+               invoice_items, invoice_payments, invoices, contacts, invoice_seq_counters,
                inventory_layers, inventory_transactions, stock_opname_items, stock_opnames,
                 inventory_settings, inventory_items,
                 pos_sale_items, pos_sales, pos_shifts, pos_sale_seq_counters,
-               asset_depreciation_lines, asset_disposals, fixed_assets,
+               asset_depreciation_lines, asset_disposals, fixed_assets, ast_seq_counters,
                accounts, fiscal_periods, memberships, organizations,
               org_profiles, onboarding_messages CASCADE
   `);

@@ -8,6 +8,7 @@ import {
   integer,
   timestamp,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { organizations, accounts } from "./org";
@@ -120,3 +121,13 @@ export const assetDisposals = pgTable("asset_disposals", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const astSeqCounters = pgTable(
+  "ast_seq_counters",
+  {
+    orgId: uuid("org_id").notNull(),
+    year: integer("year").notNull(),
+    lastSeq: integer("last_seq").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.year] })],
+);

@@ -148,6 +148,13 @@
 			"when": 1788900004000,
 			"tag": "0020_pos_lite",
 			"breakpoints": true
+		},
+		{
+			"idx": 21,
+			"version": "7",
+			"when": 1788900005000,
+			"tag": "0021_seq_counters",
+			"breakpoints": true
 		}
 	]
 }

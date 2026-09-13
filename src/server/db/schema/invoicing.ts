@@ -10,6 +10,7 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { organizations, accounts } from "./org";
 import { journalEntries } from "./journal";
@@ -149,4 +150,15 @@ export const invoicePayments = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("invoice_payments_inv_idx").on(t.invoiceId)]
+);
+
+export const invoiceSeqCounters = pgTable(
+  "invoice_seq_counters",
+  {
+    orgId: uuid("org_id").notNull(),
+    year: integer("year").notNull(),
+    type: text("type", { enum: invoiceTypeEnum }).notNull(),
+    lastSeq: integer("last_seq").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.year, t.type] })],
 );
