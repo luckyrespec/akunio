@@ -8,6 +8,7 @@ import {
   setItemActive,
 } from "@/server/db/repos/inventory.repo";
 import { contacts, invoices, invoiceItems } from "@/server/db/schema/invoicing";
+import { inventoryItems } from "@/server/db/schema/inventory";
 import { makeOrg, truncateAll } from "./helpers";
 
 describe.skipIf(process.env.SKIP_DB_TESTS === "1")("inventory archive barang", () => {
@@ -96,6 +97,19 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("inventory archive barang", (
     await db.update(invoices).set({ status: "PAID" }).where(eq(invoices.id, invoiceId));
     const archived = await db.transaction((tx) => setItemActive(tx as never, orgId, item.id, false));
     expect(archived?.isActive).toBe(false);
+  });
+
+  it("arsip tolak sisa nilai pembulatan", async () => {
+    const item = await makeItem("ARS-004", "Barang Debu", 5);
+    // Nol-kan qty, sisakan total 1 (debu pembulatan) via update langsung —
+    // repo tak menyediakan write-off parsial; cara sah menolkannya: opname.
+    await db
+      .update(inventoryItems)
+      .set({ currentQty: "0", totalCostMinor: 1n })
+      .where(eq(inventoryItems.id, item.id));
+    await expect(
+      db.transaction((tx) => setItemActive(tx as never, orgId, item.id, false)),
+    ).rejects.toThrow("NILAI_MASIH_ADA");
   });
 
   it("menolak jasa dan id tak dikenal", async () => {

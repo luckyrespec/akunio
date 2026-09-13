@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, ne, notInArray, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { Queryable } from "./queryable";
 import {
@@ -9,6 +9,7 @@ import {
   stockOpnames,
   stockOpnameItems,
 } from "../schema/inventory";
+import { documents, journalDocuments } from "../schema/ai";
 import { invoiceItems, invoices } from "../schema/invoicing";
 import { accounts } from "../schema/org";
 import { journalEntries, journalLines } from "../schema/journal";
@@ -261,26 +262,76 @@ export async function updateServiceItem(
   return updated;
 }
 
-/** Riwayat harga modal dari lapis masuk (saldo awal, pembelian, penyesuaian),
- *  kronologis menaik untuk chart. Rata-rata historis tidak direkonstruksi. */
+/** Riwayat harga modal dari lapis masuk (saldo awal, pembelian, penyesuaian
+ *  surplus) plus transaksi keluar/penyesuaian (jual, pakai, opname), kronologis
+ *  menaik untuk chart. `direction` menandai arah (IN = masuk, OUT = keluar).
+ *  Rata-rata historis tidak direkonstruksi. */
 export async function listItemCostHistory(
   q: Queryable,
   orgId: string,
   itemId: string,
   limit = 100,
 ) {
-  return q
+  const layerRows = await q
     .select({
       id: inventoryLayers.id,
       date: inventoryLayers.date,
       referenceType: inventoryLayers.referenceType,
       initialQty: inventoryLayers.initialQty,
       unitCostMinor: inventoryLayers.unitCostMinor,
+      createdAt: inventoryLayers.createdAt,
     })
     .from(inventoryLayers)
     .where(and(eq(inventoryLayers.orgId, orgId), eq(inventoryLayers.itemId, itemId)))
     .orderBy(asc(inventoryLayers.date), asc(inventoryLayers.createdAt))
     .limit(limit);
+  const txnRows = await q
+    .select({
+      id: inventoryTransactions.id,
+      date: inventoryTransactions.date,
+      type: inventoryTransactions.type,
+      qty: inventoryTransactions.qty,
+      unitCostMinor: inventoryTransactions.unitCostMinor,
+      createdAt: inventoryTransactions.createdAt,
+    })
+    .from(inventoryTransactions)
+    .where(
+      and(
+        eq(inventoryTransactions.orgId, orgId),
+        eq(inventoryTransactions.itemId, itemId),
+        inArray(inventoryTransactions.type, ["OUT", "ADJUSTMENT"]),
+      ),
+    )
+    .orderBy(asc(inventoryTransactions.date), asc(inventoryTransactions.createdAt))
+    .limit(limit);
+  const merged = [
+    ...layerRows.map((l) => ({
+      id: l.id,
+      date: l.date,
+      referenceType: l.referenceType as string,
+      initialQty: l.initialQty,
+      unitCostMinor: l.unitCostMinor,
+      direction: "IN" as const,
+      createdAt: l.createdAt,
+    })),
+    ...txnRows.map((t) => {
+      const out = t.type === "OUT" || Number(t.qty) < 0;
+      return {
+        id: t.id,
+        date: t.date,
+        referenceType: t.type,
+        initialQty: out && !t.qty.trim().startsWith("-") ? `-${t.qty}` : t.qty,
+        unitCostMinor: t.unitCostMinor,
+        direction: (out ? "OUT" : "IN") as "IN" | "OUT",
+        createdAt: t.createdAt,
+      };
+    }),
+  ]
+    .sort((a, b) =>
+      a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt.getTime() - b.createdAt.getTime(),
+    )
+    .slice(0, limit);
+  return merged.map(({ createdAt: _createdAt, ...rest }) => rest);
 }
 
 export async function listArchivedInventoryItems(q: Queryable, orgId: string) {
@@ -297,9 +348,11 @@ export async function listArchivedInventoryItems(q: Queryable, orgId: string) {
     .orderBy(desc(inventoryItems.createdAt));
 }
 
-/** Arsipkan / aktifkan ulang barang. Guard arsip: stok harus nol dan barang
- *  tidak dirujuk faktur yang belum lunas/batal (mencakup DRAFT). Mengaktifkan
- *  ulang selalu boleh. Jasa memakai alur arsip jasa tersendiri. */
+/** Arsipkan / aktifkan ulang barang. Guard arsip ganda: stok harus nol DAN
+ *  nilai persediaan harus nol (sisa pembulatan wajib di-write-off via opname,
+ *  bukan lolos arsip diam-diam). Barang juga tidak boleh dirujuk faktur yang
+ *  belum lunas/batal (mencakup DRAFT). Mengaktifkan ulang selalu boleh. Jasa
+ *  memakai alur arsip jasa tersendiri. */
 export async function setItemActive(
   q: Queryable,
   orgId: string,
@@ -311,6 +364,7 @@ export async function setItemActive(
       id: inventoryItems.id,
       itemType: inventoryItems.itemType,
       currentQty: inventoryItems.currentQty,
+      totalCostMinor: inventoryItems.totalCostMinor,
     })
     .from(inventoryItems)
     .where(and(eq(inventoryItems.orgId, orgId), eq(inventoryItems.id, itemId)))
@@ -323,6 +377,11 @@ export async function setItemActive(
   if (!active) {
     if (Number(item.currentQty) !== 0) {
       throw new Error("STOK_MASIH_ADA: nolkan stok (jual/opname) sebelum mengarsipkan");
+    }
+    if (item.totalCostMinor !== 0n) {
+      throw new Error(
+        "NILAI_MASIH_ADA: nilai persediaan masih ada (sisa pembulatan); nolkan lewat opname sebelum mengarsipkan",
+      );
     }
     const refs = await q
       .select({ id: invoices.id })
@@ -1143,6 +1202,20 @@ export async function postOpnameAdjustment(
     throw new Error("DRAF_JURNAL_TIDAK_SESUAI_SELSISIH: total draf berubah, buat ulang draf penyesuaian");
   }
 
+  // Guard basi: pembelian/jual antara create dan post bisa mengubah harga
+  // modal tanpa mengubah qty (beli+jual neto nol) sehingga guard qty di
+  // applyOpnameStockToItems lolos. Bandingkan avg kini vs snapshot opname
+  // dalam lock opname-post yang sama; beda → abort agar jurnal snapshot
+  // basi tidak menimpa biaya baru. Item migrasi (avg masih 0, harga diisi
+  // via updateOpnameItemCost) dikecualikan — snapshotnya memang hasil edit.
+  for (const line of opnameData.items) {
+    if (line.currentAverageCostMinor > 0n && line.currentAverageCostMinor !== line.unitCostMinor) {
+      throw new Error(
+        `STOK_BERUBAH_SEJAK_OPNAME: ${line.itemCode} harga modal berubah sejak opname (snapshot ${line.unitCostMinor}, kini ${line.currentAverageCostMinor}). Buat opname ulang.`,
+      );
+    }
+  }
+
   // Terapkan stok per item ke kuantitas fisik hasil opname.
   const layerShortfall = await applyOpnameStockToItems(q, orgId, opnameData);
 
@@ -1210,6 +1283,34 @@ export async function cancelStockOpname(q: Queryable, orgId: string, opnameId: s
         "JURNAL_SUDAH_DIPOSTING: jurnal penyesuaian sudah final, sesi tidak bisa dibatalkan",
       );
     }
+    // Kumpulkan kunci S3 lampiran draf SEBELUM baris dihapus (cascade
+    // menghilangkan link). Hanya dokumen eksklusif draf ini yang dibersihkan;
+    // dokumen yang juga ditautkan ke entri lain dibiarkan. Best-effort.
+    let orphanKeys: string[] = [];
+    try {
+      const linked = await q
+        .select({ documentId: documents.id, storageKey: documents.storageKey })
+        .from(journalDocuments)
+        .innerJoin(documents, eq(documents.id, journalDocuments.documentId))
+        .where(
+          and(eq(journalDocuments.orgId, orgId), eq(journalDocuments.entryId, entry.id)),
+        );
+      for (const l of linked) {
+        const shared = await q
+          .select({ id: journalDocuments.id })
+          .from(journalDocuments)
+          .where(
+            and(
+              eq(journalDocuments.documentId, l.documentId),
+              ne(journalDocuments.entryId, entry.id),
+            ),
+          )
+          .limit(1);
+        if (shared.length === 0) orphanKeys.push(l.storageKey);
+      }
+    } catch {
+      orphanKeys = [];
+    }
     // Lepas referensi lebih dulu: FK stock_opnames → journal_entries menahan delete.
     await q
       .update(stockOpnames)
@@ -1219,6 +1320,15 @@ export async function cancelStockOpname(q: Queryable, orgId: string, opnameId: s
     await q
       .delete(journalEntries)
       .where(and(eq(journalEntries.id, entry.id), eq(journalEntries.orgId, orgId)));
+    // Bersihkan objek S3 yatim best-effort (kegagalan tak menggagalkan batal).
+    if (orphanKeys.length > 0) {
+      try {
+        const { deleteDocument } = await import("@/server/storage/storage");
+        await Promise.all(orphanKeys.map((k) => deleteDocument(k).catch(() => {})));
+      } catch {
+        // best-effort
+      }
+    }
   }
 
   const [cancelled] = await q

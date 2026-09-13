@@ -206,6 +206,10 @@ export async function setServiceActiveAction(id: string, active: boolean) {
 const ITEM_ACTIVE_ERRORS: Array<[string, string]> = [
   ["STOK_MASIH_ADA", "Stok masih ada — nolkan stok (jual/opname) sebelum mengarsipkan."],
   [
+    "NILAI_MASIH_ADA",
+    "Nilai persediaan masih ada (sisa pembulatan) — nolkan lewat opname sebelum mengarsipkan.",
+  ],
+  [
     "MASIH_DIPAKAI_DOKUMEN_TERBUKA",
     "Barang masih dipakai di faktur yang belum lunas atau batal.",
   ],
@@ -464,17 +468,19 @@ export async function generateAdjustmentDraftAction(opnameId: string) {
 export async function updateOpnameItemCostAction(
   opnameId: string,
   itemId: string,
-  costText: string,
+  costText?: string,
 ) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    // String kosong/undefined = pertahankan harga snapshot, bukan nol.
+    if (!costText?.trim()) {
+      return { ok: true as const, retained: true as const };
+    }
     let unitCostMinor = 0n;
-    if (costText.trim()) {
-      try {
-        unitCostMinor = Money.parseIdr(costText).minor;
-      } catch {
-        return { ok: false as const, error: "Harga modal tidak valid." };
-      }
+    try {
+      unitCostMinor = Money.parseIdr(costText).minor;
+    } catch {
+      return { ok: false as const, error: "Harga modal tidak valid." };
     }
     const res = await withOrg(ctx.orgId, (tx) =>
       updateOpnameItemCost(tx as never, ctx.orgId, opnameId, itemId, unitCostMinor),

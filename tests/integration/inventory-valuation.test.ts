@@ -145,4 +145,71 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("inventory valuation FIFO opn
     expect(layers[0].remainingQty).toBe(5); // layer1 sisa 5
     expect(layers[1].remainingQty).toBe(10);
   });
+
+  it("pembelian antara create-post abort opname basi", async () => {
+    // Snapshot avg 2000; beli 10 @5000 lalu jual 10 → qty kembali 20
+    // (lolos guard qty) tapi avg berubah → wajib abort STOK_BERUBAH.
+    // Jual-balik via applyCatalogStockOut agar qty pas snapshot tanpa
+    // mengubah avg (jalur terkecil deterministik, tanpa jurnal jual).
+    const item = await db.transaction((tx) =>
+      createInventoryItem(tx as never, orgId, {
+        code: "STALE-001",
+        name: "Barang Basi",
+        unit: "Pcs",
+        initialQty: 20,
+        initialCostMinor: 2000n,
+      }),
+    );
+    const before = await db.transaction((tx) =>
+      getInventoryItem(tx as never, orgId, item.id),
+    );
+    expect(before!.averageCostMinor).toBe(2000n);
+
+    const opname = await db.transaction((tx) =>
+      createStockOpname(tx as never, orgId, {
+        opnameDate: `${year}-06-20`,
+        notes: "opname stale-cost",
+        items: [{ itemId: item.id, physicalQty: 18 }],
+      }),
+    );
+    await db.transaction((tx) =>
+      generateAdjustmentJournalDraft(tx as never, orgId, opname.id),
+    );
+
+    const [vendor] = await db
+      .insert(contacts)
+      .values({ orgId, type: "VENDOR", name: "PT Pemasok Basi" })
+      .returning();
+    const bill = await createInvoiceRepo(
+      db, orgId,
+      { type: "BILL", contactId: vendor.id, issueDate: `${year}-06-21`, dueDate: `${year}-07-21` },
+      [{ description: "Beli susulan", quantity: 10, unitPriceMinor: 5000n, catalogItemId: item.id }],
+    );
+    await postInvoiceToLedger(db, orgId, bill.id, "test@test.id");
+
+    const mid = await db.transaction((tx) =>
+      getInventoryItem(tx as never, orgId, item.id),
+    );
+    expect(Number(mid!.currentQty)).toBe(30);
+    expect(mid!.averageCostMinor).toBe(3000n);
+
+    const { applyCatalogStockOut } = await import("@/server/invoicing/posting");
+    await db.transaction((tx) =>
+      applyCatalogStockOut(
+        tx as never, orgId, mid!, 10, "FIFO", `${year}-06-22`,
+        { type: "INVOICE", id: crypto.randomUUID() },
+        "Jual penyeimbang uji stale-cost",
+      ),
+    );
+    const restored = await db.transaction((tx) =>
+      getInventoryItem(tx as never, orgId, item.id),
+    );
+    expect(Number(restored!.currentQty)).toBe(20);
+
+    await expect(
+      db.transaction((tx) =>
+        postOpnameAdjustment(tx as never, orgId, opname.id, "tester@test.id"),
+      ),
+    ).rejects.toThrow("STOK_BERUBAH");
+  });
 });

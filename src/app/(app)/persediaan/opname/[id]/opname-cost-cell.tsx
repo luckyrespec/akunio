@@ -10,7 +10,8 @@ import { Money } from "@/core/money/money";
 import { updateOpnameItemCostAction } from "@/server/actions/inventory.actions";
 
 /** Harga modal baris opname. Editable hanya saat DRAFT & barang belum punya
- *  cost (jalur migrasi tanpa nota) agar selisih bisa dinilai & dijurnal. */
+ *  cost (jalur migrasi tanpa nota) agar selisih bisa dinilai & dijurnal.
+ *  Input dikosongkan = pertahankan harga snapshot (server tidak menimpa nol). */
 export function OpnameCostCell({
   opnameId,
   itemId,
@@ -36,7 +37,8 @@ export function OpnameCostCell({
   const save = async () => {
     setBusy(true);
     try {
-      const res = await updateOpnameItemCostAction(opnameId, itemId, value.trim());
+      const raw = value.trim();
+      const res = await updateOpnameItemCostAction(opnameId, itemId, raw === "" ? undefined : raw);
       if (!res.ok) {
         setErrorText(res.error || "Gagal menyimpan harga modal");
         return;

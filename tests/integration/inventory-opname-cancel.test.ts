@@ -2,6 +2,23 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Pool } from "pg";
 import { makeOrg, truncateAll } from "./helpers";
 
+// Probe S3 (SeaweedFS): pola storage.test.ts — bila tak reachable, suite S3
+// di-skip, bukan fail. Put di dalam test tetap di-try/catch (weed lokal bisa
+// menolak key demo walau server menjawab) agar SKIP anggun.
+const s3Reachable = await (async () => {
+  try {
+    const { getDocument } = await import("@/server/storage/storage");
+    await getDocument("orgs/probe/definitely-missing.pdf");
+    return true;
+  } catch (e) {
+    const msg = (e as Error).message ?? "";
+    if (msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND") || msg.includes("fetch failed")) {
+      return false;
+    }
+    return true;
+  }
+})();
+
 describe.skipIf(process.env.SKIP_DB_TESTS === "1")("opname: batalkan sesi pra-posting", () => {
   let orgId: string;
   const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
@@ -182,5 +199,69 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("opname: batalkan sesi pra-po
     await expect(
       db.transaction((tx) => inv.cancelStockOpname(tx as never, orgId, opname.id)),
     ).rejects.toThrow("OPNAME_SELESAI_TIDAK_BISA_DIBATALKAN");
+  });
+
+  describe.skipIf(!s3Reachable || process.env.SKIP_STORAGE_TESTS === "1")("cancel bersih S3 ter-link draf", () => {
+    it("menghapus objek S3 eksklusif draf saat sesi dibatalkan", async () => {
+      const { putDocument, getDocument } = await import("@/server/storage/storage");
+      const buf = Buffer.from("%PDF-1.4 opname-cancel");
+      let storageKey: string;
+      try {
+        ({ storageKey } = await putDocument(orgId, { buffer: buf, mime: "application/pdf" }));
+      } catch (e) {
+        console.warn(`[skip] S3 put ditolak (${(e as Error).message}) — SKIP anggun`);
+        return;
+      }
+      const inv = await import("@/server/db/repos/inventory.repo");
+      const { db } = await import("@/server/db");
+      const docRepo = await import("@/server/db/repos/documents.repo");
+      const jRepo = await import("@/server/db/repos/journals.repo");
+
+      const item = await db.transaction((tx) =>
+        inv.createInventoryItem(tx as never, orgId, {
+          code: "CAN-S3",
+          name: "Barang S3",
+          unit: "Pcs",
+          initialQty: 10,
+          initialCostMinor: 2_000_00n,
+        }),
+      );
+      const opname = await db.transaction((tx) =>
+        inv.createStockOpname(tx as never, orgId, {
+          opnameDate: `${year}-08-04`,
+          items: [{ itemId: item.id, physicalQty: 8 }],
+        }),
+      );
+      const draft = await db.transaction((tx) =>
+        inv.generateAdjustmentJournalDraft(tx as never, orgId, opname.id),
+      );
+      expect(draft.journalEntryId).toBeTruthy();
+      const entryId = draft.journalEntryId!;
+
+      await db.transaction(async (tx) => {
+        const doc = await docRepo.createDocumentRow(tx as never, {
+          orgId,
+          storageKey,
+          mime: "application/pdf",
+          sizeBytes: buf.length,
+        });
+        await jRepo.linkDocumentToEntry(tx as never, {
+          orgId,
+          entryId,
+          documentId: doc.id,
+          fileName: "bukti.pdf",
+        });
+      });
+
+      await db.transaction((tx) => inv.cancelStockOpname(tx as never, orgId, opname.id));
+
+      // Objek S3 ikut terhapus (best-effort di repo); link DB hilang via cascade.
+      await expect(getDocument(storageKey)).rejects.toThrow();
+      const links = await admin.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM journal_documents WHERE entry_id=$1`,
+        [entryId],
+      );
+      expect(Number(links.rows[0].n)).toBe(0);
+    });
   });
 });

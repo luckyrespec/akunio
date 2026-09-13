@@ -4,15 +4,18 @@ import { Money } from "@/core/money/money";
 export interface CostHistoryPoint {
   id: string;
   date: string;
-  referenceType: "PURCHASE" | "OPENING_BALANCE" | "ADJUSTMENT";
+  referenceType: "PURCHASE" | "OPENING_BALANCE" | "ADJUSTMENT" | "OUT" | string;
   initialQty: string;
   unitCostMinor: bigint;
+  /** Arah mutasi: IN = barang masuk, OUT = keluar (jual/pakai/defisit). */
+  direction: "IN" | "OUT";
 }
 
-const SOURCE_LABEL: Record<CostHistoryPoint["referenceType"], string> = {
+const SOURCE_LABEL: Record<string, string> = {
   OPENING_BALANCE: "Saldo Awal",
   PURCHASE: "Pembelian",
   ADJUSTMENT: "Penyesuaian",
+  OUT: "Keluar (jual/pakai)",
 };
 
 function shortDate(iso: string) {
@@ -20,8 +23,9 @@ function shortDate(iso: string) {
   return `${d}/${m}/${y.slice(2)}`;
 }
 
-/** Riwayat harga modal dari lapis masuk + chart batang CSS murni.
- *  Yang di-chart adalah harga beli per barang masuk; rata-rata historis
+/** Riwayat harga modal dari lapis masuk + transaksi keluar/penyesuaian, plus
+ *  chart batang CSS murni. Tanda minus pada qty = arah keluar.
+ *  Yang di-chart adalah harga per unit tiap mutasi; rata-rata historis
  *  tidak direkonstruksi — rata-rata saat ini tampil sebagai acuan. */
 export function ItemCostHistory({
   history,
@@ -40,7 +44,8 @@ export function ItemCostHistory({
           Belum ada riwayat harga
         </p>
         <p className="text-xs mt-1">
-          Harga modal tercatat setiap ada barang masuk (saldo awal, pembelian, penyesuaian).
+          Harga modal tercatat setiap ada mutasi: masuk (saldo awal, pembelian, penyesuaian
+          tambah) dan keluar (penjualan, pemakaian, defisit opname).
         </p>
       </div>
     );
@@ -64,7 +69,7 @@ export function ItemCostHistory({
               <div key={p.id} className="flex min-w-0 flex-1 flex-col items-center">
                 <div className="flex w-full flex-1 flex-col justify-end">
                   <div
-                    title={`${shortDate(p.date)} · ${SOURCE_LABEL[p.referenceType]} · ${Money.fromMinor(p.unitCostMinor).formatIdr()}/${unit}`}
+                    title={`${shortDate(p.date)} · ${SOURCE_LABEL[p.referenceType] ?? p.referenceType} · ${Money.fromMinor(p.unitCostMinor).formatIdr()}/${unit}`}
                     style={{ height: `${Math.max(pct, 4)}%` }}
                     className={`w-full rounded-t-md ${latest ? "bg-terra" : "bg-ink/40"}`}
                   />
@@ -90,7 +95,7 @@ export function ItemCostHistory({
             <tr>
               <th className="py-2.5 px-4">Tanggal</th>
               <th className="py-2.5 px-4">Sumber</th>
-              <th className="py-2.5 px-4 text-right">Qty Masuk</th>
+              <th className="py-2.5 px-4 text-right">Qty (− = keluar)</th>
               <th className="py-2.5 px-4 text-right">Harga/Unit</th>
             </tr>
           </thead>
@@ -99,7 +104,10 @@ export function ItemCostHistory({
               <tr key={p.id} className="hover:bg-[var(--color-kanvas)]/30">
                 <td className="py-2.5 px-4 font-mono text-xs">{p.date}</td>
                 <td className="py-2.5 px-4 text-xs text-[var(--color-ink-muted)]">
-                  {SOURCE_LABEL[p.referenceType]}
+                  {SOURCE_LABEL[p.referenceType] ?? p.referenceType}
+                  {p.direction === "OUT" && (
+                    <span className="ml-1 font-mono text-[10px] text-[var(--color-terra)]">−</span>
+                  )}
                 </td>
                 <td className="py-2.5 px-4 text-right font-mono tnum text-xs">
                   {Number(p.initialQty).toLocaleString("id-ID")} {unit}
