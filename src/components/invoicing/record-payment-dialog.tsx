@@ -103,6 +103,13 @@ export function RecordPaymentDialog({
       return;
     }
 
+    if (amountMinor > remainingMinor) {
+      setError(
+        `Jumlah melebihi sisa tagihan ${Money.fromMinor(remainingMinor).formatIdr()} (MELEBIHI_SISA).`
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
 

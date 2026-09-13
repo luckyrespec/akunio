@@ -8,6 +8,7 @@ import {
   type InvoiceType,
   type InvoiceStatus,
 } from "../schema/invoicing";
+import { accounts } from "../schema/org";
 import { calculateInvoiceTotals, determineInvoiceStatus } from "@/core/invoicing/calculations";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
@@ -249,6 +250,30 @@ export async function recordInvoicePaymentRepo(
         const [fresh] = await tx.select().from(invoices).where(eq(invoices.id, inv.id));
         return { payment: dupe, updatedInvoice: fresh ?? inv };
       }
+    }
+
+    // Guard nilai pelunasan (di repo, bukan hanya UI): nominal positif,
+    // akun kas/bank wajib, dan tak boleh melebihi sisa tagihan.
+    // Berjalan SETELAH dedup idempotency di atas agar retry double-submit
+    // (nominal lama yang kini melebihi sisa) tetap kembali ke record existing.
+    if (input.amountMinor <= 0n) {
+      throw new Error("NOMINAL_HARUS_POSITIF: jumlah pelunasan harus lebih dari Rp 0.");
+    }
+    if (!input.paymentAccountId) {
+      throw new Error("AKUN_KAS_WAJIB: pilih akun kas atau bank untuk pelunasan.");
+    }
+    const [payAccount] = await tx
+      .select({ id: accounts.id, isCash: accounts.isCash, isBank: accounts.isBank })
+      .from(accounts)
+      .where(and(eq(accounts.orgId, orgId), eq(accounts.id, input.paymentAccountId)))
+      .limit(1);
+    if (!payAccount || (!payAccount.isCash && !payAccount.isBank)) {
+      throw new Error("BUKAN_AKUN_KAS: akun pelunasan harus akun kas atau bank.");
+    }
+    if (inv.amountPaidMinor + input.amountMinor > inv.totalMinor) {
+      throw new Error(
+        `MELEBIHI_SISA: jumlah pelunasan melebihi sisa tagihan faktur ${inv.invoiceNumber}.`
+      );
     }
 
     let payment: typeof invoicePayments.$inferSelect;

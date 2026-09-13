@@ -8,6 +8,8 @@ import {
   inventoryTransactions,
 } from "@/server/db/schema/inventory";
 import { getInvoiceByIdRepo } from "@/server/db/repos/invoices.repo";
+import { kasBankEntries } from "@/server/db/schema/cash-bank";
+import { cashNumber } from "@/core/kas-bank/kas-bank";
 import { getInventorySettings, lockInventoryPolicy } from "@/server/db/repos/inventory.repo";
 import { postJournalEntry, toMinor } from "@/server/db/repos/journals.repo";
 import { resolveRevenueAccountId, resolveCogsAccountId, resolveExpenseAccountId } from "@/server/db/repos/accounts.repo";
@@ -629,6 +631,30 @@ export async function voidInvoiceWithReversal(
   });
 }
 
+/** Nomor pelunasan `PMB-YYYY-NNNN` via counter kas kind `PAYMENT`.
+ *  Meniru `nextNumber` cash-bank.repo (lock + upsert per org-tahun-kind);
+ *  baris log kas-nya sendiri ber-kind TERIMA/BAYAR, hanya nomornya yang
+ *  memakai sekuens PAYMENT. */
+async function nextPaymentNumber(
+  q: Queryable,
+  orgId: string,
+  paymentDate: string,
+): Promise<string> {
+  const year = paymentDate.slice(0, 4);
+  await q.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:kas:${year}:PAYMENT`}))`
+  );
+  const res = await q.execute(sql`
+    INSERT INTO kas_bank_seq_counters (org_id, year, kind, last)
+    VALUES (${orgId}, ${year}, ${"PAYMENT"}, 1)
+    ON CONFLICT (org_id, year, kind)
+    DO UPDATE SET last = kas_bank_seq_counters.last + 1
+    RETURNING last
+  `);
+  const seq = Number((res.rows?.[0] as { last: number } | undefined)?.last ?? 1);
+  return cashNumber("PAYMENT", year, seq);
+}
+
 export async function postInvoicePaymentToLedger(
   db: Db,
   orgId: string,
@@ -659,10 +685,12 @@ export async function postInvoicePaymentToLedger(
 
   return db.transaction(async (tx) => {
     const lines: JournalLineInput[] = [];
+    let counterAccountId: string;
 
     if (inv.type === "INVOICE") {
       // Pelunasan Piutang: Dr Kas/Bank, Cr Piutang Usaha
       const arAccount = await getAccountByCode(tx, orgId, "1200");
+      counterAccountId = arAccount.id;
 
       lines.push({
         accountId: payment.paymentAccountId,
@@ -681,6 +709,7 @@ export async function postInvoicePaymentToLedger(
     } else {
       // Pembayaran Utang: Dr Utang Usaha, Cr Kas/Bank
       const apAccount = await getAccountByCode(tx, orgId, "2100");
+      counterAccountId = apAccount.id;
 
       lines.push({
         accountId: apAccount.id,
@@ -724,6 +753,38 @@ export async function postInvoicePaymentToLedger(
         journalEntryId: entry.id,
       })
       .where(eq(invoicePayments.id, payment.id));
+
+    // Baris log kas ke JE yang sama (preceden POS: insert langsung ke
+    // kas_bank_entries, TANPA createCashEntryRepo yang memposting jurnal
+    // kedua + menolak akun kontrol). Return-existing di bawah menjaga
+    // tepat-satu-baris bila JE hasil kontrak return-existing sudah berlog.
+    const [existingKas] = await tx
+      .select({ id: kasBankEntries.id })
+      .from(kasBankEntries)
+      .where(
+        and(
+          eq(kasBankEntries.orgId, orgId),
+          eq(kasBankEntries.journalEntryId, entry.id)
+        )
+      )
+      .limit(1);
+    if (!existingKas) {
+      const paymentNumber = await nextPaymentNumber(tx, orgId, payment.paymentDate);
+      await tx.insert(kasBankEntries).values({
+        orgId,
+        kind: inv.type === "INVOICE" ? "TERIMA" : "BAYAR",
+        entryDate: payment.paymentDate,
+        cashAccountId: payment.paymentAccountId,
+        counterAccountId,
+        contactId: inv.contactId,
+        amountMinor: payment.amountMinor,
+        memo,
+        number: paymentNumber,
+        journalEntryId: entry.id,
+        status: "POSTED",
+        createdBy: actorEmail,
+      });
+    }
 
     return entry.id;
   });

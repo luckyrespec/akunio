@@ -1,4 +1,4 @@
-export type UiCashKind = "BAYAR" | "TERIMA" | "TRANSFER";
+export type UiCashKind = "BAYAR" | "TERIMA" | "TRANSFER" | "PAYMENT";
 
 export class CashValidationError extends Error {}
 
@@ -20,6 +20,7 @@ export const CASH_KIND_PREFIX: Record<UiCashKind, string> = {
   BAYAR: "BBK",
   TERIMA: "BBM",
   TRANSFER: "TKB",
+  PAYMENT: "PMB",
 };
 
 export function planCashJournal(
