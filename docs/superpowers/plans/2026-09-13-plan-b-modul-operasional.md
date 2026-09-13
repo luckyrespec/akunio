@@ -290,6 +290,47 @@ git add src/server/ai src/server/actions/journal-ai.actions.ts "src/app/(app)/ju
 git commit -m "fix(ai): threading, jendela 12, prompt leaf, resolver postable"
 ```
 
+### Task B8: Sweep withOrg read-path + gate final Plan B (Ruling R9)
+
+Menutup Produces A9 "semua jalur tulis/baca tenant lewat withOrg": read non-tx di journal/pos/inventory/asset/subsidiary/pajak/AI-tools yang masih pakai `db` mentah → 0 baris di bawah `app_user`.
+
+**Files:**
+- Modify: hasil inventory ( actions/repos dengan `db.select/query/execute` top-level di luar tx)
+- Test: `tests/integration/modul-operasional.test.ts` (APPEND)
+
+**Interfaces:**
+- Consumes: `withOrg(orgId, fn)` (signature aktual —/models A9, BUKAN `(db, orgId, fn)`).
+- Produces: nol read tenant-scope di luar `withOrg`/tx.
+
+- [ ] **Step 1: Inventory read bocor**
+
+Grep `db\.select|db\.query|db\.execute` di `src/server/actions`, `src/server/ai`, `src/server/invoicing`, dan pemanggil repo dengan `db` mentah dari Server Components. Klasifikasikan: (a) sudah di dalam tx/withOrg → lewati; (b) read tenant-scope telanjang → bungkus `withOrg`. Tulis daftar (a)/(b) di laporan.
+
+- [ ] **Step 2: Tulis failing test scoping**
+
+```ts
+it("read antar-org terisolasi predikat", async () => {
+  // 2 org + data masing-masing → listX(orgA) tak memuat baris orgB
+});
+```
+(CATATAN: isolasi RLS sejati diuji Plan E docker; di sini kunci predikat + withOrg terpasang.)
+
+- [ ] **Step 3: Implementasi sweep**
+
+Bungkus (b) dengan `withOrg`, tanpa ubah logika/filter. Satu pola per file, tiru A9.
+
+- [ ] **Step 4: Gate final Plan B**
+
+Run: `bunx tsc --noEmit; if ($?) { bunx vitest run tests/integration/modul-operasional.test.ts tests/integration/pos-lite.test.ts tests/integration/posting-foundation.test.ts tests/unit/ai-threading.test.ts }`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add <file-file yang diubah saja — verifikasi git status dulu>
+git commit -m "fix(rls): withOrg read-path modul + gate B hijau"
+```
+
 ### Task B7: Gate Plan B
 
 - [ ] **Step 1: tsc**
