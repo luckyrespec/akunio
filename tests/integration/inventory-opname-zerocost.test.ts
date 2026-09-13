@@ -281,4 +281,51 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("opname: jalur harga modal Rp
       periods.setPeriodStatus(tx as never, orgId, period!.id, "OPEN"),
     );
   });
+
+  it("opname cocok-sempurna di periode OPEN tidak mengunci kebijakan", async () => {
+    const inv = await import("@/server/db/repos/inventory.repo");
+    const { db } = await import("@/server/db");
+
+    // Test sebelumnya sudah mengunci policy; reset dulu agar assert
+    // "tetap unlocked" bermakna (UPDATE langsung, bukan via upsert).
+    await admin.query(`UPDATE inventory_settings SET is_locked=false WHERE org_id=$1`, [orgId]);
+    const before = await db.transaction((tx) =>
+      inv.getInventorySettings(tx as never, orgId),
+    );
+    expect(before!.isLocked).toBe(false);
+
+    const item = await db.transaction((tx) =>
+      inv.createInventoryItem(tx as never, orgId, {
+        code: "ZER-NOOP",
+        name: "Cocok Sempurna",
+        unit: "Pcs",
+        initialQty: 7,
+        initialCostMinor: 10_000_00n,
+      }),
+    );
+    // Bulan September belum dipakai test lain di file ini.
+    const opnameDate = `${year}-09-10`;
+    const opname = await db.transaction((tx) =>
+      inv.createStockOpname(tx as never, orgId, {
+        opnameDate,
+        items: [{ itemId: item.id, physicalQty: 7 }],
+      }),
+    );
+    expect(opname.totalDifferenceValueMinor).toBe(0n);
+
+    const res = await db.transaction((tx) =>
+      inv.generateAdjustmentJournalDraft(tx as never, orgId, opname.id),
+    );
+    expect(res.journalEntryId).toBeNull();
+
+    const op = await db.transaction((tx) =>
+      inv.getStockOpnameWithItems(tx as never, orgId, opname.id),
+    );
+    expect(op!.status).toBe("COMPLETED");
+
+    const after = await db.transaction((tx) =>
+      inv.getInventorySettings(tx as never, orgId),
+    );
+    expect(after!.isLocked).toBe(false);
+  });
 });

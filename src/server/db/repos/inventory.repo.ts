@@ -963,9 +963,9 @@ export async function updateOpnameJournalMemo(
  * Membuat Draf Jurnal Penyesuaian (Opsi A) dari hasil selisih Stok Opname.
  * Stock-neutral untuk jalur bernilai: tidak menyentuh qty/layer/transaksi;
  * stok baru diterapkan saat draf diposting via postOpnameAdjustment.
- * Periode wajib OPEN dan kebijakan metode dikunci di muka untuk SEMUA jalur
- * (termasuk Rp0), karena cabang Rp0 di bawah langsung menerapkan stok fisik
- * dan menandai COMPLETED tanpa jurnal.
+ * Periode wajib OPEN untuk SEMUA jalur (termasuk no-op cocok-sempurna).
+ * Kebijakan metode dikunci HANYA bila ada mutasi (selisih qty atau nilai
+ * non-nol); opname cocok-sempurna langsung COMPLETED tanpa mengunci.
  * Pengecualian: bila nilai selisih Rp0 (harga modal belum diisi) TIDAK ada yang
  * bisa dijurnal, namun qty fisik tetap diterapkan dan opname ditandai COMPLETED.
  */
@@ -985,20 +985,22 @@ export async function generateAdjustmentJournalDraft(
     throw new Error(`STATUS_OPNAME_TIDAK_VALID: hanya DRAFT yang bisa dibuatkan draf jurnal (saat ini ${opnameData.status})`);
   }
 
-  // Jalur Rp0 maupun bernilai wajib periode OPEN + kunci kebijakan SEBELUM
-  // cabang diffValue==0: cabang Rp0 langsung menerapkan stok + COMPLETED
-  // tanpa jurnal, sehingga tanpa cek ini ia lolos dari validasi periode
-  // dan policy lock. Valuasi C1 (logika layer) tidak diubah.
+  // Periode wajib OPEN untuk SEMUA jalur (termasuk no-op cocok-sempurna).
+  // Kebijakan metode dikunci HANYA bila ada mutasi (selisih qty atau nilai
+  // non-nol). Valuasi C1 (logika layer) tidak diubah.
   const period = await findPeriodByDate(q, orgId, opnameData.opnameDate);
   if (!period) throw new Error("PERIODE_TIDAK_DITEMUKAN");
   if (period.status !== "OPEN") {
     throw new Error(`PERIODE_TUTUP: draf penyesuaian opname hanya bisa dibuat pada periode OPEN (periode ${period.name} berstatus ${period.status})`);
   }
-  await lockInventoryPolicy(q, orgId);
 
   const diffValue = opnameData.totalDifferenceValueMinor;
+  const hasQtyDiff = opnameData.items.some((it) => Number(it.differenceQty) !== 0);
+  if (diffValue !== 0n || hasQtyDiff) {
+    await lockInventoryPolicy(q, orgId);
+  }
+
   if (diffValue === 0n) {
-    const hasQtyDiff = opnameData.items.some((it) => Number(it.differenceQty) !== 0);
     if (!hasQtyDiff) {
       // Fisik cocok sempurna: tidak ada yang perlu diterapkan maupun dijurnal.
       const [done] = await q.update(stockOpnames)
