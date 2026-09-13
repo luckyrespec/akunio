@@ -78,41 +78,75 @@ export async function loadPlCards(
   const is = buildSakEmkmIncomeStatement(aggs);
   const idByCode = new Map(showable.map((a) => [a.code, a.id]));
 
-  const toRows = (rows: ReportRow[]): PlCardRow[] =>
-    rows.map((r) => {
-      const id = idByCode.get(r.code)!;
-      return {
-        id,
-        code: r.code,
-        name: r.name,
-        count: stats.get(id)?.count ?? 0,
-        movementMinor: r.movementMinor,
-      };
+  // Baris yang kodenya tak terpetakan ke akun tampil (mis. baris sintetis
+  // klasifikasi) ditampung ke bucket fallback "Lainnya" per kelompok
+  // sak-emkm — nominal tetap tampil dan terrekonsiliasi, bukan silent-drop.
+  const unmatched: { group: "revenue" | "expense"; row: ReportRow }[] = [];
+
+  const toRows = (rows: ReportRow[], group: "revenue" | "expense"): PlCardRow[] =>
+    rows.flatMap((r): PlCardRow[] => {
+      const id = idByCode.get(r.code);
+      if (!id) {
+        unmatched.push({ group, row: r });
+        return [];
+      }
+      return [
+        {
+          id,
+          code: r.code,
+          name: r.name,
+          count: stats.get(id)?.count ?? 0,
+          movementMinor: r.movementMinor,
+        },
+      ];
     });
 
+  const fallbackSection = (group: "revenue" | "expense"): PlCardSection | null => {
+    const rows = unmatched
+      .filter((u) => u.group === group)
+      .map((u, i) => ({
+        id: `lainnya-${u.row.code}-${i}`,
+        code: u.row.code,
+        name: u.row.name,
+        count: 0,
+        movementMinor: u.row.movementMinor,
+      }));
+    if (rows.length === 0) return null;
+    return {
+      label: "Lainnya",
+      rows,
+      subtotalMinor: rows.reduce((s, r) => s + r.movementMinor, 0n),
+    };
+  };
+
   const revenueSections: PlCardSection[] = [
-    { label: "Pendapatan Usaha", rows: toRows(is.revenueRows), subtotalMinor: is.totalRevenueMinor },
+    { label: "Pendapatan Usaha", rows: toRows(is.revenueRows, "revenue"), subtotalMinor: is.totalRevenueMinor },
     {
       label: "Pendapatan Lain-lain",
-      rows: toRows(is.otherRevenueRows),
+      rows: toRows(is.otherRevenueRows, "revenue"),
       subtotalMinor: is.totalOtherRevenueMinor,
     },
   ].filter((s) => s.rows.length > 0);
 
   const expenseSections: PlCardSection[] = [
-    { label: "Beban Pokok Penjualan", rows: toRows(is.cogsRows), subtotalMinor: is.totalCogsMinor },
+    { label: "Beban Pokok Penjualan", rows: toRows(is.cogsRows, "expense"), subtotalMinor: is.totalCogsMinor },
     {
       label: "Beban Operasional",
-      rows: toRows(is.operatingExpenseRows),
+      rows: toRows(is.operatingExpenseRows, "expense"),
       subtotalMinor: is.totalOperatingExpenseMinor,
     },
-    { label: "Beban Pajak", rows: toRows(is.taxExpenseRows), subtotalMinor: is.totalTaxExpenseMinor },
+    { label: "Beban Pajak", rows: toRows(is.taxExpenseRows, "expense"), subtotalMinor: is.totalTaxExpenseMinor },
     {
       label: "Beban Lain-lain",
-      rows: toRows(is.otherExpenseRows),
+      rows: toRows(is.otherExpenseRows, "expense"),
       subtotalMinor: is.totalOtherExpenseMinor,
     },
   ].filter((s) => s.rows.length > 0);
+
+  const revenueFallback = fallbackSection("revenue");
+  if (revenueFallback) revenueSections.push(revenueFallback);
+  const expenseFallback = fallbackSection("expense");
+  if (expenseFallback) expenseSections.push(expenseFallback);
 
   const movedCount = (sections: PlCardSection[]) =>
     sections.reduce((n, s) => n + s.rows.filter((r) => r.movementMinor !== 0n).length, 0);

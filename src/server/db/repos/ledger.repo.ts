@@ -1,4 +1,4 @@
-import { and, asc, eq, lte } from "drizzle-orm";
+import { and, asc, eq, gte, lt, lte } from "drizzle-orm";
 import { accounts } from "../schema/org";
 import { journalEntries, journalLines } from "../schema/journal";
 import type { Queryable } from "./queryable";
@@ -29,12 +29,15 @@ export async function getLedger(
     .limit(1);
   const account = accRows[0];
   if (!account) throw new Error("AKUN_TIDAK_DITEMUKAN");
+  const isDebitNormal = account.normal === "D";
 
   const conds = [
     eq(journalLines.orgId, orgId),
+    eq(journalEntries.orgId, orgId),
     eq(journalLines.accountId, accountId),
     eq(journalEntries.status, "POSTED"),
   ];
+  if (range?.from) conds.push(gte(journalEntries.entryDate, range.from));
   if (range?.to) conds.push(lte(journalEntries.entryDate, range.to));
 
   const raw = await q.select({
@@ -53,23 +56,36 @@ export async function getLedger(
     .where(and(...conds))
     .orderBy(asc(journalEntries.entryDate), asc(journalEntries.seq), asc(journalLines.position));
 
-  const isDebitNormal = account.normal === "D";
+  // Saldo awal dihitung via query agregat terpisah agar filter `from`
+  // tetap di SQL tanpa kehilangan openingMinor.
   let opening = 0n;
-  let running = 0n;
-  let started = false;
+  if (range?.from) {
+    const openLines = await q.select({
+      debit: journalLines.debit,
+      credit: journalLines.credit,
+    })
+      .from(journalLines)
+      .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+      .where(and(
+        eq(journalLines.orgId, orgId),
+        eq(journalEntries.orgId, orgId),
+        eq(journalLines.accountId, accountId),
+        eq(journalEntries.status, "POSTED"),
+        lt(journalEntries.entryDate, range.from),
+      ));
+    for (const r of openLines) {
+      const d = toMinor(r.debit);
+      const c = toMinor(r.credit);
+      opening += isDebitNormal ? d - c : c - d;
+    }
+  }
+
+  let running = opening;
   const rows: LedgerRow[] = [];
   for (const r of raw) {
     const d = toMinor(r.debit);
     const c = toMinor(r.credit);
     const delta = isDebitNormal ? d - c : c - d;
-    if (range?.from && r.entryDate < range.from) {
-      opening += delta;
-      continue;
-    }
-    if (!started) {
-      running = opening;
-      started = true;
-    }
     running += delta;
     rows.push({
       entryId: r.entryId,
@@ -119,6 +135,7 @@ export async function listAccountsWithBalances(
     .where(
       and(
         eq(journalLines.orgId, orgId),
+        eq(journalEntries.orgId, orgId),
         eq(journalEntries.status, "POSTED"),
       ),
     );

@@ -38,7 +38,12 @@ export default async function KartuAkunPage({
       const ledger = await getLedger(tx, ctx.orgId, id, { from: fromISO, to: period.endsOn });
       return { period, options, ledger, fromISO };
     })
-    .catch(() => null);
+    .catch((e: unknown) => {
+      // 404 hanya bila akun tak ada; kegagalan DB / periode dilempar agar
+      // tak menyamarkan error infrastruktur sebagai halaman hilang.
+      if (e instanceof Error && e.message === "AKUN_TIDAK_DITEMUKAN") return null;
+      throw e;
+    });
 
   if (!data) notFound();
   const { account, rows, openingMinor } = data.ledger;

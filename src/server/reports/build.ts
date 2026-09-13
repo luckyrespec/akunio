@@ -11,6 +11,7 @@ async function postedLines(
 ): Promise<LedgerLine[]> {
   const conds = [
     eq(journalEntries.orgId, orgId),
+    eq(journalLines.orgId, orgId),
     eq(journalEntries.status, "POSTED"),
   ];
   if (range?.from) conds.push(gte(journalEntries.entryDate, range.from));

@@ -212,11 +212,11 @@ export async function deletePeriodAction(periodId: string): Promise<ActionResult
     const { journalEntries } = await import("@/server/db/schema/journal");
     const { eq } = await import("drizzle-orm");
 
-    // Check if period has any journal entries
+    // Check if period has any journal entries (scoped ke org peminta).
     const existingEntry = await db
       .select({ id: journalEntries.id })
       .from(journalEntries)
-      .where(eq(journalEntries.periodId, periodId))
+      .where(and(eq(journalEntries.orgId, ctx.orgId), eq(journalEntries.periodId, periodId)))
       .limit(1);
 
     if (existingEntry.length > 0) {
