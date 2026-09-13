@@ -9,7 +9,7 @@ test("persediaan redirect dan child menu", async ({ page }) => {
   await page.waitForLoadState("networkidle", { timeout: 30000 });
   await page.waitForTimeout(2000);
   await expect(page).toHaveURL(/\/persediaan\/daftar/, { timeout: 15000 });
-  await expect(page.getByRole("heading", { name: /Persediaan/i }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Barang & Jasa" }).first()).toBeVisible();
 });
 
 test("tambah barang dengan Generate SKU", async ({ page }) => {
@@ -54,6 +54,6 @@ test("sidebar persediaan punya anak Daftar dan Opname", async ({ page }) => {
   await page.goto("/persediaan/daftar");
   await page.waitForLoadState("networkidle", { timeout: 30000 });
   await page.waitForTimeout(2000);
-  await expect(page.getByRole("link", { name: "Daftar Barang", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Barang & Jasa", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Stok Opname", exact: true })).toBeVisible();
 });

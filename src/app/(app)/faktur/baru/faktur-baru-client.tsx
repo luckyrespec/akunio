@@ -597,7 +597,7 @@ export function FakturBaruClient({
                               ))}
                             </datalist>
                             {it.catalogItemId && catalogById.get(it.catalogItemId) && (
-                              <p className="mt-1 text-[10px] text-ink-soft">
+                              <p data-testid="faktur-item-terikat" className="mt-1 text-[10px] text-ink-soft">
                                 {catalogById.get(it.catalogItemId)!.itemType === "BARANG"
                                   ? `Barang · Stok: ${catalogById.get(it.catalogItemId)!.qty} ${catalogById.get(it.catalogItemId)!.unit}`
                                   : "Jasa · tanpa stok"}

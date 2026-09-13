@@ -63,7 +63,7 @@ export function JasaBaruClient({ accounts }: { accounts: AccountOpt[] }) {
       if (!res.ok) {
         setError(res.error || "Gagal menyimpan jasa");
       } else {
-        router.push("/persediaan/jasa");
+        router.push("/persediaan/daftar?jenis=jasa");
       }
     });
   };
@@ -72,11 +72,11 @@ export function JasaBaruClient({ accounts }: { accounts: AccountOpt[] }) {
     <form onSubmit={handleSubmit} className="w-full space-y-6">
       <div className="mb-2">
         <Link
-          href="/persediaan/jasa"
+          href="/persediaan/daftar"
           className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft transition-colors hover:text-terra"
         >
           <ArrowLeft className="size-3.5" />
-          Kembali ke Jasa &amp; Layanan
+          Kembali ke Barang &amp; Jasa
         </Link>
       </div>
 
@@ -89,7 +89,7 @@ export function JasaBaruClient({ accounts }: { accounts: AccountOpt[] }) {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => router.push("/persediaan/jasa")}
+               onClick={() => router.push("/persediaan/daftar")}
               className="h-9 rounded-xl border-rule bg-paper px-4 text-xs font-medium text-ink-soft transition-colors hover:bg-canvas hover:text-ink"
             >
               Batal

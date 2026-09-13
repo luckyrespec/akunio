@@ -63,13 +63,12 @@ const NAVIGATION_GROUPS: NavGroup[] = [
       { href: "/faktur", label: "Faktur & Tagihan", desc: "Buat, kirim, dan pantau piutang–utang usaha", icon: IconReceipt },
       {
         href: "/persediaan/daftar",
-        label: "Persediaan & Stok",
+        label: "Persediaan",
         desc: "Kelola barang, jasa, dan stok opname",
         icon: IconInventory,
         match: (p: string) => p.startsWith("/persediaan"),
         children: [
-          { href: "/persediaan/daftar", label: "Daftar Barang", desc: "Katalog barang dagang dan stoknya" },
-          { href: "/persediaan/jasa", label: "Jasa & Layanan", desc: "Katalog jasa tanpa stok" },
+          { href: "/persediaan/daftar", label: "Barang & Jasa", desc: "Katalog barang dagang, jasa, dan stoknya" },
           { href: "/persediaan/opname", label: "Stok Opname", desc: "Hitung fisik dan selisihkan stok" },
         ],
       },

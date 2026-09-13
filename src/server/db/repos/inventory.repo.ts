@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, notInArray, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import type { Queryable } from "./queryable";
 import {
   inventorySettings,
@@ -8,6 +9,7 @@ import {
   stockOpnames,
   stockOpnameItems,
 } from "../schema/inventory";
+import { invoiceItems, invoices } from "../schema/invoicing";
 import { accounts } from "../schema/org";
 import { journalEntries, journalLines } from "../schema/journal";
 import { createDraftJournalEntry, toMinor } from "./journals.repo";
@@ -128,6 +130,20 @@ export async function listServiceItems(q: Queryable, orgId: string) {
     .orderBy(desc(inventoryItems.createdAt));
 }
 
+export async function listArchivedServiceItems(q: Queryable, orgId: string) {
+  return q
+    .select()
+    .from(inventoryItems)
+    .where(
+      and(
+        eq(inventoryItems.orgId, orgId),
+        eq(inventoryItems.isActive, false),
+        eq(inventoryItems.itemType, "JASA"),
+      ),
+    )
+    .orderBy(desc(inventoryItems.createdAt));
+}
+
 export async function getInventoryItem(q: Queryable, orgId: string, itemId: string) {
   const [item] = await q
     .select()
@@ -135,6 +151,202 @@ export async function getInventoryItem(q: Queryable, orgId: string, itemId: stri
     .where(and(eq(inventoryItems.orgId, orgId), eq(inventoryItems.id, itemId)))
     .limit(1);
   return item ?? null;
+}
+
+export interface UpdateItemInput {
+  name: string;
+  category?: string | null;
+  unit?: string;
+  minStockAlert?: string;
+  standardSellingPriceMinor?: bigint;
+  barcode?: string | null;
+}
+
+/** Ubah field master yang aman. Terkunci: kode SKU, barcode app, stok, harga modal.
+ *  Harga modal hanya bergerak via pembelian/opname, bukan edit langsung. */
+export async function updateInventoryItem(
+  q: Queryable,
+  orgId: string,
+  itemId: string,
+  input: UpdateItemInput,
+) {
+  const name = input.name.trim();
+  if (name.length < 2) throw new Error("NAMA_BARANG_MINIMAL_2_HURUF");
+  const minStockAlert = input.minStockAlert?.trim() || "0";
+  if (!/^\d+(\.\d+)?$/.test(minStockAlert)) {
+    throw new Error("MIN_STOK_TIDAK_VALID: harus angka >= 0");
+  }
+  const selling = input.standardSellingPriceMinor ?? 0n;
+  if (selling < 0n) throw new Error("HARGA_JUAL_TIDAK_VALID: harus >= 0");
+  const [updated] = await q
+    .update(inventoryItems)
+    .set({
+      name,
+      category: input.category?.trim() || null,
+      unit: input.unit?.trim() || "Pcs",
+      minStockAlert,
+      standardSellingPriceMinor: selling,
+      barcode: input.barcode?.trim() || null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(inventoryItems.orgId, orgId),
+        eq(inventoryItems.id, itemId),
+        eq(inventoryItems.itemType, "BARANG"),
+      ),
+    )
+    .returning({ id: inventoryItems.id });
+  if (!updated) throw new Error("BARANG_TIDAK_DITEMUKAN");
+  return updated;
+}
+
+export interface UpdateServiceInput {
+  name: string;
+  category?: string | null;
+  unit?: string;
+  standardSellingPriceMinor?: bigint;
+  revenueAccountId?: string | null;
+  expenseAccountId?: string | null;
+}
+
+/** Ubah jasa. Terkunci: kode. Akun yang diisi harus milik org dengan tipe tepat
+ *  (pendapatan∈PENDAPATAN, beban∈BEBAN); null = kembali ke akun default. */
+export async function updateServiceItem(
+  q: Queryable,
+  orgId: string,
+  itemId: string,
+  input: UpdateServiceInput,
+) {
+  const name = input.name.trim();
+  if (name.length < 2) throw new Error("NAMA_JASA_MINIMAL_2_HURUF");
+  const selling = input.standardSellingPriceMinor ?? 0n;
+  if (selling < 0n) throw new Error("HARGA_JUAL_TIDAK_VALID: harus >= 0");
+  for (const [accountId, expected, label] of [
+    [input.revenueAccountId, "PENDAPATAN", "pendapatan"],
+    [input.expenseAccountId, "BEBAN", "beban"],
+  ] as const) {
+    if (!accountId) continue;
+    const [acc] = await q
+      .select({ id: accounts.id, type: accounts.type })
+      .from(accounts)
+      .where(and(eq(accounts.orgId, orgId), eq(accounts.id, accountId)))
+      .limit(1);
+    if (!acc) throw new Error(`AKUN_${label.toUpperCase()}_TIDAK_DITEMUKAN`);
+    if (acc.type !== expected) {
+      throw new Error(`AKUN_${label.toUpperCase()}_TIPE_SALAH: harus akun ${expected}`);
+    }
+  }
+  const [updated] = await q
+    .update(inventoryItems)
+    .set({
+      name,
+      category: input.category?.trim() || null,
+      unit: input.unit?.trim() || "Sesi",
+      standardSellingPriceMinor: selling,
+      revenueAccountId: input.revenueAccountId ?? null,
+      expenseAccountId: input.expenseAccountId ?? null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(inventoryItems.orgId, orgId),
+        eq(inventoryItems.id, itemId),
+        eq(inventoryItems.itemType, "JASA"),
+      ),
+    )
+    .returning({ id: inventoryItems.id });
+  if (!updated) throw new Error("JASA_TIDAK_DITEMUKAN");
+  return updated;
+}
+
+/** Riwayat harga modal dari lapis masuk (saldo awal, pembelian, penyesuaian),
+ *  kronologis menaik untuk chart. Rata-rata historis tidak direkonstruksi. */
+export async function listItemCostHistory(
+  q: Queryable,
+  orgId: string,
+  itemId: string,
+  limit = 100,
+) {
+  return q
+    .select({
+      id: inventoryLayers.id,
+      date: inventoryLayers.date,
+      referenceType: inventoryLayers.referenceType,
+      initialQty: inventoryLayers.initialQty,
+      unitCostMinor: inventoryLayers.unitCostMinor,
+    })
+    .from(inventoryLayers)
+    .where(and(eq(inventoryLayers.orgId, orgId), eq(inventoryLayers.itemId, itemId)))
+    .orderBy(asc(inventoryLayers.date), asc(inventoryLayers.createdAt))
+    .limit(limit);
+}
+
+export async function listArchivedInventoryItems(q: Queryable, orgId: string) {
+  return q
+    .select()
+    .from(inventoryItems)
+    .where(
+      and(
+        eq(inventoryItems.orgId, orgId),
+        eq(inventoryItems.isActive, false),
+        eq(inventoryItems.itemType, "BARANG"),
+      ),
+    )
+    .orderBy(desc(inventoryItems.createdAt));
+}
+
+/** Arsipkan / aktifkan ulang barang. Guard arsip: stok harus nol dan barang
+ *  tidak dirujuk faktur yang belum lunas/batal (mencakup DRAFT). Mengaktifkan
+ *  ulang selalu boleh. Jasa memakai alur arsip jasa tersendiri. */
+export async function setItemActive(
+  q: Queryable,
+  orgId: string,
+  itemId: string,
+  active: boolean,
+) {
+  const [item] = await q
+    .select({
+      id: inventoryItems.id,
+      itemType: inventoryItems.itemType,
+      currentQty: inventoryItems.currentQty,
+    })
+    .from(inventoryItems)
+    .where(and(eq(inventoryItems.orgId, orgId), eq(inventoryItems.id, itemId)))
+    .limit(1)
+    .for("update");
+  if (!item) throw new Error("BARANG_TIDAK_DITEMUKAN");
+  if (item.itemType !== "BARANG") {
+    throw new Error("HANYA_BARANG: jasa memakai alur arsip jasa");
+  }
+  if (!active) {
+    if (Number(item.currentQty) !== 0) {
+      throw new Error("STOK_MASIH_ADA: nolkan stok (jual/opname) sebelum mengarsipkan");
+    }
+    const refs = await q
+      .select({ id: invoices.id })
+      .from(invoiceItems)
+      .innerJoin(invoices, eq(invoices.id, invoiceItems.invoiceId))
+      .where(
+        and(
+          eq(invoices.orgId, orgId),
+          eq(invoiceItems.catalogItemId, itemId),
+          notInArray(invoices.status, ["PAID", "VOID"]),
+        ),
+      )
+      .limit(1);
+    if (refs.length > 0) {
+      throw new Error(
+        "MASIH_DIPAKAI_DOKUMEN_TERBUKA: barang dirujuk faktur yang belum lunas atau batal",
+      );
+    }
+  }
+  const [updated] = await q
+    .update(inventoryItems)
+    .set({ isActive: active, updatedAt: new Date() })
+    .where(and(eq(inventoryItems.orgId, orgId), eq(inventoryItems.id, itemId)))
+    .returning({ id: inventoryItems.id, isActive: inventoryItems.isActive });
+  return updated ?? null;
 }
 
 export async function createInventoryItem(
@@ -325,6 +537,98 @@ export async function listStockOpnames(q: Queryable, orgId: string) {
     .orderBy(desc(stockOpnames.opnameDate), desc(stockOpnames.createdAt));
 }
 
+export type OpnameStatusFilter =
+  | "ALL"
+  | "DRAFT"
+  | "REVIEW_DRAFT_JOURNAL"
+  | "COMPLETED"
+  | "CANCELLED";
+
+function opnameListConds(orgId: string, opts: { search?: string; status?: OpnameStatusFilter }) {
+  const conds = [eq(stockOpnames.orgId, orgId)];
+  const search = opts.search?.trim();
+  if (search) {
+    const like = `%${search}%`;
+    conds.push(
+      or(ilike(stockOpnames.number, like), ilike(stockOpnames.notes, like)) as SQL,
+    );
+  }
+  if (opts.status && opts.status !== "ALL") {
+    conds.push(eq(stockOpnames.status, opts.status));
+  }
+  return and(...conds);
+}
+
+/** Daftar sesi opname untuk tabel server-side (search + status + pagination). */
+export async function listStockOpnamesPaginated(
+  q: Queryable,
+  orgId: string,
+  opts: { search?: string; status?: OpnameStatusFilter; limit: number; offset: number },
+) {
+  return q
+    .select()
+    .from(stockOpnames)
+    .where(opnameListConds(orgId, opts))
+    .orderBy(desc(stockOpnames.opnameDate), desc(stockOpnames.createdAt))
+    .limit(opts.limit)
+    .offset(opts.offset);
+}
+
+export async function countStockOpnames(
+  q: Queryable,
+  orgId: string,
+  opts: { search?: string; status?: OpnameStatusFilter } = {},
+): Promise<number> {
+  const [row] = await q
+    .select({ n: sql<number>`cast(count(*) as int)` })
+    .from(stockOpnames)
+    .where(opnameListConds(orgId, opts));
+  return row?.n ?? 0;
+}
+
+/** Statistik KPI dalam satu query agregat (tanpa memuat semua baris). */
+export async function getStockOpnameStats(q: Queryable, orgId: string) {
+  const [row] = await q
+    .select({
+      total: sql<number>`cast(count(*) as int)`,
+      completed: sql<number>`cast(count(*) filter (where status = 'COMPLETED') as int)`,
+      draft: sql<number>`cast(count(*) filter (where status = 'DRAFT') as int)`,
+      review: sql<number>`cast(count(*) filter (where status = 'REVIEW_DRAFT_JOURNAL') as int)`,
+      cancelled: sql<number>`cast(count(*) filter (where status = 'CANCELLED') as int)`,
+      netDifference: sql<string>`cast(coalesce(sum(total_difference_value_minor) filter (where status <> 'CANCELLED'), 0) as text)`,
+    })
+    .from(stockOpnames)
+    .where(eq(stockOpnames.orgId, orgId));
+  return {
+    total: row?.total ?? 0,
+    completed: row?.completed ?? 0,
+    draft: row?.draft ?? 0,
+    review: row?.review ?? 0,
+    cancelled: row?.cancelled ?? 0,
+    netDifferenceMinor: BigInt(row?.netDifference ?? "0"),
+  };
+}
+
+/** Hapus permanen sesi yang sudah DIBATALKAN. Draf & sesi selesai tidak bisa
+ *  dihapus — draf masih bisa dibatalkan dulu, yang selesai menjadi jejak audit. */
+export async function deleteCancelledOpname(q: Queryable, orgId: string, opnameId: string) {
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`opname-delete:${opnameId}`}))`);
+  const opnameData = await getStockOpnameWithItems(q, orgId, opnameId);
+  if (!opnameData) throw new Error("OPNAME_TIDAK_DITEMUKAN");
+  if (opnameData.status !== "CANCELLED") {
+    throw new Error(
+      "HANYA_OPNAME_DIBATALKAN: hanya sesi berstatus Dibatalkan yang bisa dihapus permanen",
+    );
+  }
+  if (opnameData.journalEntryId) {
+    throw new Error("OPNAME_MASIH_TERHUBUNG_JURNAL: batalkan sesi lewat tombol Batalkan Sesi lebih dulu");
+  }
+  await q
+    .delete(stockOpnames)
+    .where(and(eq(stockOpnames.orgId, orgId), eq(stockOpnames.id, opnameId)));
+  return { ok: true as const };
+}
+
 export async function getStockOpnameWithItems(q: Queryable, orgId: string, opnameId: string) {
   const [opname] = await q
     .select()
@@ -346,6 +650,8 @@ export async function getStockOpnameWithItems(q: Queryable, orgId: string, opnam
       unitCostMinor: stockOpnameItems.unitCostMinor,
       differenceValueMinor: stockOpnameItems.differenceValueMinor,
       reason: stockOpnameItems.reason,
+      /** Harga modal barang SAAT INI (0 = belum pernah punya cost). */
+      currentAverageCostMinor: inventoryItems.averageCostMinor,
     })
     .from(stockOpnameItems)
     .innerJoin(inventoryItems, eq(inventoryItems.id, stockOpnameItems.itemId))
@@ -405,9 +711,187 @@ async function resolveAdjustmentAccounts(
 }
 
 /**
+ * Terapkan qty fisik opname ke item (qty, kartu stok, layer FIFO).
+ * Dipakai jalur posting normal maupun jalur "tanpa jurnal" saat nilai selisih Rp0.
+ * Mengembalikan catatan shortfall layer (best-effort) untuk notes opname.
+ */
+async function applyOpnameStockToItems(
+  q: Queryable,
+  orgId: string,
+  opname: {
+    id: string;
+    number: string;
+    opnameDate: string;
+    items: Array<{ itemId: string; systemQty: string; physicalQty: string; unitCostMinor: bigint }>;
+  },
+): Promise<string> {
+  let layerShortfall = "";
+  for (const line of opname.items) {
+    const item = await getInventoryItem(q, orgId, line.itemId);
+    if (!item) throw new Error(`ITEM_TIDAK_DITEMUKAN: ${line.itemId}`);
+    const currentQty = Number(item.currentQty);
+    const recordedSystemQty = Number(line.systemQty);
+    const physicalQty = Number(line.physicalQty);
+    if (!Number.isFinite(physicalQty) || physicalQty < 0) {
+      throw new Error("FISIK_TIDAK_VALID: kuantitas fisik harus angka >= 0");
+    }
+    if (Math.abs(currentQty - recordedSystemQty) > 1e-9) {
+      throw new Error(
+        `STOK_BERUBAH_SEJAK_OPNAME: ${item.code} tercatat ${recordedSystemQty} saat opname, kini ${currentQty}. Buat opname ulang.`,
+      );
+    }
+    const diffQty = physicalQty - currentQty;
+    if (Math.abs(diffQty) < 1e-9) continue;
+
+    const unitCostMinor = line.unitCostMinor;
+    const newTotalCostMinor = costForQty(unitCostMinor, physicalQty);
+    const diffValueMinor = costForQty(unitCostMinor, diffQty);
+
+    await q.update(inventoryItems)
+      .set({
+        currentQty: qtyToDb(physicalQty),
+        totalCostMinor: newTotalCostMinor,
+        averageCostMinor: physicalQty > 0 ? unitCostMinor : item.averageCostMinor,
+        updatedAt: new Date(),
+      })
+      .where(eq(inventoryItems.id, item.id));
+
+    await q.insert(inventoryTransactions).values({
+      orgId,
+      itemId: item.id,
+      date: opname.opnameDate,
+      type: "ADJUSTMENT",
+      qty: qtyToDb(diffQty),
+      unitCostMinor,
+      totalCostMinor: diffQty < 0 ? -diffValueMinor : diffValueMinor,
+      resultingQty: qtyToDb(physicalQty),
+      resultingTotalCostMinor: newTotalCostMinor,
+      sourceType: "OPNAME",
+      sourceId: opname.id,
+      memo: `Opname ${opname.number} (${diffQty > 0 ? "+" : ""}${diffQty})`,
+    });
+
+    if (diffQty > 0) {
+      await q.insert(inventoryLayers).values({
+        orgId,
+        itemId: item.id,
+        date: opname.opnameDate,
+        initialQty: qtyToDb(diffQty),
+        remainingQty: qtyToDb(diffQty),
+        unitCostMinor,
+        referenceType: "ADJUSTMENT",
+        referenceId: opname.id,
+      });
+    } else {
+      // Defisit: kurangi layer FIFO tertua lebih dulu.
+      let toDeduct = Math.abs(diffQty);
+      const layers = await q
+        .select()
+        .from(inventoryLayers)
+        .where(and(eq(inventoryLayers.orgId, orgId), eq(inventoryLayers.itemId, item.id)))
+        .orderBy(asc(inventoryLayers.date), asc(inventoryLayers.createdAt));
+      for (const layer of layers) {
+        if (toDeduct <= 1e-9) break;
+        const remaining = Number(layer.remainingQty);
+        if (remaining <= 1e-9) continue;
+        const take = Math.min(remaining, toDeduct);
+        await q.update(inventoryLayers)
+          .set({ remainingQty: qtyToDb(remaining - take) })
+          .where(eq(inventoryLayers.id, layer.id));
+        toDeduct -= take;
+      }
+      if (toDeduct > 1e-9) {
+        // Layer tidak mencakup seluruh defisit (inkonsistensi data lama):
+        // catat shortfall di catatan opname agar terlihat, tanpa membuat qty negatif.
+        layerShortfall = `${layerShortfall}${layerShortfall ? "; " : ""}${item.code} kurang layer ${toDeduct}`;
+      }
+    }
+  }
+  return layerShortfall;
+}
+
+/**
+ * Isi/ubah harga modal per unit untuk baris opname pada status DRAFT.
+ * Hanya diizinkan bila barang belum punya harga modal (averageCost = 0):
+ * dipakai user migrasi yang belum sempat mencatat nota pembelian. Nilai ini
+ * menjadi dasar penilaian selisih dan menjadi modal awal saat opname diposting.
+ */
+export async function updateOpnameItemCost(
+  q: Queryable,
+  orgId: string,
+  opnameId: string,
+  itemId: string,
+  unitCostMinor: bigint,
+) {
+  if (unitCostMinor < 0n) throw new Error("HARGA_MODAL_TIDAK_VALID: harus >= 0");
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`opname-cost:${opnameId}`}))`);
+
+  const opnameData = await getStockOpnameWithItems(q, orgId, opnameId);
+  if (!opnameData) throw new Error("OPNAME_TIDAK_DITEMUKAN");
+  if (opnameData.status !== "DRAFT" || opnameData.journalEntryId) {
+    throw new Error("OPNAME_TIDAK_BISA_DIEDIT: hanya Draf Perhitungan bisa diubah harga modalnya");
+  }
+  const line = opnameData.items.find((it) => it.itemId === itemId);
+  if (!line) throw new Error("ITEM_OPNAME_TIDAK_DITEMUKAN");
+  const item = await getInventoryItem(q, orgId, itemId);
+  if (!item) throw new Error("BARANG_TIDAK_DITEMUKAN");
+  if (item.averageCostMinor > 0n) {
+    throw new Error(
+      "HARGA_MODAL_SUDAH_TERISI: barang ini sudah punya harga modal dari pembelian/saldo awal",
+    );
+  }
+
+  const diffQty = Number(line.differenceQty);
+  const differenceValueMinor = costForQty(unitCostMinor, diffQty);
+  await q
+    .update(stockOpnameItems)
+    .set({ unitCostMinor, differenceValueMinor })
+    .where(and(eq(stockOpnameItems.opnameId, opnameId), eq(stockOpnameItems.itemId, itemId)));
+
+  const rows = await q
+    .select({ value: stockOpnameItems.differenceValueMinor })
+    .from(stockOpnameItems)
+    .where(eq(stockOpnameItems.opnameId, opnameId));
+  const total = rows.reduce((acc, r) => acc + r.value, 0n);
+  await q
+    .update(stockOpnames)
+    .set({ totalDifferenceValueMinor: total, updatedAt: new Date() })
+    .where(eq(stockOpnames.id, opnameId));
+
+  return { totalDifferenceValueMinor: total, differenceValueMinor };
+}
+
+/** Ubah memo jurnal penyesuaian opname, hanya selagi draf (belum POSTED). */
+export async function updateOpnameJournalMemo(
+  q: Queryable,
+  orgId: string,
+  opnameId: string,
+  memo: string,
+) {
+  const opnameData = await getStockOpnameWithItems(q, orgId, opnameId);
+  if (!opnameData) throw new Error("OPNAME_TIDAK_DITEMUKAN");
+  if (!opnameData.journalEntryId) throw new Error("JURNAL_BELUM_DIBUAT");
+  const updated = await q
+    .update(journalEntries)
+    .set({ memo: memo.trim() })
+    .where(
+      and(
+        eq(journalEntries.id, opnameData.journalEntryId),
+        eq(journalEntries.orgId, orgId),
+        eq(journalEntries.status, "DRAFT"),
+      ),
+    )
+    .returning({ id: journalEntries.id });
+  if (updated.length === 0) throw new Error("JURNAL_SUDAH_DIPOSTING: memo tidak bisa diubah lagi");
+  return { ok: true as const };
+}
+
+/**
  * Membuat Draf Jurnal Penyesuaian (Opsi A) dari hasil selisih Stok Opname.
  * Stock-neutral: tidak menyentuh qty/layer/transaksi dan tidak mengunci
- * kebijakan — stok baru diterapkan saat draf diposting via postOpnameAdjustment.
+ * kebijakan; stok baru diterapkan saat draf diposting via postOpnameAdjustment.
+ * Pengecualian: bila nilai selisih Rp0 (harga modal belum diisi) TIDAK ada yang
+ * bisa dijurnal, namun qty fisik tetap diterapkan dan opname ditandai COMPLETED.
  */
 export async function generateAdjustmentJournalDraft(
   q: Queryable,
@@ -427,12 +911,28 @@ export async function generateAdjustmentJournalDraft(
 
   const diffValue = opnameData.totalDifferenceValueMinor;
   if (diffValue === 0n) {
-    // Tidak ada selisih nilai, langsung tandai selesai
+    const hasQtyDiff = opnameData.items.some((it) => Number(it.differenceQty) !== 0);
+    if (!hasQtyDiff) {
+      // Fisik cocok sempurna: tidak ada yang perlu diterapkan maupun dijurnal.
+      const [done] = await q.update(stockOpnames)
+        .set({ status: "COMPLETED", updatedAt: new Date() })
+        .where(eq(stockOpnames.id, opnameId))
+        .returning();
+      return { opname: done ?? opnameData, journalEntryId: null as string | null, noJournal: true as const };
+    }
+    // Ada selisih qty tapi nilai Rp0 (harga modal belum diisi): tetap terapkan
+    // stok fisik, tandai selesai tanpa jurnal, dan catat alasannya di notes.
+    const shortfall = await applyOpnameStockToItems(q, orgId, opnameData);
+    const note = "[Tanpa jurnal: nilai selisih Rp0 karena harga modal belum diisi]";
     const [done] = await q.update(stockOpnames)
-      .set({ status: "COMPLETED", updatedAt: new Date() })
+      .set({
+        status: "COMPLETED",
+        notes: `${opnameData.notes ?? ""}${opnameData.notes ? "\n" : ""}${note}${shortfall ? ` [Layer tidak penuh: ${shortfall}]` : ""}`,
+        updatedAt: new Date(),
+      })
       .where(eq(stockOpnames.id, opnameId))
       .returning();
-    return { opname: done ?? opnameData, journalEntryId: null as string | null };
+    return { opname: done ?? opnameData, journalEntryId: null as string | null, noJournal: true as const };
   }
 
   const isDeficit = diffValue < 0n;
@@ -555,88 +1055,7 @@ export async function postOpnameAdjustment(
   }
 
   // Terapkan stok per item ke kuantitas fisik hasil opname.
-  let layerShortfall = "";
-  for (const line of opnameData.items) {
-    const item = await getInventoryItem(q, orgId, line.itemId);
-    if (!item) throw new Error(`ITEM_TIDAK_DITEMUKAN: ${line.itemId}`);
-    const currentQty = Number(item.currentQty);
-    const recordedSystemQty = Number(line.systemQty);
-    const physicalQty = Number(line.physicalQty);
-    if (!Number.isFinite(physicalQty) || physicalQty < 0) {
-      throw new Error("FISIK_TIDAK_VALID: kuantitas fisik harus angka >= 0");
-    }
-    if (Math.abs(currentQty - recordedSystemQty) > 1e-9) {
-      throw new Error(
-        `STOK_BERUBAH_SEJAK_OPNAME: ${item.code} tercatat ${recordedSystemQty} saat opname, kini ${currentQty}. Buat opname ulang.`,
-      );
-    }
-    const diffQty = physicalQty - currentQty;
-    if (Math.abs(diffQty) < 1e-9) continue;
-
-    const unitCostMinor = line.unitCostMinor;
-    const newTotalCostMinor = costForQty(unitCostMinor, physicalQty);
-    const diffValueMinor = costForQty(unitCostMinor, diffQty);
-
-    await q.update(inventoryItems)
-      .set({
-        currentQty: qtyToDb(physicalQty),
-        totalCostMinor: newTotalCostMinor,
-        averageCostMinor: physicalQty > 0 ? unitCostMinor : item.averageCostMinor,
-        updatedAt: new Date(),
-      })
-      .where(eq(inventoryItems.id, item.id));
-
-    await q.insert(inventoryTransactions).values({
-      orgId,
-      itemId: item.id,
-      date: opnameData.opnameDate,
-      type: "ADJUSTMENT",
-      qty: qtyToDb(diffQty),
-      unitCostMinor,
-      totalCostMinor: diffQty < 0 ? -diffValueMinor : diffValueMinor,
-      resultingQty: qtyToDb(physicalQty),
-      resultingTotalCostMinor: newTotalCostMinor,
-      sourceType: "OPNAME",
-      sourceId: opnameData.id,
-      memo: `Opname ${opnameData.number} (${diffQty > 0 ? "+" : ""}${diffQty})`,
-    });
-
-    if (diffQty > 0) {
-      await q.insert(inventoryLayers).values({
-        orgId,
-        itemId: item.id,
-        date: opnameData.opnameDate,
-        initialQty: qtyToDb(diffQty),
-        remainingQty: qtyToDb(diffQty),
-        unitCostMinor,
-        referenceType: "ADJUSTMENT",
-        referenceId: opnameData.id,
-      });
-    } else {
-      // Defisit: kurangi layer FIFO tertua lebih dulu.
-      let toDeduct = Math.abs(diffQty);
-      const layers = await q
-        .select()
-        .from(inventoryLayers)
-        .where(and(eq(inventoryLayers.orgId, orgId), eq(inventoryLayers.itemId, item.id)))
-        .orderBy(asc(inventoryLayers.date), asc(inventoryLayers.createdAt));
-      for (const layer of layers) {
-        if (toDeduct <= 1e-9) break;
-        const remaining = Number(layer.remainingQty);
-        if (remaining <= 1e-9) continue;
-        const take = Math.min(remaining, toDeduct);
-        await q.update(inventoryLayers)
-          .set({ remainingQty: qtyToDb(remaining - take) })
-          .where(eq(inventoryLayers.id, layer.id));
-        toDeduct -= take;
-      }
-      if (toDeduct > 1e-9) {
-        // Layer tidak mencakup seluruh defisit (inkonsistensi data lama):
-        // catat shortfall di catatan opname agar terlihat, tanpa membuat qty negatif.
-        layerShortfall = `${layerShortfall}${layerShortfall ? "; " : ""}${item.code} kurang layer ${toDeduct}`;
-      }
-    }
-  }
+  const layerShortfall = await applyOpnameStockToItems(q, orgId, opnameData);
 
   const posted = await q.update(journalEntries)
     .set({ status: "POSTED", postedAt: new Date(), postedBy: actorEmail })
@@ -667,4 +1086,56 @@ export async function postOpnameAdjustment(
   await lockInventoryPolicy(q, orgId);
 
   return { opname: completed ?? opnameData, journalEntryId: entry.id, journalNumber: posted[0].number };
+}
+
+/**
+ * Batalkan sesi opname yang belum selesai (standar audit: dokumen pra-posting
+ * boleh dibatalkan, dokumen posted tidak). Draf jurnal penyesuaian yang masih
+ * DRAFT dan stock-neutral, ikut dihapus bersama baris/subledger/lampirannya.
+ * Sesi COMPLETED tidak bisa dibatalkan; koreksi lewat sesi opname baru.
+ */
+export async function cancelStockOpname(q: Queryable, orgId: string, opnameId: string) {
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`opname-cancel:${opnameId}`}))`);
+
+  const opnameData = await getStockOpnameWithItems(q, orgId, opnameId);
+  if (!opnameData) throw new Error("OPNAME_TIDAK_DITEMUKAN");
+  if (opnameData.status === "COMPLETED") {
+    throw new Error("OPNAME_SELESAI_TIDAK_BISA_DIBATALKAN: buat sesi opname koreksi bila perlu");
+  }
+  if (opnameData.status === "CANCELLED") throw new Error("OPNAME_SUDAH_DIBATALKAN");
+  if (!["DRAFT", "IN_PROGRESS", "REVIEW_DRAFT_JOURNAL"].includes(opnameData.status)) {
+    throw new Error(`STATUS_OPNAME_TIDAK_VALID: ${opnameData.status}`);
+  }
+
+  if (opnameData.journalEntryId) {
+    const [entry] = await q
+      .select({ id: journalEntries.id, status: journalEntries.status })
+      .from(journalEntries)
+      .where(
+        and(eq(journalEntries.id, opnameData.journalEntryId), eq(journalEntries.orgId, orgId)),
+      )
+      .limit(1);
+    if (!entry) throw new Error("JURNAL_TIDAK_DITEMUKAN");
+    if (entry.status !== "DRAFT") {
+      throw new Error(
+        "JURNAL_SUDAH_DIPOSTING: jurnal penyesuaian sudah final, sesi tidak bisa dibatalkan",
+      );
+    }
+    // Lepas referensi lebih dulu: FK stock_opnames → journal_entries menahan delete.
+    await q
+      .update(stockOpnames)
+      .set({ journalEntryId: null, updatedAt: new Date() })
+      .where(eq(stockOpnames.id, opnameId));
+    // Baris, subledger links, dan lampiran ikut terhapus via FK cascade.
+    await q
+      .delete(journalEntries)
+      .where(and(eq(journalEntries.id, entry.id), eq(journalEntries.orgId, orgId)));
+  }
+
+  const [cancelled] = await q
+    .update(stockOpnames)
+    .set({ status: "CANCELLED", updatedAt: new Date() })
+    .where(eq(stockOpnames.id, opnameId))
+    .returning();
+  return cancelled ?? opnameData;
 }

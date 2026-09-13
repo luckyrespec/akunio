@@ -6,31 +6,42 @@ import { withOrg } from "@/server/db/repos/with-org";
 import {
   createInventoryItem,
   listInventoryItems,
+  listArchivedInventoryItems,
   listServiceItems,
+  listArchivedServiceItems,
   getInventorySettings,
   upsertInventorySettings,
   createStockOpname,
   listStockOpnames,
   generateAdjustmentJournalDraft,
   postOpnameAdjustment,
+  setItemActive,
+  updateInventoryItem,
+  updateServiceItem,
+  updateOpnameItemCost,
+  updateOpnameJournalMemo,
+  cancelStockOpname,
+  deleteCancelledOpname,
 } from "@/server/db/repos/inventory.repo";
 import { Money } from "@/core/money/money";
 import { and, eq } from "drizzle-orm";
 import { inventoryItems } from "@/server/db/schema/inventory";
-import {
-  putInventoryImage,
-  deleteDocument,
-  validateInventoryImage,
-  MAX_INVENTORY_IMAGE_BYTES,
-} from "@/server/storage/storage";
+import { MAX_INVENTORY_IMAGE_BYTES } from "@/server/storage/storage";
+import { removeItemImage, saveItemImage } from "@/server/storage/inventory-image";
 
 export async function getInventoryOverviewAction() {
   const ctx = await requireContext();
-  const [items, settings, opnames] = await Promise.all([
+  const [allActive, archivedItems, jasaItems, archivedJasaItems, settings, opnames] = await Promise.all([
     listInventoryItems(db, ctx.orgId),
+    listArchivedInventoryItems(db, ctx.orgId),
+    listServiceItems(db, ctx.orgId),
+    listArchivedServiceItems(db, ctx.orgId),
     getInventorySettings(db, ctx.orgId),
     listStockOpnames(db, ctx.orgId),
   ]);
+
+  // Jasa punya daftarnya sendiri — pisahkan agar tidak dobel di tabel gabungan.
+  const items = allActive.filter((item) => item.itemType === "BARANG");
 
   const totalValueMinor = items.reduce((acc, item) => acc + item.totalCostMinor, 0n);
   const totalSku = items.length;
@@ -40,6 +51,9 @@ export async function getInventoryOverviewAction() {
 
   return {
     items,
+    archivedItems,
+    jasaItems,
+    archivedJasaItems,
     settings,
     opnames,
     totalValueMinor: totalValueMinor.toString(),
@@ -142,7 +156,7 @@ export async function createServiceItemAction(payload: {
       }),
     );
 
-    revalidatePath("/persediaan/jasa");
+    revalidatePath("/persediaan/daftar");
     revalidatePath("/faktur/baru");
     return { ok: true as const, item };
   } catch (err: unknown) {
@@ -180,12 +194,146 @@ export async function setServiceActiveAction(id: string, active: boolean) {
         .returning({ id: inventoryItems.id }),
     );
     if (rows.length === 0) return { ok: false as const, error: "Jasa tidak ditemukan" };
-    revalidatePath("/persediaan/jasa");
+    revalidatePath("/persediaan/daftar");
     revalidatePath("/faktur/baru");
     return { ok: true as const };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal mengubah status jasa";
     return { ok: false as const, error: message };
+  }
+}
+
+const ITEM_ACTIVE_ERRORS: Array<[string, string]> = [
+  ["STOK_MASIH_ADA", "Stok masih ada — nolkan stok (jual/opname) sebelum mengarsipkan."],
+  [
+    "MASIH_DIPAKAI_DOKUMEN_TERBUKA",
+    "Barang masih dipakai di faktur yang belum lunas atau batal.",
+  ],
+  ["BARANG_TIDAK_DITEMUKAN", "Barang tidak ditemukan."],
+  ["HANYA_BARANG", "Jasa memakai alur arsip jasa."],
+];
+
+export async function setItemActiveAction(id: string, active: boolean) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const updated = await withOrg(ctx.orgId, (tx) =>
+      setItemActive(tx as never, ctx.orgId, id, active),
+    );
+    if (!updated) return { ok: false as const, error: "Barang tidak ditemukan." };
+    revalidatePath("/persediaan/daftar");
+    revalidatePath(`/persediaan/daftar/${id}`);
+    revalidatePath("/persediaan/opname/baru");
+    revalidatePath("/faktur/baru");
+    revalidatePath("/kasir");
+    return { ok: true as const, isActive: updated.isActive };
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : "Gagal mengubah status barang";
+    const hit = ITEM_ACTIVE_ERRORS.find(([code]) => raw.startsWith(code));
+    return { ok: false as const, error: hit ? hit[1] : raw };
+  }
+}
+
+export async function updateItemAction(payload: {
+  id: string;
+  name: string;
+  category?: string;
+  unit?: string;
+  minStockAlert?: string;
+  standardSellingPriceText?: string;
+  barcode?: string;
+}) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    let standardSellingPriceMinor = 0n;
+    if (payload.standardSellingPriceText?.trim()) {
+      try {
+        standardSellingPriceMinor = Money.parseIdr(payload.standardSellingPriceText).minor;
+      } catch {
+        return { ok: false as const, error: "Harga jual tidak valid." };
+      }
+    }
+    const updated = await withOrg(ctx.orgId, (tx) =>
+      updateInventoryItem(tx as never, ctx.orgId, payload.id, {
+        name: payload.name,
+        category: payload.category,
+        unit: payload.unit,
+        minStockAlert: payload.minStockAlert,
+        standardSellingPriceMinor,
+        barcode: payload.barcode,
+      }),
+    );
+    revalidatePath("/persediaan/daftar");
+    revalidatePath(`/persediaan/daftar/${payload.id}`);
+    revalidatePath("/faktur/baru");
+    return { ok: true as const, id: updated.id };
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : "Gagal menyimpan perubahan barang";
+    const friendly =
+      raw.startsWith("NAMA_BARANG_MINIMAL_2_HURUF")
+        ? "Nama barang minimal 2 huruf."
+        : raw.startsWith("MIN_STOK_TIDAK_VALID")
+          ? "Batas min. stok harus angka >= 0."
+          : raw.startsWith("HARGA_JUAL_TIDAK_VALID")
+            ? "Harga jual harus >= 0."
+            : raw.startsWith("BARANG_TIDAK_DITEMUKAN")
+              ? "Barang tidak ditemukan."
+              : raw;
+    return { ok: false as const, error: friendly };
+  }
+}
+
+export async function updateServiceItemAction(payload: {
+  id: string;
+  name: string;
+  category?: string;
+  unit?: string;
+  sellingPriceText?: string;
+  revenueAccountId?: string | null;
+  expenseAccountId?: string | null;
+}) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    let standardSellingPriceMinor = 0n;
+    if (payload.sellingPriceText?.trim()) {
+      try {
+        standardSellingPriceMinor = Money.parseIdr(payload.sellingPriceText).minor;
+      } catch {
+        return { ok: false as const, error: "Harga jual tidak valid." };
+      }
+    }
+    const updated = await withOrg(ctx.orgId, (tx) =>
+      updateServiceItem(tx as never, ctx.orgId, payload.id, {
+        name: payload.name,
+        category: payload.category,
+        unit: payload.unit,
+        standardSellingPriceMinor,
+        revenueAccountId: payload.revenueAccountId ?? null,
+        expenseAccountId: payload.expenseAccountId ?? null,
+      }),
+    );
+    revalidatePath("/persediaan/daftar");
+    revalidatePath(`/persediaan/jasa/${payload.id}`);
+    revalidatePath("/faktur/baru");
+    return { ok: true as const, id: updated.id };
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : "Gagal menyimpan perubahan jasa";
+    const friendly =
+      raw.startsWith("NAMA_JASA_MINIMAL_2_HURUF")
+        ? "Nama jasa minimal 2 huruf."
+        : raw.startsWith("HARGA_JUAL_TIDAK_VALID")
+          ? "Harga jual harus >= 0."
+          : raw.startsWith("AKUN_PENDAPATAN_TIDAK_DITEMUKAN")
+            ? "Akun pendapatan tidak ditemukan."
+            : raw.startsWith("AKUN_PENDAPATAN_TIPE_SALAH")
+              ? "Akun pendapatan harus bertipe PENDAPATAN."
+              : raw.startsWith("AKUN_BEBAN_TIDAK_DITEMUKAN")
+                ? "Akun beban tidak ditemukan."
+                : raw.startsWith("AKUN_BEBAN_TIPE_SALAH")
+                  ? "Akun beban harus bertipe BEBAN."
+                  : raw.startsWith("JASA_TIDAK_DITEMUKAN")
+                    ? "Jasa tidak ditemukan."
+                    : raw;
+    return { ok: false as const, error: friendly };
   }
 }
 
@@ -313,6 +461,106 @@ export async function generateAdjustmentDraftAction(opnameId: string) {
   }
 }
 
+export async function updateOpnameItemCostAction(
+  opnameId: string,
+  itemId: string,
+  costText: string,
+) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    let unitCostMinor = 0n;
+    if (costText.trim()) {
+      try {
+        unitCostMinor = Money.parseIdr(costText).minor;
+      } catch {
+        return { ok: false as const, error: "Harga modal tidak valid." };
+      }
+    }
+    const res = await withOrg(ctx.orgId, (tx) =>
+      updateOpnameItemCost(tx as never, ctx.orgId, opnameId, itemId, unitCostMinor),
+    );
+    revalidatePath(`/persediaan/opname/${opnameId}`);
+    revalidatePath("/persediaan/opname");
+    return { ok: true as const, ...res };
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : "Gagal menyimpan harga modal";
+    const friendly =
+      raw.startsWith("HARGA_MODAL_SUDAH_TERISI")
+        ? "Barang ini sudah punya harga modal dari pembelian/saldo awal."
+        : raw.startsWith("OPNAME_TIDAK_BISA_DIEDIT")
+          ? "Harga modal hanya bisa diisi selama opname masih Draf Perhitungan."
+          : raw.startsWith("HARGA_MODAL_TIDAK_VALID")
+            ? "Harga modal harus >= 0."
+            : raw;
+    return { ok: false as const, error: friendly };
+  }
+}
+
+export async function updateOpnameJournalMemoAction(opnameId: string, memo: string) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    await withOrg(ctx.orgId, (tx) =>
+      updateOpnameJournalMemo(tx as never, ctx.orgId, opnameId, memo),
+    );
+    revalidatePath(`/persediaan/opname/${opnameId}`);
+    revalidatePath("/jurnal");
+    return { ok: true as const };
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : "Gagal menyimpan catatan jurnal";
+    const friendly = raw.startsWith("JURNAL_SUDAH_DIPOSTING")
+      ? "Jurnal sudah diposting — catatan tidak bisa diubah lagi."
+      : raw.startsWith("JURNAL_BELUM_DIBUAT")
+        ? "Draf jurnal belum dibuat."
+        : raw;
+    return { ok: false as const, error: friendly };
+  }
+}
+
+export async function cancelStockOpnameAction(opnameId: string) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    await withOrg(ctx.orgId, (tx) => cancelStockOpname(tx as never, ctx.orgId, opnameId));
+    revalidatePath("/persediaan/opname");
+    revalidatePath(`/persediaan/opname/${opnameId}`);
+    revalidatePath("/jurnal");
+    revalidatePath("/persediaan/daftar");
+    return { ok: true as const };
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : "Gagal membatalkan sesi opname";
+    const friendly =
+      raw.startsWith("OPNAME_SELESAI_TIDAK_BISA_DIBATALKAN")
+        ? "Sesi sudah selesai & diposting — tidak bisa dibatalkan. Buat sesi opname koreksi bila perlu."
+        : raw.startsWith("OPNAME_SUDAH_DIBATALKAN")
+          ? "Sesi ini sudah dibatalkan."
+          : raw.startsWith("JURNAL_SUDAH_DIPOSTING")
+            ? "Jurnal penyesuaian sudah diposting — sesi tidak bisa dibatalkan."
+            : raw.startsWith("OPNAME_TIDAK_DITEMUKAN")
+              ? "Sesi opname tidak ditemukan."
+              : raw;
+    return { ok: false as const, error: friendly };
+  }
+}
+
+export async function deleteCancelledOpnameAction(opnameId: string) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    await withOrg(ctx.orgId, (tx) => deleteCancelledOpname(tx as never, ctx.orgId, opnameId));
+    revalidatePath("/persediaan/opname");
+    revalidatePath(`/persediaan/opname/${opnameId}`);
+    return { ok: true as const };
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : "Gagal menghapus sesi opname";
+    const friendly = raw.startsWith("HANYA_OPNAME_DIBATALKAN")
+      ? "Hanya sesi yang sudah dibatalkan yang bisa dihapus permanen."
+      : raw.startsWith("OPNAME_MASIH_TERHUBUNG_JURNAL")
+        ? "Sesi ini masih terhubung ke jurnal. Batalkan sesi lebih dulu."
+        : raw.startsWith("OPNAME_TIDAK_DITEMUKAN")
+          ? "Sesi opname tidak ditemukan."
+          : raw;
+    return { ok: false as const, error: friendly };
+  }
+}
+
 export async function postOpnameAdjustmentAction(opnameId: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
@@ -370,33 +618,8 @@ export async function updateItemImageAction(itemId: string, formData: FormData) 
       return { ok: false, error: "Ukuran foto maksimal 500 KB (kompres dulu di form)" };
     }
     const buffer = Buffer.from(await file.arrayBuffer());
-    try {
-      validateInventoryImage(buffer, file.type);
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "Foto tidak valid" };
-    }
-    const res = await withOrg(ctx.orgId, async (tx) => {
-      const items = await tx
-        .select()
-        .from(inventoryItems)
-        .where(eq(inventoryItems.id, itemId))
-        .limit(1);
-      const current = items[0];
-      if (!current || current.orgId !== ctx.orgId) throw new Error("ITEM_TIDAK_DITEMUKAN");
-      const { storageKey } = await putInventoryImage(ctx.orgId, itemId, { buffer, mime: file.type });
-      const [updated] = await tx
-        .update(inventoryItems)
-        .set({ imageStorageKey: storageKey, imageMime: file.type, updatedAt: new Date() })
-        .where(eq(inventoryItems.id, itemId))
-        .returning();
-      return { updated, oldKey: current.imageStorageKey };
-    });
-    if (res.oldKey) {
-      try { await deleteDocument(res.oldKey); } catch { /* best-effort */ }
-    }
-    revalidatePath("/persediaan/daftar");
-    revalidatePath(`/persediaan/daftar/${itemId}`);
-    return { ok: true as const, item: res.updated };
+    await saveItemImage({ orgId: ctx.orgId, itemId, buffer, mime: file.type });
+    return { ok: true as const };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menyimpan foto";
     return { ok: false as const, error: message };
@@ -406,25 +629,7 @@ export async function updateItemImageAction(itemId: string, formData: FormData) 
 export async function deleteItemImageAction(itemId: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const oldKey = await withOrg(ctx.orgId, async (tx) => {
-      const items = await tx
-        .select()
-        .from(inventoryItems)
-        .where(eq(inventoryItems.id, itemId))
-        .limit(1);
-      const current = items[0];
-      if (!current || current.orgId !== ctx.orgId) throw new Error("ITEM_TIDAK_DITEMUKAN");
-      await tx
-        .update(inventoryItems)
-        .set({ imageStorageKey: null, imageMime: null, updatedAt: new Date() })
-        .where(eq(inventoryItems.id, itemId));
-      return current.imageStorageKey;
-    });
-    if (oldKey) {
-      try { await deleteDocument(oldKey); } catch { /* best-effort */ }
-    }
-    revalidatePath("/persediaan/daftar");
-    revalidatePath(`/persediaan/daftar/${itemId}`);
+    await removeItemImage({ orgId: ctx.orgId, itemId });
     return { ok: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menghapus foto";

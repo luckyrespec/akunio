@@ -44,7 +44,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isFaktur = pathname.startsWith("/faktur");
   const isAturan = pathname.startsWith("/aturan");
   const isJurnal = pathname === "/jurnal";
-  const fullBleed = isAsisten || isPengaturan || isFaktur || isAturan || isJurnal;
+  // Detail barang memakai sidemenu mini sendiri (pola Pengaturan).
+  const isItemDetail =
+    pathname.startsWith("/persediaan/daftar/") && !pathname.startsWith("/persediaan/daftar/baru");
+  const fullBleed = isAsisten || isPengaturan || isFaktur || isAturan || isJurnal || isItemDetail;
   const isFixedViewport = isAsisten || isAturan || isFaktur;
 
   // Avoid flash of wrong width before localStorage read

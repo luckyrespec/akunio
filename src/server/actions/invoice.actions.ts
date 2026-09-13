@@ -58,7 +58,6 @@ export async function createInvoiceWithPostingAction(
     revalidatePath("/jurnal");
     revalidatePath("/buku-besar");
     revalidatePath("/persediaan/daftar");
-    revalidatePath("/persediaan/jasa");
     return { ok: true as const, data: { invoice, journalEntryId, postWarning } };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal membuat faktur." };
@@ -73,7 +72,6 @@ export async function postInvoiceToJournalAction(invoiceId: string) {
     revalidatePath("/jurnal");
     revalidatePath("/buku-besar");
     revalidatePath("/persediaan/daftar");
-    revalidatePath("/persediaan/jasa");
     return { ok: true as const, journalEntryId };
   } catch (e) {
     // PostingError hanya membawa kode VALIDASI_GAGAL — uraikan isunya agar user tahu sebabnya.

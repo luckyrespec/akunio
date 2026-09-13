@@ -14,7 +14,7 @@ import type { FullConfig } from "@playwright/test";
  * dev-server race. Warming each route until its HTML contains the complete
  * bootstrap closes the window before any test runs.
  */
-const WARM_PATHS = ["/daftar", "/masuk", "/verifikasi", "/onboarding", "/dasbor"];
+const WARM_PATHS = ["/daftar", "/masuk", "/verifikasi", "/onboarding", "/dasbor", "/faktur/baru"];
 
 async function fetchHtml(url: string): Promise<string> {
   const res = await fetch(url, { redirect: "follow" });
