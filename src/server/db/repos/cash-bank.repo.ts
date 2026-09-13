@@ -147,6 +147,27 @@ export async function createCashEntryRepo(
   const je = opts.post
     ? await postJournalEntry(q, orgId, actorEmail, journalInput)
     : await createDraftJournalEntry(q, orgId, journalInput);
+  // Double-submit dengan idempotencyKey sama runtuh ke jurnal yang sama
+  // (kontrak return-existing postJournalEntry); kembalikan baris kas yang
+  // sudah menunjuk ke jurnal itu alih-alih menyisip duplikat.
+  const [existingKas] = await q
+    .select({ id: kasBankEntries.id, number: kasBankEntries.number })
+    .from(kasBankEntries)
+    .where(
+      and(
+        eq(kasBankEntries.orgId, orgId),
+        eq(kasBankEntries.journalEntryId, je.id)
+      )
+    )
+    .limit(1);
+  if (existingKas) {
+    return {
+      id: existingKas.id,
+      number: existingKas.number,
+      journalEntryId: je.id,
+      journalNumber: je.number,
+    };
+  }
   const number = await nextNumber(q, orgId, input.kind, input.entryDate);
   const [row] = await q
     .insert(kasBankEntries)
