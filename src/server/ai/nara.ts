@@ -21,13 +21,13 @@ import {
 } from "./interaction-memory";
 import { DraftEntrySchema, type DraftEntry } from "./schema";
 import { buildDraftPrompt } from "./prompt";
+import { getGeminiModel } from "./models";
 import { createDraft } from "@/server/db/repos/drafts.repo";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import { resolveDraftAccounts } from "@/core/ai/map-accounts";
 import { listEntriesWithLines } from "@/server/db/repos/journals.repo";
 import { searchJournals } from "@/server/db/repos/search.repo";
 
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 const ASSISTANT_NAME = process.env.ASSISTANT_NAME ?? "Akunio";
 
 export interface NaraCitation {
@@ -308,7 +308,7 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
       : { store: STORE_INTERACTIONS };
     try {
       interaction = await ai.interactions.create({
-        model: MODEL,
+        model: getGeminiModel(),
         input: inputSteps,
         ...memoryParams,
         tools: ALL_TOOLS,
@@ -318,7 +318,7 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
         console.warn("previous_interaction_id basi, ulangi tanpa chaining", e);
         await clearThreadInteractionId(orgId, threadId);
         interaction = await ai.interactions.create({
-          model: MODEL,
+          model: getGeminiModel(),
           input: inputSteps,
           store: STORE_INTERACTIONS,
           tools: ALL_TOOLS,
@@ -351,7 +351,7 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
     try {
       if (call.name === "create_journal_draft") {
         const parsed = parseDraftFromToolArgs(call.arguments);
-        const mapping = resolveDraftAccounts(parsed, leafAccs.map((a) => ({ id: a.id, code: a.code, name: a.name })));
+        const mapping = resolveDraftAccounts(parsed, accRows.map((a) => ({ id: a.id, code: a.code, name: a.name, parentCode: a.parentCode, archivedAt: a.archivedAt })));
         const draftWithMapping = { ...parsed, mapping } as DraftEntry & { mapping: unknown };
         // Persist document if present
         let documentId: string | undefined;
@@ -376,7 +376,7 @@ Instruksi: Pilih tool yang tepat jika dibutuhkan, atau jawab langsung jika perta
             documentId,
             inputText: question,
             draft: draftWithMapping,
-            model: MODEL,
+            model: getGeminiModel(),
           });
           // audit
           try {
@@ -482,7 +482,7 @@ ${context}
 
 Tugas: Jawab user dalam Bahasa Indonesia natural, ringkas, gunakan angka dari tool jika ada. Sitasi inline HANYA untuk klaim aturan penting atau angka kunci: [SAK EMKM Bab 11 paragraf 11.1-11.3](sak:11:11.1-11.3) atau [JE-2026-0004](jurnal:JE-2026-0004) (nomor persis dari hasil tool). Jangan tampilkan daftar sumber. Jangan halusinasi. Jika ada draft yang dibuat, sebutkan ID draft dan minta user review sebelum posting.`;
       const synth = await ai.interactions.create({
-        model: MODEL,
+        model: getGeminiModel(),
         input: [{ type: "user_input", content: [{ type: "text", text: synthPrompt }] } as never],
         store: STORE_INTERACTIONS,
       });

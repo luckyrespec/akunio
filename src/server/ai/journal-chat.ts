@@ -1,9 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { DraftEntrySchema, type DraftEntry } from "./schema";
 import { buildDraftPrompt, type PromptAccount } from "./prompt";
-import { STORE_INTERACTIONS } from "./interaction-memory";
-
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+import { STORE_INTERACTIONS, isStaleInteractionError } from "./interaction-memory";
+import { getGeminiModel } from "./models";
 
 type GenaiContent =
   | { type: "text"; text: string }
@@ -54,6 +53,8 @@ export interface JournalChatResult {
   answer: string;
   draft?: DraftEntry;
   functionCalled: boolean;
+  /** Id interaksi baru untuk chaining turn berikutnya (disimpan per thread). */
+  interactionId?: string;
 }
 
 function parseDraftFromToolArgs(args: unknown): DraftEntry {
@@ -105,16 +106,31 @@ export async function journalChat(input: JournalChatInput): Promise<JournalChatR
 
   const inputSteps = [{ type: "user_input", content: userContent as never }] as never;
 
-  const interaction = await ai.interactions.create({
-    model: MODEL,
+  const baseParams = {
+    model: getGeminiModel(),
     input: inputSteps,
     store: STORE_INTERACTIONS,
-    ...(input.previousInteractionId ? { previous_interaction_id: input.previousInteractionId } : {}),
     tools: [createJournalDraftTool as never],
-  });
+  };
+  let interaction: { steps?: Array<{ type: string; name?: string; arguments?: unknown }>; output_text?: string; id?: string };
+  try {
+    interaction = (await ai.interactions.create({
+      ...baseParams,
+      ...(input.previousInteractionId ? { previous_interaction_id: input.previousInteractionId } : {}),
+    } as never)) as unknown as typeof interaction;
+  } catch (e) {
+    // Id basi/kedaluwarsa (retensi gratis 1 hari): ulangi tanpa chaining
+    // agar chat tetap jalan; pemanggil menyimpan id baru yang segar.
+    if (input.previousInteractionId && isStaleInteractionError(e)) {
+      interaction = (await ai.interactions.create({ ...baseParams } as never)) as unknown as typeof interaction;
+    } else {
+      throw e;
+    }
+  }
+  const interactionId = interaction.id;
 
   // Look for function call in steps
-  const steps = (interaction as unknown as { steps?: Array<{ type: string; name?: string; arguments?: unknown }> }).steps ?? [];
+  const steps = interaction.steps ?? [];
   const call = steps.find((s) => s.type === "function_call" && s.name === "create_journal_draft");
   if (call) {
     const draft = parseDraftFromToolArgs(call.arguments);
@@ -122,16 +138,17 @@ export async function journalChat(input: JournalChatInput): Promise<JournalChatR
       answer: `Draft jurnal untuk "${input.message}" berhasil disusun. Silakan tinjau dan posting.`,
       draft,
       functionCalled: true,
+      interactionId,
     };
   }
 
   // Fallback: try structured output as before, or plain text
-  const text = (interaction as unknown as { output_text?: string }).output_text ?? "";
+  const text = interaction.output_text ?? "";
   // Try to parse as DraftEntry JSON if it looks like one
   try {
     const parsed = DraftEntrySchema.parse(JSON.parse(text));
-    return { answer: parsed.explanation, draft: parsed, functionCalled: true };
+    return { answer: parsed.explanation, draft: parsed, functionCalled: true, interactionId };
   } catch {
-    return { answer: text || "Maaf, saya tidak bisa memproses permintaan tersebut.", functionCalled: false };
+    return { answer: text || "Maaf, saya tidak bisa memproses permintaan tersebut.", functionCalled: false, interactionId };
   }
 }

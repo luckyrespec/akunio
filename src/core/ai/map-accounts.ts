@@ -20,9 +20,19 @@ export interface DraftAccountLine {
   unresolved: boolean;
 }
 
+export interface ResolverAccount {
+  id: string;
+  code: string;
+  name: string;
+  /** Kode induk (null = kandidat leaf). Dibutuhkan untuk deteksi akun GROUP. */
+  parentCode?: string | null;
+  /** Terisi = diarsipkan → tidak bisa diposting (kriteria isPostableAccount). */
+  archivedAt?: Date | string | null;
+}
+
 export function resolveDraftAccounts(
   draft: { lines: Array<{ accountCode: string }> },
-  accounts: Array<{ id: string; code: string; name: string }>,
+  accounts: ResolverAccount[],
   minScore = 0.6,
 ): { lines: DraftAccountLine[]; warnings: string[] } {
   const warnings: string[] = [];
@@ -31,6 +41,27 @@ export function resolveDraftAccounts(
     const byCode = accounts.find((a) => a.code === l.accountCode)
       ?? accounts.find((a) => a.code.toLowerCase() === l.accountCode.toLowerCase());
     if (byCode) {
+      // Kode cocok tetapi tak bisa diposting (induk/grup atau arsip — kriteria
+      // identik guard GROUP_ACCOUNT): tandai unresolved sejak dini agar review
+      // memblokir dengan pesan jelas, bukan gagal saat posting.
+      if (accounts.some((a) => a.parentCode === byCode.code)) {
+        warnings.push(
+          `Baris ${n}: akun ${l.accountCode} (${byCode.name}) adalah akun induk (GROUP) — pilih akun detail yang bisa diposting`,
+        );
+        return {
+          accountCode: l.accountCode, accountId: null,
+          matchedName: byCode.name, unresolved: true,
+        };
+      }
+      if (byCode.archivedAt) {
+        warnings.push(
+          `Baris ${n}: akun ${l.accountCode} (${byCode.name}) sudah diarsipkan — pilih akun aktif`,
+        );
+        return {
+          accountCode: l.accountCode, accountId: null,
+          matchedName: byCode.name, unresolved: true,
+        };
+      }
       return {
         accountCode: l.accountCode, accountId: byCode.id,
         matchedName: byCode.name, unresolved: false,

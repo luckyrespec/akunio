@@ -41,7 +41,7 @@ export function JournalChatClient({
     if ((!input.trim() && !file) || sending) return;
     const text = input.trim() || (file ? "Buat jurnal dari dokumen terlampir" : "");
     const currentFile = file;
-    const history = messages.slice(-6).map((m) => ({ role: m.role, content: m.content }));
+    const history = messages.slice(-12).map((m) => ({ role: m.role, content: m.content }));
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),

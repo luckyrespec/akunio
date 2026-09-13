@@ -3,11 +3,13 @@ import { db } from "@/server/db";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
 import { countDraftsThisMonth, checkQuota, createDraft } from "@/server/db/repos/drafts.repo";
-import { checkAssistantQuota } from "@/server/db/repos/chat.repo";
+import { checkAssistantQuota, getThread } from "@/server/db/repos/chat.repo";
 import { createDocumentRow } from "@/server/db/repos/documents.repo";
 import { putDocument, MAX_DOCUMENT_BYTES, ALLOWED_MIMES } from "@/server/storage/storage";
 import { resolveDraftAccounts } from "@/core/ai/map-accounts";
 import { journalChat } from "@/server/ai/journal-chat";
+import { saveThreadInteractionId } from "@/server/ai/interaction-memory";
+import { getGeminiModel } from "@/server/ai/models";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import { eq } from "drizzle-orm";
 import { accounts as accountsTable } from "@/server/db/schema/org";
@@ -18,6 +20,8 @@ export interface JournalChatResult {
   answer?: string;
   draftId?: string;
   draft?: unknown;
+  /** Id interaksi baru untuk chaining turn berikutnya dalam thread yang sama. */
+  interactionId?: string;
 }
 
 export async function journalAiChatAction(formData: FormData): Promise<JournalChatResult> {
@@ -56,7 +60,8 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
       document = { dataBase64: buffer.toString("base64"), mime: file.type };
     }
 
-    const leaves = await db.select().from(accountsTable).where(eq(accountsTable.orgId, ctx.orgId)).then((rows) => rows.filter((a) => !rows.some((c) => c.parentCode === a.code)));
+    const allAccounts = await db.select().from(accountsTable).where(eq(accountsTable.orgId, ctx.orgId));
+    const leaves = allAccounts.filter((a) => !allAccounts.some((c) => c.parentCode === a.code));
 
     // Unified quota blocks all if exceeded
     if (!quota.allowed) {
@@ -69,13 +74,32 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
       if (historyRaw) history = JSON.parse(historyRaw);
     } catch {}
 
+    // Threading server-side ala nara.ts: muat interaction id terakhir thread
+    // ini agar Gemini mengingat konteks ("ok catatkan ya" tak lupa objeknya).
+    // Best-effort: tanpa threadId valid chat tetap jalan stateless.
+    const threadId = String(formData.get("threadId") ?? "").trim() || null;
+    let previousInteractionId: string | null = null;
+    if (threadId) {
+      try {
+        const t = await getThread(db, ctx.orgId, threadId);
+        previousInteractionId = t?.geminiInteractionId ?? null;
+      } catch {
+        previousInteractionId = null;
+      }
+    }
+
     const result = await journalChat({
       message: message || "Buat jurnal dari dokumen terlampir",
       document,
       accounts: leaves.map((a) => ({ code: a.code, name: a.name, normal: a.normal === "D" ? "D" as const : "K" as const })),
       todayISO: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }),
       history,
+      previousInteractionId,
     });
+
+    if (threadId && result.interactionId) {
+      await saveThreadInteractionId(ctx.orgId, threadId, result.interactionId);
+    }
 
     // If function was called and draft exists, persist it
     if (result.draft && result.functionCalled) {
@@ -85,10 +109,10 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
 
       const mapping = resolveDraftAccounts(
         result.draft as { lines: Array<{ accountCode: string }> },
-        leaves.map((a) => ({ id: a.id, code: a.code, name: a.name })),
+        allAccounts.map((a) => ({ id: a.id, code: a.code, name: a.name, parentCode: a.parentCode, archivedAt: a.archivedAt })),
       );
       const draftWithMapping = { ...(result.draft as object), mapping };
-      const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+      const model = getGeminiModel();
 
       const row = await db.transaction(async (tx) => {
         const d = await createDraft(tx, {
@@ -110,10 +134,10 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
         return d;
       });
 
-      return { ok: true, answer: result.answer, draftId: row.id, draft: draftWithMapping };
+      return { ok: true, answer: result.answer, draftId: row.id, draft: draftWithMapping, interactionId: result.interactionId };
     }
 
-    return { ok: true, answer: result.answer };
+    return { ok: true, answer: result.answer, interactionId: result.interactionId };
   } catch (e) {
     if (isRedirectError(e)) throw e;
     console.error(e);

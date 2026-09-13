@@ -7,8 +7,12 @@
 //
 // Never hardcode a model id at call sites — use these helpers so a model
 // swap is one env change, not a multi-file hunt. Never legacy 2.5-*/2.0-*/1.5-*.
-export function chatModel(): string {
+export function getGeminiModel(): string {
   return process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+}
+
+export function chatModel(): string {
+  return getGeminiModel();
 }
 
 export function thinkingModel(): string {

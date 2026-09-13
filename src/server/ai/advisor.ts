@@ -10,6 +10,7 @@ import { hybridSearch } from "@/server/db/repos/rag-search";
 import { addMessage, listMessages, checkAdvisorQuota, getThread } from "@/server/db/repos/chat.repo";
 import { GoogleGenAI } from "@google/genai";
 import { STORE_INTERACTIONS, saveThreadInteractionId } from "./interaction-memory";
+import { getGeminiModel } from "./models";
 
 export interface Citation {
   kind: string;
@@ -104,7 +105,7 @@ ${lastMessages}
 Pertanyaan: ${question}`;
 
   const interaction = await ai.interactions.create({
-    model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
+    model: getGeminiModel(),
     input: [{ type: "user_input", content: [{ type: "text", text: prompt }] } as never],
     store: STORE_INTERACTIONS,
     ...(previousInteractionId ? { previous_interaction_id: previousInteractionId } : {}),
