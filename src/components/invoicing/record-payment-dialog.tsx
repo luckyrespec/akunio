@@ -46,6 +46,9 @@ export function RecordPaymentDialog({
   const [autoPost, setAutoPost] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Kunci idempotency per buka dialog (Ruling R8): SEKALI saat dialog dibuka,
+  // stabil selama dialog terbuka — klik-ulang / re-render tak menggantinya.
+  const idemKeyRef = React.useRef<string | null>(null);
 
   const remainingMinor = invoice ? invoice.totalMinor - invoice.amountPaidMinor : 0n;
 
@@ -57,6 +60,7 @@ export function RecordPaymentDialog({
       setReferenceNumber("");
       setNotes("");
       setError(null);
+      if (open) idemKeyRef.current = crypto.randomUUID();
 
       // Default to first account or 1120/1110
       if (accountsList.length > 0) {
@@ -94,6 +98,7 @@ export function RecordPaymentDialog({
           paymentAccountId,
           referenceNumber: referenceNumber.trim() || null,
           notes: notes.trim() || null,
+          idempotencyKey: idemKeyRef.current ?? crypto.randomUUID(),
         },
         autoPost
       );
@@ -102,6 +107,7 @@ export function RecordPaymentDialog({
         throw new Error(res.error);
       }
 
+      idemKeyRef.current = null;
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {

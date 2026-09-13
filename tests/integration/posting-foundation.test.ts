@@ -279,3 +279,97 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("idempotency ujung-ke-ujung +
     }
   });
 });
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("dedup baris pelunasan (Ruling R8)", () => {
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+
+  beforeAll(async () => {
+    await truncateAll();
+  });
+
+  afterAll(async () => {
+    await truncateAll();
+    await admin.end();
+  });
+
+  async function seedOrgWithKas(name: string): Promise<{ orgId: string; kas: string }> {
+    const { orgId } = await makeOrg(name);
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+    const rows = await admin.query<{ id: string; code: string }>(
+      `SELECT id, code FROM accounts WHERE org_id=$1`, [orgId]);
+    const byCode = Object.fromEntries(rows.rows.map((r) => [r.code, r.id]));
+    // 1110 selalu leaf di semua varian COA (bukan GROUP).
+    return { orgId, kas: byCode["1110"] as string };
+  }
+
+  async function makeInvoice(orgId: string, contactId: string, n: string) {
+    const { createInvoiceRepo } = await import("@/server/db/repos/invoices.repo");
+    const { db } = await import("@/server/db");
+    return createInvoiceRepo(db as never, orgId, {
+      type: "INVOICE",
+      invoiceNumber: n,
+      contactId,
+      issueDate: "2026-09-01",
+      dueDate: "2026-09-15",
+      status: "ISSUED",
+    }, [{
+      description: "Jasa",
+      quantity: "1.00",
+      unitPriceMinor: 10_000_000n,
+      discountMinor: 0n,
+      taxRatePercent: "0.00",
+    }]);
+  }
+
+  it("double-submit pelunasan satu baris satu jurnal", async () => {
+    const { orgId, kas } = await seedOrgWithKas("R8 Pay Co");
+    const { createContactRepo } = await import("@/server/db/repos/contacts.repo");
+    const { db } = await import("@/server/db");
+    const contact = await createContactRepo(db as never, orgId, { type: "CUSTOMER", name: "PT R8" });
+    const inv = await makeInvoice(orgId, contact.id, "INV-R8-0001");
+    const { recordInvoicePaymentRepo } = await import("@/server/db/repos/invoices.repo");
+    const { postInvoicePaymentToLedger } = await import("@/server/invoicing/posting");
+    const base = {
+      invoiceId: inv.id,
+      paymentDate: "2026-09-03",
+      amountMinor: 5_000_000n,
+      paymentAccountId: kas,
+      idempotencyKey: "pay-1",
+    };
+    const p1 = await recordInvoicePaymentRepo(db as never, orgId, base);
+    const p2 = await recordInvoicePaymentRepo(db as never, orgId, base);
+    expect(p2.payment.id).toBe(p1.payment.id);
+    expect(p2.updatedInvoice.amountPaidMinor).toBe(p1.updatedInvoice.amountPaidMinor);
+    const cnt = await admin.query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM invoice_payments WHERE invoice_id=$1`, [inv.id]);
+    expect(cnt.rows[0].c).toBe(1);
+    const j1 = await postInvoicePaymentToLedger(db as never, orgId, p1.payment.id, "tester@test.id");
+    const j2 = await postInvoicePaymentToLedger(db as never, orgId, p2.payment.id, "tester@test.id");
+    expect(j2).toBe(j1);
+  });
+
+  it("key sama di invoice berbeda → record berbeda (unik per invoice)", async () => {
+    const { orgId, kas } = await seedOrgWithKas("R8 Scope Co");
+    const { createContactRepo } = await import("@/server/db/repos/contacts.repo");
+    const { db } = await import("@/server/db");
+    const contact = await createContactRepo(db as never, orgId, { type: "CUSTOMER", name: "PT R8 Scope" });
+    const invA = await makeInvoice(orgId, contact.id, "INV-R8-0002");
+    const invB = await makeInvoice(orgId, contact.id, "INV-R8-0003");
+    const { recordInvoicePaymentRepo } = await import("@/server/db/repos/invoices.repo");
+    const pay = (invoiceId: string) => recordInvoicePaymentRepo(db as never, orgId, {
+      invoiceId,
+      paymentDate: "2026-09-03",
+      amountMinor: 5_000_000n,
+      paymentAccountId: kas,
+      idempotencyKey: "pay-shared",
+    });
+    const pa = await pay(invA.id);
+    const pb = await pay(invB.id);
+    expect(pb.payment.id).not.toBe(pa.payment.id);
+    for (const inv of [invA, invB]) {
+      const cnt = await admin.query<{ c: number }>(
+        `SELECT count(*)::int AS c FROM invoice_payments WHERE invoice_id=$1`, [inv.id]);
+      expect(cnt.rows[0].c).toBe(1);
+    }
+  });
+});

@@ -146,10 +146,16 @@ export const invoicePayments = pgTable(
     journalEntryId: uuid("journal_entry_id").references(() => journalEntries.id, {
       onDelete: "set null",
     }),
+    // Kunci idempotency client per dialog (Ruling R8): dedup double-submit.
+    // Tanpa org_id — isolasi via join ke invoices; unik per (invoice_id, key).
+    idempotencyKey: text("idempotency_key"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("invoice_payments_inv_idx").on(t.invoiceId)]
+  (t) => [
+    index("invoice_payments_inv_idx").on(t.invoiceId),
+    uniqueIndex("invoice_payments_inv_idem_uq").on(t.invoiceId, t.idempotencyKey),
+  ]
 );
 
 export const invoiceSeqCounters = pgTable(

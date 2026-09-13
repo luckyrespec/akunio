@@ -38,6 +38,9 @@ export interface RecordPaymentInput {
   paymentAccountId: string;
   referenceNumber?: string | null;
   notes?: string | null;
+  // Kunci idempotency client per dialog (Ruling R8): key sama → record sama,
+  // unik per (invoice_id, key). Absen = perilaku lama (tanpa dedup).
+  idempotencyKey?: string | null;
 }
 
 export async function getNextInvoiceNumberRepo(
@@ -197,6 +200,28 @@ export async function listInvoicesRepo(
   }));
 }
 
+/** Cari pembayaran existing berdasar kunci idempotency (kontrak: key sama → record sama, unik per invoice). */
+export async function findPaymentByIdempotencyKey(
+  q: Queryable,
+  invoiceId: string,
+  key: string,
+) {
+  const [dupe] = await q
+    .select()
+    .from(invoicePayments)
+    .where(and(eq(invoicePayments.invoiceId, invoiceId), eq(invoicePayments.idempotencyKey, key)))
+    .limit(1);
+  return dupe ?? null;
+}
+
+/** True bila error adalah pelanggaran unik invoice_payments_inv_idem_uq (jendela race double-submit). */
+function isPaymentIdemConflict(e: unknown): boolean {
+  const pg = e as { code?: unknown; constraint?: unknown } | null;
+  if (!pg || typeof pg !== "object" || pg.code !== "23505") return false;
+  if (pg.constraint === "invoice_payments_inv_idem_uq") return true;
+  return e instanceof Error && e.message.includes("invoice_payments_inv_idem_uq");
+}
+
 export async function recordInvoicePaymentRepo(
   db: Db,
   orgId: string,
@@ -212,17 +237,49 @@ export async function recordInvoicePaymentRepo(
       throw new Error(`Faktur dengan ID ${input.invoiceId} tidak ditemukan.`);
     }
 
-    const [payment] = await tx
-      .insert(invoicePayments)
-      .values({
-        invoiceId: inv.id,
-        paymentDate: input.paymentDate,
-        amountMinor: input.amountMinor,
-        paymentAccountId: input.paymentAccountId,
-        referenceNumber: input.referenceNumber ?? null,
-        notes: input.notes ?? null,
-      })
-      .returning();
+    // Isolasi org via invoice terverifikasi di atas (tanpa kolom org_id —
+    // Ruling R8): semua pre-check difilter invoice_id milik org ini.
+    const idemKey = input.idempotencyKey ?? null;
+    if (idemKey) {
+      // Serikan double-submit konkuren per invoice+key: yang kalah menunggu
+      // lock, lalu pre-check di bawah melihat baris pemenang yang sudah komit.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`invpay:${inv.id}:${idemKey}`}))`);
+      const dupe = await findPaymentByIdempotencyKey(tx, inv.id, idemKey);
+      if (dupe) {
+        const [fresh] = await tx.select().from(invoices).where(eq(invoices.id, inv.id));
+        return { payment: dupe, updatedInvoice: fresh ?? inv };
+      }
+    }
+
+    let payment: typeof invoicePayments.$inferSelect;
+    try {
+      [payment] = await tx
+        .insert(invoicePayments)
+        .values({
+          invoiceId: inv.id,
+          paymentDate: input.paymentDate,
+          amountMinor: input.amountMinor,
+          paymentAccountId: input.paymentAccountId,
+          referenceNumber: input.referenceNumber ?? null,
+          idempotencyKey: idemKey,
+          notes: input.notes ?? null,
+        })
+        .returning();
+    } catch (e) {
+      // Jendela race sisa (key ditulis jalur lain tanpa lock): kembalikan
+      // record existing, bukan error mentah. Di dalam transaksi yang sudah
+      // abort, SELECT ikut gagal — jatuhkan error asli bila begitu.
+      if (idemKey && isPaymentIdemConflict(e)) {
+        try {
+          const existing = await findPaymentByIdempotencyKey(tx, inv.id, idemKey);
+          if (existing) {
+            const [fresh] = await tx.select().from(invoices).where(eq(invoices.id, inv.id));
+            return { payment: existing, updatedInvoice: fresh ?? inv };
+          }
+        } catch {}
+      }
+      throw e;
+    }
 
     const newAmountPaid = inv.amountPaidMinor + input.amountMinor;
     const newStatus = determineInvoiceStatus(
