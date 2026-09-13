@@ -87,7 +87,7 @@ Scope: **satu spec besar**, ~30 temuan dari 2 audit end-to-end (2026-09-12 dan 2
 
 ## Section 5 — Baseline hijau + testing/rollout (disetujui)
 
-1. **6 merah RLS**: suite isolasi-RLS pindah ke PG docker lokal (`docker-compose.yml`, `db` pg16+pgvector, host 54329) di mana superuser tersedia untuk cabut BYPASSRLS; suite lain tetap cabang Neon `vitest`/`ledger_test`. Pisahkan via file test + env `TEST_RLS_DATABASE_URL`.
+1. **6 merah RLS**: suite isolasi-RLS pindah ke PG docker lokal (`docker-compose.yml`, `db` pg16+pgvector, host 54329) di mana superuser tersedia untuk cabut BYPASSRLS; suite lain tetap cabang Neon `vitest`/`ledger_test`. Pisahkan via file test + env `TEST_RLS_DATABASE_URL` (nama database docker wajib lolos `guardTestDb` di `tests/integration/helpers.ts`, mis. tetap `ledger_test`).
 2. **2 merah storage**: konfigurasi S3 SeaweedFS terima `demo/demo` (file `s3.config` untuk `weed server -s3` di `scripts/weed-dev.cmd`; data dir `D:\Lucky\weed_strorage\data` tak boleh dihapus); pastikan bucket `neraca-docs` via `scripts/weed-ensure-bucket.mjs`. Probe-gate `SKIP_STORAGE_TESTS` dipertahankan.
 3. **1 merah registry NARA** (`tests/unit/ai/nara-tools-registry.test.ts`): satukan ke satu registry (nama→{def, handler}) agar tak bisa drift di tree kotor; test mengunci single-source, bukan cross-check dua list.
 4. **Playbook reset dev** (perluas `scripts/reset-dev.mjs`, flag `--confirm` dipertahankan):
