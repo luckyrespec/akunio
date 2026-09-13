@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, like } from "drizzle-orm";
+import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 import type { Queryable } from "./queryable";
 import { prepaidContracts, prepaidScheduleLines } from "../schema/prepaid";
 import { postJournalEntry } from "./journals.repo";
@@ -44,6 +44,10 @@ export async function createPrepaidContract(
     throw new Error("KONTROL_TIDAK_COCok: akun kontrol kontrak wajib sama dengan registry DIMUKA");
 
   const year = input.startDate.slice(0, 4);
+  // Serialkan penomoran DM-YYYY-NNNN per org-tahun (anti-race): pemanggil
+  // menjalankan fungsi ini di dalam transaksi (withOrg) sehingga xact lock
+  // membuat read-modify-write kode di bawah atomik antar penulis konkuren.
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`dm:${input.orgId}:${year}`}))`);
   const [last] = await q
     .select({ code: prepaidContracts.code })
     .from(prepaidContracts)

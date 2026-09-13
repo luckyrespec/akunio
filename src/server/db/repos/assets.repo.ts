@@ -27,28 +27,33 @@ export interface CreateFixedAssetInput {
   notes?: string;
 }
 
+export async function nextAssetCode(
+  q: Queryable,
+  orgId: string,
+  year: number,
+): Promise<string> {
+  // WAJIB dalam transaksi pemanggil: xact lock menyerikan upsert counter
+  // per org-tahun akuisisi, reset tiap tahun (pola pos_sale_seq_counters).
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`ast:${orgId}:${year}`}))`);
+  const res = await q.execute(sql`
+    INSERT INTO ast_seq_counters (org_id, year, last_seq)
+    VALUES (${orgId}, ${year}, 1)
+    ON CONFLICT (org_id, year)
+    DO UPDATE SET last_seq = ast_seq_counters.last_seq + 1
+    RETURNING last_seq
+  `);
+  const seq = Number((res.rows?.[0] as { last_seq: number } | undefined)?.last_seq ?? 1);
+  return `AST-${year}-${String(seq).padStart(4, "0")}`;
+}
+
 export async function createFixedAsset(
   q: Queryable,
   input: CreateFixedAssetInput,
 ) {
-  const currentYear = input.acquisitionDate.slice(0, 4);
+  const acquisitionYear = Number(input.acquisitionDate.slice(0, 4));
 
   // Generate unique code AST-YYYY-NNNN
-  const [lastAsset] = await q
-    .select({ code: fixedAssets.code })
-    .from(fixedAssets)
-    .where(and(eq(fixedAssets.orgId, input.orgId)))
-    .orderBy(desc(fixedAssets.createdAt))
-    .limit(1);
-
-  let nextSeq = 1;
-  if (lastAsset?.code) {
-    const match = lastAsset.code.match(/AST-\d{4}-(\d+)/);
-    if (match) {
-      nextSeq = parseInt(match[1], 10) + 1;
-    }
-  }
-  const code = `AST-${currentYear}-${String(nextSeq).padStart(4, "0")}`;
+  const code = await nextAssetCode(q, input.orgId, acquisitionYear);
 
   const [asset] = await q
     .insert(fixedAssets)

@@ -14,7 +14,8 @@ BEGIN
                            'fixed_assets','asset_depreciation_lines','asset_disposals',
                            'prepaid_contracts','prepaid_schedule_lines',
                             'inventory_settings','inventory_items','inventory_layers','inventory_transactions','stock_opnames','inventory_sku_counters',
-                            'pos_shifts','pos_sales','pos_sale_items','pos_sale_seq_counters',
+                             'pos_shifts','pos_sales','pos_sale_items','pos_sale_seq_counters',
+                             'invoice_seq_counters','ast_seq_counters',
                            'subledger_controls','subledger_journal_links',
                            'tax_summaries','assistant_memories']
   LOOP

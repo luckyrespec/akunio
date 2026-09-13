@@ -1,4 +1,5 @@
 import { Db } from "../index";
+import type { Queryable } from "./queryable";
 import {
   invoices,
   invoiceItems,
@@ -40,34 +41,24 @@ export interface RecordPaymentInput {
 }
 
 export async function getNextInvoiceNumberRepo(
-  db: Db,
+  q: Queryable,
   orgId: string,
   type: InvoiceType,
   year: number = new Date().getFullYear()
 ): Promise<string> {
+  // WAJIB dalam transaksi pemanggil: xact lock menyerikan upsert counter
+  // per org-tahun-tipe (pola pos_sale_seq_counters).
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`inv:${orgId}:${year}:${type}`}))`);
+  const res = await q.execute(sql`
+    INSERT INTO invoice_seq_counters (org_id, year, type, last_seq)
+    VALUES (${orgId}, ${year}, ${type}, 1)
+    ON CONFLICT (org_id, year, type)
+    DO UPDATE SET last_seq = invoice_seq_counters.last_seq + 1
+    RETURNING last_seq
+  `);
+  const seq = Number((res.rows?.[0] as { last_seq: number } | undefined)?.last_seq ?? 1);
   const prefix = type === "INVOICE" ? `INV-${year}-` : `BILL-${year}-`;
-  const existing = await db
-    .select({ invoiceNumber: invoices.invoiceNumber })
-    .from(invoices)
-    .where(
-      and(
-        eq(invoices.orgId, orgId),
-        eq(invoices.type, type),
-        sql`${invoices.invoiceNumber} LIKE ${prefix + "%"}`
-      )
-    );
-
-  let maxSeq = 0;
-  for (const row of existing) {
-    const parts = row.invoiceNumber.split("-");
-    const num = parseInt(parts[2], 10);
-    if (!isNaN(num) && num > maxSeq) {
-      maxSeq = num;
-    }
-  }
-
-  const nextSeq = String(maxSeq + 1).padStart(4, "0");
-  return `${prefix}${nextSeq}`;
+  return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
 export async function createInvoiceRepo(
@@ -85,15 +76,18 @@ export async function createInvoiceRepo(
     }))
   );
 
-  const invoiceNumber =
-    invoiceData.invoiceNumber ||
-    (await getNextInvoiceNumberRepo(db, orgId, invoiceData.type));
-
-  const status =
-    invoiceData.status ??
-    determineInvoiceStatus(calculated.totalMinor, 0n, invoiceData.dueDate);
-
   return db.transaction(async (tx) => {
+    // Penomoran di DALAM transaksi agar lock+counter anti-race berlaku.
+    const issueYear =
+      Number(invoiceData.issueDate.slice(0, 4)) || new Date().getFullYear();
+    const invoiceNumber =
+      invoiceData.invoiceNumber ||
+      (await getNextInvoiceNumberRepo(tx, orgId, invoiceData.type, issueYear));
+
+    const status =
+      invoiceData.status ??
+      determineInvoiceStatus(calculated.totalMinor, 0n, invoiceData.dueDate);
+
     const [inv] = await tx
       .insert(invoices)
       .values({
