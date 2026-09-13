@@ -11,6 +11,12 @@ import {
 import { makeReversal } from "@/core/journals/validate";
 import { issueToMessage } from "@/core/journals/messages";
 import { Money } from "@/core/money/money";
+import {
+  ALLOWED_MIMES,
+  MAX_DOCUMENT_BYTES,
+  putDocument,
+} from "@/server/storage/storage";
+import { createDocumentRow } from "@/server/db/repos/documents.repo";
 
 export interface ActionResult {
   ok: boolean;
@@ -113,9 +119,7 @@ export interface JournalDetailLineResult {
   debitMinor: string;
   creditMinor: string;
   memo: string | null;
-}
-
-export interface JournalDetailResult {
+}export interface JournalDetailResult {
   ok: boolean;
   number?: string;
   data?: {
@@ -162,5 +166,52 @@ export async function getJournalDetailAction(number: string): Promise<JournalDet
     };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/**
+ * Lampirkan dokumen bukti ke entri jurnal — berlaku untuk draf maupun POSTED.
+ * Lampiran adalah bukti audit, bukan isi buku besar; baris jurnal tetap terkunci.
+ */
+export async function attachJournalDocumentAction(entryId: string, formData: FormData) {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false as const, error: "File lampiran wajib diisi." };
+    }
+    if (!ALLOWED_MIMES.includes(file.type as never)) {
+      return { ok: false as const, error: "Tipe lampiran harus gambar, PDF, atau spreadsheet." };
+    }
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      return { ok: false as const, error: "Ukuran lampiran maksimal 5 MB." };
+    }
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { storageKey } = await putDocument(ctx.orgId, { buffer, mime: file.type });
+    await withOrg(ctx.orgId, async (tx) => {
+      const doc = await createDocumentRow(tx, {
+        orgId: ctx.orgId,
+        storageKey,
+        mime: file.type,
+        sizeBytes: file.size,
+      });
+      await linkDocumentToEntry(tx, {
+        orgId: ctx.orgId,
+        entryId,
+        documentId: doc.id,
+        fileName: file.name,
+      });
+    });
+    revalidatePath(`/jurnal/${entryId}`);
+    revalidatePath("/jurnal");
+    revalidatePath("/persediaan/opname");
+    return { ok: true as const };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    const raw = e instanceof Error ? e.message : "Gagal mengunggah lampiran.";
+    const friendly = raw.startsWith("JURNAL_TIDAK_DITEMUKAN")
+      ? "Jurnal tidak ditemukan."
+      : raw;
+    return { ok: false as const, error: friendly };
   }
 }

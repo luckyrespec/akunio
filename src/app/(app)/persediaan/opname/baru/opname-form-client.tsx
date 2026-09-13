@@ -14,8 +14,14 @@ import {
   AlertTriangle,
   CheckCircle2,
   Package,
+  Search,
+  ArrowLeft,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +43,15 @@ import { PageHeader } from "@/components/page-header";
 import { Money } from "@/core/money/money";
 import { Reveal, Stagger, StaggerItem, AnimatedNumber } from "@/components/motion";
 import { createStockOpnameAction } from "@/server/actions/inventory.actions";
+import { matchPickerItems, resolvePickerList, type PickerSort } from "./opname-picker";
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
+
+const SORT_OPTIONS: Array<{ value: PickerSort; label: string }> = [
+  { value: "name", label: "A–Z" },
+  { value: "stock-desc", label: "Stok ↓" },
+  { value: "stock-asc", label: "Stok ↑" },
+];
 
 interface Props {
   items: Array<{
@@ -58,6 +73,33 @@ export function OpnameFormClient({ items }: Props) {
     new Date().toISOString().slice(0, 10),
   );
   const [notes, setNotes] = useState("");
+
+  // Langkah 1 = pilih barang, Langkah 2 = lembar hitung (hanya yang terpilih).
+  const [step, setStep] = useState<1 | 2>(1);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<PickerSort>("name");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const picker = useMemo(
+    () => resolvePickerList(items, query, { sort, page, pageSize }),
+    [items, query, sort, page, pageSize],
+  );
+
+  const activeItems = useMemo(
+    () => items.filter((it) => selectedIds.has(it.id)),
+    [items, selectedIds],
+  );
 
   const [counts, setCounts] = useState<
     Record<string, { physicalQty: number; reason: string }>
@@ -84,12 +126,12 @@ export function OpnameFormClient({ items }: Props) {
     }));
   };
 
-  // Ringkasan selisih real-time untuk panel samping
+  // Ringkasan selisih real-time untuk panel samping (hanya barang terpilih)
   const summary = useMemo(() => {
     let totalItemsDiscrepancy = 0;
     let totalNetDifferenceMinor = 0n;
 
-    for (const it of items) {
+    for (const it of activeItems) {
       const sys = Number(it.currentQty);
       const phys = counts[it.id]?.physicalQty ?? sys;
       const diff = phys - sys;
@@ -106,11 +148,16 @@ export function OpnameFormClient({ items }: Props) {
       isDeficit: totalNetDifferenceMinor < 0n,
       isSurplus: totalNetDifferenceMinor > 0n,
     };
-  }, [items, counts]);
+  }, [activeItems, counts]);
 
   const submitWithMode = (mode: "save" | "save-another") => {
     setError(null);
-    const payloadItems = items.map((it) => {
+    if (activeItems.length === 0) {
+      setError("Pilih minimal satu barang pada Langkah 1 sebelum menyimpan sesi opname.");
+      setStep(1);
+      return;
+    }
+    const payloadItems = activeItems.map((it) => {
       const raw = counts[it.id]?.physicalQty ?? Number(it.currentQty);
       return {
         itemId: it.id,
@@ -137,6 +184,10 @@ export function OpnameFormClient({ items }: Props) {
             resetCounts[it.id] = { physicalQty: Number(it.currentQty), reason: "" };
           }
           setCounts(resetCounts);
+          setSelectedIds(new Set());
+          setQuery("");
+          setPage(1);
+          setStep(1);
         } else {
           router.push(`/persediaan/opname/${res.opnameId}`);
         }
@@ -154,17 +205,45 @@ export function OpnameFormClient({ items }: Props) {
       {/* Page Header dengan Action Buttons Sejajar Inline (seperti Batch Persediaan) */}
       <PageHeader
         title="Mulai Stok Opname Fisik"
-        eyebrow="Hitung stok fisik aktual gudang, hitung selisih otomatis, dan siapkan draf jurnal penyesuaian."
+        eyebrow={
+          step === 1
+            ? "Langkah 1 dari 2 — pilih barang yang mau dihitung fisik."
+            : `Langkah 2 dari 2 — hitung fisik ${activeItems.length} barang terpilih.`
+        }
         actions={
+          step === 1 ? (
+            <div className="flex items-center gap-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/persediaan/opname")}
+                className="h-9 px-4 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink-soft hover:text-ink transition-colors shadow-xs"
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={selectedIds.size === 0}
+                onClick={() => setStep(2)}
+                className="h-9 rounded-xl px-5 bg-terra text-white hover:bg-terra/90 text-xs font-semibold transition-transform active:scale-[0.98] disabled:transform-none shadow-xs"
+              >
+                Lanjut ke Lembar Hitung ({selectedIds.size})
+                <ArrowRight className="size-3.5 ml-1.5" />
+              </Button>
+            </div>
+          ) : (
           <div className="flex items-center gap-2.5">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => router.push("/persediaan/opname")}
+              onClick={() => setStep(1)}
               className="h-9 px-4 text-xs font-medium rounded-xl border-rule bg-paper hover:bg-canvas text-ink-soft hover:text-ink transition-colors shadow-xs"
             >
-              Batal
+              <ArrowLeft className="size-3.5 mr-1.5" />
+              Pilih Barang
             </Button>
 
             <div className="flex items-stretch shadow-xs rounded-xl overflow-hidden">
@@ -206,6 +285,7 @@ export function OpnameFormClient({ items }: Props) {
               </DropdownMenu>
             </div>
           </div>
+          )
         }
       />
 
@@ -215,7 +295,196 @@ export function OpnameFormClient({ items }: Props) {
         </div>
       )}
 
-      {/* Two-Column Grid: Form Utama (Kiri) + Live Summary Cards (Kanan) persis layout New Aset */}
+      {/* Langkah 1 — Pilih barang yang mau diopname */}
+      {step === 1 && (
+        <Reveal>
+          <Card className="border-rule bg-paper shadow-xs overflow-hidden">
+            <CardHeader className="border-b border-rule/60 pb-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="font-display text-base text-ink">Pilih Barang</CardTitle>
+                  <CardDescription>
+                    Cari, urutkan, lalu centang barang yang mau dihitung. Hanya yang terpilih masuk lembar hitung.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-xs font-mono bg-canvas border-rule shrink-0">
+                  {selectedIds.size} dipilih
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
+                <Input
+                  placeholder="Cari kode atau nama barang… (mis. SHAMPO)"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  className="h-9 bg-canvas pl-9"
+                  aria-label="Cari barang untuk opname"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div
+                  className="flex items-center gap-0.5 rounded-lg border border-rule bg-canvas p-0.5"
+                  role="group"
+                  aria-label="Urutkan barang"
+                >
+                  {SORT_OPTIONS.map((o) => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      aria-pressed={sort === o.value}
+                      onClick={() => {
+                        setSort(o.value);
+                        setPage(1);
+                      }}
+                      className={`h-7 rounded-md px-2.5 text-[11px] font-medium transition-colors ${
+                        sort === o.value
+                          ? "bg-paper font-semibold text-ink shadow-xs"
+                          : "text-ink-soft hover:text-ink"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className="flex items-center gap-0.5 rounded-lg border border-rule bg-canvas p-0.5"
+                  role="group"
+                  aria-label="Jumlah barang per halaman"
+                >
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-pressed={pageSize === n}
+                      onClick={() => {
+                        setPageSize(n);
+                        setPage(1);
+                      }}
+                      className={`h-7 rounded-md px-2.5 text-[11px] font-medium tabular-nums transition-colors ${
+                        pageSize === n
+                          ? "bg-paper font-semibold text-ink shadow-xs"
+                          : "text-ink-soft hover:text-ink"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <div className="ms-auto flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={picker.total === 0}
+                    onClick={() => {
+                      const ids = matchPickerItems(items, query, sort).map((it) => it.id);
+                      setSelectedIds((prev) => new Set([...prev, ...ids]));
+                    }}
+                    className="h-8 rounded-lg text-xs"
+                  >
+                    Pilih semua hasil{picker.total > 0 ? ` (${picker.total})` : ""}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={selectedIds.size === 0}
+                    onClick={() => setSelectedIds(new Set())}
+                    className="h-8 rounded-lg text-xs text-ink-soft"
+                  >
+                    Bersihkan
+                  </Button>
+                </div>
+              </div>
+              {picker.total === 0 ? (
+                <div className="py-10 text-center text-ink-soft">
+                  <Package className="size-8 mx-auto text-ink-soft/40 mb-2" />
+                  <p className="font-display text-base text-ink font-medium">
+                    {query.trim() ? "Tidak ada barang yang cocok" : "Belum ada barang di katalog"}
+                  </p>
+                  <p className="text-xs mt-1">
+                    {query.trim()
+                      ? "Coba kata kunci lain atau bersihkan pencarian."
+                      : "Daftarkan barang terlebih dahulu di menu Persediaan sebelum opname."}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <ul className="divide-y divide-rule/60">
+                    {picker.visible.map((it) => {
+                      const checked = selectedIds.has(it.id);
+                      return (
+                        <li key={it.id} className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-canvas/60 transition-colors">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => toggleSelect(it.id)}
+                            aria-label={`Pilih ${it.name}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleSelect(it.id)}
+                            className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-xs font-medium text-ink">{it.name}</span>
+                              <span className="block text-[11px] font-mono text-ink-soft">{it.code}</span>
+                            </span>
+                            <span className="tnum shrink-0 font-mono text-[11px] text-ink-soft">
+                              {Number(it.currentQty).toLocaleString("id-ID")} {it.unit}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <p className="tnum text-[11px] text-ink-soft">
+                      Menampilkan {picker.total === 0 ? 0 : picker.startIndex + 1}–
+                      {Math.min(picker.startIndex + picker.visible.length, picker.total)} dari{" "}
+                      {picker.total} barang · {selectedIds.size} dipilih
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={picker.page <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        aria-label="Halaman sebelumnya"
+                        className="h-8 w-8 rounded-lg p-0"
+                      >
+                        <ChevronLeft className="size-4" />
+                      </Button>
+                      <span className="tnum min-w-16 text-center text-[11px] font-medium text-ink-soft">
+                        {picker.page} / {picker.totalPages}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={picker.page >= picker.totalPages}
+                        onClick={() => setPage((p) => Math.min(picker.totalPages, p + 1))}
+                        aria-label="Halaman berikutnya"
+                        className="h-8 w-8 rounded-lg p-0"
+                      >
+                        <ChevronRight className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </Reveal>
+      )}
+
+      {/* Langkah 2 — lembar hitung + ringkasan (hanya barang terpilih) */}
+      {step === 2 && (
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
         <Stagger className="flex flex-col gap-6" staggerDelay={0.07}>
           {/* Section 1 — Parameter Pelaksanaan */}
@@ -260,10 +529,10 @@ export function OpnameFormClient({ items }: Props) {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="font-display text-base text-ink">Lembar Hitung Barang</CardTitle>
-                    <CardDescription>Masukkan angka aktual fisik gudang untuk setiap SKU terdaftar.</CardDescription>
+                    <CardDescription>Masukkan angka aktual fisik gudang untuk setiap SKU terpilih.</CardDescription>
                   </div>
                   <Badge variant="outline" className="text-xs font-mono bg-canvas border-rule">
-                    {items.length} SKU
+                    {activeItems.length} SKU
                   </Badge>
                 </div>
               </CardHeader>
@@ -281,7 +550,7 @@ export function OpnameFormClient({ items }: Props) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-rule/60">
-                      {items.length === 0 ? (
+                      {activeItems.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="py-12 text-center text-ink-soft">
                             <Package className="size-8 mx-auto text-ink-soft/40 mb-2" />
@@ -290,7 +559,7 @@ export function OpnameFormClient({ items }: Props) {
                           </td>
                         </tr>
                       ) : (
-                        items.map((it) => {
+                        activeItems.map((it) => {
                           const sysQty = Number(it.currentQty);
                           const physQty = counts[it.id]?.physicalQty ?? sysQty;
                           const diffQty = physQty - sysQty;
@@ -454,6 +723,7 @@ export function OpnameFormClient({ items }: Props) {
           </Card>
         </aside>
       </div>
+      )}
     </form>
   );
 }
