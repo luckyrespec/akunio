@@ -18,6 +18,7 @@ import { matchBankTransactions } from "@/core/reconciliation/matcher";
 import { createBankFeeJournal, createBankInterestJournal } from "@/server/reconciliation/quick-journal";
 import { listContactsRepo } from "@/server/db/repos/contacts.repo";
 import { listInvoicesRepo } from "@/server/db/repos/invoices.repo";
+import { toMinor } from "@/server/db/repos/journals.repo";
 
 export async function startReconciliationSessionAction(formData: FormData) {
   try {
@@ -52,7 +53,7 @@ export async function startReconciliationSessionAction(formData: FormData) {
         referenceNumber: tx.referenceNumber ?? null,
       }));
     } else if (manualClosingBalanceStr) {
-      closingBalanceMinor = BigInt(Math.round(parseFloat(manualClosingBalanceStr) * 100));
+      closingBalanceMinor = toMinor(manualClosingBalanceStr);
     }
 
     const session = await createReconciliationRepo(db, ctx.orgId, {
