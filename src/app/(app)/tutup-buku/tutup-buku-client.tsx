@@ -581,7 +581,8 @@ export function TutupBukuClient({
           </CardHeader>
           <CardContent className="pt-2 space-y-3 text-xs">
             <p className="text-ink-soft leading-relaxed">
-              Pada penutupan buku akhir tahun (Desember), sistem otomatis menolkan seluruh akun nominal (Pendapatan & Beban) dan memindahkan saldo laba/rugi bersih ke akun Laba Ditahan.
+              Pada penutupan buku akhir tahun (Desember), sistem otomatis menolkan seluruh akun nominal (Pendapatan &amp; Beban, termasuk saldo abnormal dan Prive 33xx) dan memindahkan saldo laba/rugi bersih ke akun Laba Ditahan.
+              Catatan: L/R Desember ≈ nol pasca tutup — lihat Laba Ditahan.
             </p>
             <div className="max-w-md space-y-1.5">
               <label className="font-medium text-ink text-xs">Pilih Akun Laba Ditahan (Retained Earnings)</label>

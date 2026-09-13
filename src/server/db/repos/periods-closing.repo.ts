@@ -1,6 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Queryable } from "./queryable";
-import { fiscalPeriods, accounts } from "../schema/org";
+import { fiscalPeriods, accounts, organizations } from "../schema/org";
 import { journalEntries, journalLines } from "../schema/journal";
 import { aiDrafts } from "../schema/ai";
 import { bankReconciliations } from "../schema/reconciliation";
@@ -114,7 +114,6 @@ export async function closePeriod(
     periodName: string; // YYYY-MM
     actorEmail: string;
     isYearEnd?: boolean;
-    incomeSummaryAccountId?: string;
     retainedEarningsAccountId?: string;
   },
 ) {
@@ -123,9 +122,21 @@ export async function closePeriod(
     periodName,
     actorEmail,
     isYearEnd = periodName.endsWith("-12"),
-    incomeSummaryAccountId,
     retainedEarningsAccountId,
   } = params;
+
+  const [org] = await q
+    .select({ fiscalYearStartMonth: organizations.fiscalYearStartMonth })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
+  // Engine tutup tahun berasumsi tahun kalender Jan–Des (agregat 12 periode
+  // "YYYY-01".."YYYY-12", penutup di Desember). Fiskal non-Januari di luar
+  // lingkup: tolak eksplisit, bukan tutup diam-diam yang salah.
+  if (isYearEnd && (org?.fiscalYearStartMonth ?? 1) !== 1) {
+    throw new Error("FISKAL_NON_KALENDER_BELUM_DIDUKUNG");
+  }
 
   const [period] = await q
     .select()
@@ -136,12 +147,35 @@ export async function closePeriod(
   if (!period) throw new Error("PERIODE_TIDAK_DITEMUKAN");
   if (period.status !== "OPEN") throw new Error("PERIODE_SUDAH_DITUTUP");
 
+  // Guard server: periode yang belum siap (draf menggantung, rekonsiliasi
+  // belum klop, dsb.) tidak boleh ditutup walau UI sudah me-disable tombol.
+  const readiness = await evaluatePeriodReadiness(q, orgId, periodName);
+  if (!readiness.isReady) {
+    const blockers = Object.values(readiness.items)
+      .filter((i) => !i.passed)
+      .map((i) => i.title)
+      .join("; ");
+    throw new Error(`BELUM_SIAP: ${blockers}`);
+  }
+
   let closingJournalId: string | null = null;
 
   // If year-end, generate and post closing entries to Retained Earnings
   if (isYearEnd && retainedEarningsAccountId) {
-    // Find all revenues and expenses for the entire year
+    // Agregat seluruh akun nominal setahun via periode fiskal tahun itu
+    // (bukan LIKE pada kolom date — tak ada operator LIKE untuk date di PG).
     const yearPrefix = periodName.slice(0, 4);
+
+    const yearPeriods = await q
+      .select({ id: fiscalPeriods.id })
+      .from(fiscalPeriods)
+      .where(
+        and(
+          eq(fiscalPeriods.orgId, orgId),
+          sql`left(${fiscalPeriods.name}, 4) = ${yearPrefix}`,
+        ),
+      );
+    const yearPeriodIds = yearPeriods.map((p) => p.id);
 
     const revRows = await q
       .select({
@@ -156,7 +190,7 @@ export async function closePeriod(
           eq(journalLines.orgId, orgId),
           eq(accounts.type, "PENDAPATAN"),
           eq(journalEntries.status, "POSTED"),
-          sql`${journalEntries.entryDate} LIKE ${`${yearPrefix}%`}`,
+          inArray(journalEntries.periodId, yearPeriodIds),
         ),
       )
       .groupBy(journalLines.accountId);
@@ -174,25 +208,44 @@ export async function closePeriod(
           eq(journalLines.orgId, orgId),
           eq(accounts.type, "BEBAN"),
           eq(journalEntries.status, "POSTED"),
-          sql`${journalEntries.entryDate} LIKE ${`${yearPrefix}%`}`,
+          inArray(journalEntries.periodId, yearPeriodIds),
         ),
       )
       .groupBy(journalLines.accountId);
 
-    const revenueBalances = revRows.map((r) => ({
-      accountId: r.accountId,
-      balanceCreditMinor: toMinor(r.creditTotal),
-    }));
-
-    const expenseBalances = expRows.map((e) => ({
-      accountId: e.accountId,
-      balanceDebitMinor: toMinor(e.debitTotal),
-    }));
+    // Prive pemilik (EKUITAS 33xx, normal debit) ikut ditutup ke Laba Ditahan.
+    const priveRows = await q
+      .select({
+        accountId: journalLines.accountId,
+        debitTotal: sql<string>`COALESCE(SUM(${journalLines.debit} - ${journalLines.credit}), 0)`,
+      })
+      .from(journalLines)
+      .innerJoin(accounts, eq(journalLines.accountId, accounts.id))
+      .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
+      .where(
+        and(
+          eq(journalLines.orgId, orgId),
+          eq(accounts.type, "EKUITAS"),
+          sql`${accounts.code} LIKE '33%'`,
+          eq(journalEntries.status, "POSTED"),
+          inArray(journalEntries.periodId, yearPeriodIds),
+        ),
+      )
+      .groupBy(journalLines.accountId);
 
     const closingLines = generateYearEndClosingLines({
-      revenueBalances,
-      expenseBalances,
-      incomeSummaryAccountId: incomeSummaryAccountId ?? retainedEarningsAccountId,
+      revenueBalances: revRows.map((r) => ({
+        accountId: r.accountId,
+        balanceMinor: toMinor(r.creditTotal),
+      })),
+      expenseBalances: expRows.map((e) => ({
+        accountId: e.accountId,
+        balanceMinor: toMinor(e.debitTotal),
+      })),
+      drawingsBalances: priveRows.map((p) => ({
+        accountId: p.accountId,
+        balanceMinor: toMinor(p.debitTotal),
+      })),
       retainedEarningsAccountId,
     });
 

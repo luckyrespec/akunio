@@ -40,7 +40,6 @@ describe("Period Closing Engines", () => {
   });
 
   describe("Year-End Closing Journal Generator", () => {
-    const incomeSummaryAccountId = "acc-3999-ikhtisar";
     const retainedEarningsAccountId = "acc-3200-laba-ditahan";
 
     it("generates balanced closing lines zeroing out revenues and expenses into retained earnings (Net Profit)", () => {
@@ -49,14 +48,14 @@ describe("Period Closing Engines", () => {
       // Laba Bersih = 20.000.000 (2.000.000.000 sen) -> Kredit Laba Ditahan
       const lines = generateYearEndClosingLines({
         revenueBalances: [
-          { accountId: "acc-4110", balanceCreditMinor: 4000000000n },
-          { accountId: "acc-4210", balanceCreditMinor: 1000000000n },
+          { accountId: "acc-4110", balanceMinor: 4000000000n },
+          { accountId: "acc-4210", balanceMinor: 1000000000n },
         ],
         expenseBalances: [
-          { accountId: "acc-5110", balanceDebitMinor: 2000000000n },
-          { accountId: "acc-6110", balanceDebitMinor: 1000000000n },
+          { accountId: "acc-5110", balanceMinor: 2000000000n },
+          { accountId: "acc-6110", balanceMinor: 1000000000n },
         ],
-        incomeSummaryAccountId,
+        drawingsBalances: [],
         retainedEarningsAccountId,
       });
 
@@ -86,17 +85,48 @@ describe("Period Closing Engines", () => {
       // Pendapatan: 10jt, Beban: 15jt -> Rugi 5jt (Debit Laba Ditahan)
       const lines = generateYearEndClosingLines({
         revenueBalances: [
-          { accountId: "acc-4110", balanceCreditMinor: 1000000000n },
+          { accountId: "acc-4110", balanceMinor: 1000000000n },
         ],
         expenseBalances: [
-          { accountId: "acc-5110", balanceDebitMinor: 1500000000n },
+          { accountId: "acc-5110", balanceMinor: 1500000000n },
         ],
-        incomeSummaryAccountId,
+        drawingsBalances: [],
         retainedEarningsAccountId,
       });
 
       const reDebit = lines.find((l) => l.accountId === retainedEarningsAccountId);
       expect(reDebit?.debitMinor).toBe(500000000n);
+
+      const totalDebit = lines.reduce((sum, l) => sum + l.debitMinor, 0n);
+      const totalCredit = lines.reduce((sum, l) => sum + l.creditMinor, 0n);
+      expect(totalDebit).toBe(totalCredit);
+    });
+
+    it("closes abnormal balances and prive 33xx into retained earnings", () => {
+      // Beban bersaldo kredit 5jt (abnormal) + prive debit 10jt;
+      // pendapatan 100jt → Laba Ditahan +95jt.
+      const lines = generateYearEndClosingLines({
+        revenueBalances: [
+          { accountId: "acc-4110", balanceMinor: 10000000000n },
+        ],
+        expenseBalances: [
+          { accountId: "acc-5900", balanceMinor: -500000000n },
+        ],
+        drawingsBalances: [
+          { accountId: "acc-3300", balanceMinor: 1000000000n },
+        ],
+        retainedEarningsAccountId,
+      });
+
+      // Beban abnormal ditutup di sisi debet, prive di sisi kredit.
+      const expLine = lines.find((l) => l.accountId === "acc-5900");
+      expect(expLine?.debitMinor).toBe(500000000n);
+      expect(expLine?.creditMinor).toBe(0n);
+      const priveLine = lines.find((l) => l.accountId === "acc-3300");
+      expect(priveLine?.creditMinor).toBe(1000000000n);
+
+      const reLine = lines.find((l) => l.accountId === retainedEarningsAccountId);
+      expect(reLine?.creditMinor).toBe(9500000000n);
 
       const totalDebit = lines.reduce((sum, l) => sum + l.debitMinor, 0n);
       const totalCredit = lines.reduce((sum, l) => sum + l.creditMinor, 0n);

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
@@ -89,14 +89,51 @@ export async function reopenPeriodAction(periodId: string): Promise<ActionResult
   try {
     const ctx = await requireContext(["OWNER"]); // reopening is owner-only per spec
     await db.transaction(async (tx) => {
-      const period = await setPeriodStatus(tx, ctx.orgId, periodId, "OPEN");
+      const { fiscalPeriods } = await import("@/server/db/schema/org");
+      const [period] = await tx
+        .select()
+        .from(fiscalPeriods)
+        .where(and(eq(fiscalPeriods.orgId, ctx.orgId), eq(fiscalPeriods.id, periodId)))
+        .limit(1);
+      if (!period) throw new Error("PERIODE_TIDAK_DITEMUKAN");
+
+      // Desember yang sudah tutup tahun tidak boleh dibuka kembali selama
+      // jurnal penutupnya masih aktif — buka kuncinya dengan mereversal
+      // jurnal penutup dulu (agar L/R tak hidup lagi diam-diam).
+      if (period.name.endsWith("-12")) {
+        const { journalEntries } = await import("@/server/db/schema/journal");
+        const { findReversalEntries } = await import("@/server/db/repos/journals.repo");
+        const year = period.name.slice(0, 4);
+        const [closing] = await tx
+          .select({ id: journalEntries.id })
+          .from(journalEntries)
+          .where(
+            and(
+              eq(journalEntries.orgId, ctx.orgId),
+              eq(journalEntries.periodId, period.id),
+              eq(journalEntries.idempotencyKey, `closing-${ctx.orgId}-${year}`),
+              eq(journalEntries.status, "POSTED"),
+            ),
+          )
+          .limit(1);
+        if (closing) {
+          const reversals = await findReversalEntries(tx, ctx.orgId, closing.id);
+          if (reversals.length === 0) {
+            throw new Error(
+              "TUTUP_BUKU_BELUM_REVERSAL: reversal jurnal penutup akhir tahun dulu sebelum membuka kembali Desember",
+            );
+          }
+        }
+      }
+
+      const reopened = await setPeriodStatus(tx, ctx.orgId, periodId, "OPEN");
       await appendAudit(tx, {
         orgId: ctx.orgId,
         actor: ctx.userEmail,
         action: "PERIOD_REOPEN",
         subjectType: "fiscal_period",
         subjectId: periodId,
-        data: { name: period.name },
+        data: { name: reopened.name },
       });
     });
     revalidatePath("/pengaturan");
@@ -229,7 +266,6 @@ export async function evaluatePeriodReadinessAction(periodName: string) {
 export async function executePeriodCloseAction(payload: {
   periodName: string;
   isYearEnd?: boolean;
-  incomeSummaryAccountId?: string;
   retainedEarningsAccountId?: string;
 }) {
   try {
@@ -244,7 +280,6 @@ export async function executePeriodCloseAction(payload: {
         periodName: payload.periodName,
         actorEmail: ctx.userEmail,
         isYearEnd: payload.isYearEnd,
-        incomeSummaryAccountId: payload.incomeSummaryAccountId,
         retainedEarningsAccountId: payload.retainedEarningsAccountId,
       });
 
