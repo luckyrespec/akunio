@@ -237,4 +237,48 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("opname: jalur harga modal Rp
       ),
     ).rejects.toThrow("JURNAL_SUDAH_DIPOSTING");
   });
+
+  it("opname Rp0 di periode CLOSED ditolak", async () => {
+    const inv = await import("@/server/db/repos/inventory.repo");
+    const { db } = await import("@/server/db");
+    const periods = await import("@/server/db/repos/periods.repo");
+
+    const item = await db.transaction((tx) =>
+      inv.createInventoryItem(tx as never, orgId, {
+        code: "ZER-CLOSED",
+        name: "Stok Nol Periode Tutup",
+        unit: "Pcs",
+        initialQty: 0,
+        initialCostMinor: 0n,
+      }),
+    );
+    // Bulan Agustus belum dipakai test lain di file ini.
+    const opnameDate = `${year}-08-10`;
+    const opname = await db.transaction((tx) =>
+      inv.createStockOpname(tx as never, orgId, {
+        opnameDate,
+        items: [{ itemId: item.id, physicalQty: 5 }],
+      }),
+    );
+    expect(opname.totalDifferenceValueMinor).toBe(0n);
+
+    // Kunci periode cara terkecil: set status CLOSED langsung (bukan
+    // closePeriod FULL yang menutup tahun + menulis jurnal).
+    const period = await db.transaction((tx) =>
+      periods.findPeriodByDate(tx as never, orgId, opnameDate),
+    );
+    await db.transaction((tx) =>
+      periods.setPeriodStatus(tx as never, orgId, period!.id, "CLOSED"),
+    );
+
+    await expect(
+      db.transaction((tx) =>
+        inv.generateAdjustmentJournalDraft(tx as never, orgId, opname.id),
+      ),
+    ).rejects.toThrow("PERIODE_TUTUP");
+
+    await db.transaction((tx) =>
+      periods.setPeriodStatus(tx as never, orgId, period!.id, "OPEN"),
+    );
+  });
 });
