@@ -15,7 +15,8 @@ import { journalEntries, journalLines } from "../schema/journal";
 import { createDraftJournalEntry, toMinor } from "./journals.repo";
 import { nextSkuCodes } from "./inventory-sku";
 import { findPeriodByDate } from "./periods.repo";
-import { calculateStockDifference } from "@/core/inventory/valuation";
+import { calculateStockDifference, consumeFifoLayers } from "@/core/inventory/valuation";
+import type { FifoLayer } from "@/core/inventory/types";
 import { isRagTenantIndexingEnabled } from "@/server/ai/rag-worker";
 
 export interface CreateItemInput {
@@ -450,6 +451,43 @@ export async function listItemTransactions(q: Queryable, orgId: string, itemId: 
     .orderBy(desc(inventoryTransactions.createdAt));
 }
 
+/**
+ * Nilai defisit opname untuk org FIFO: konsumsi layer tertua lebih dulu
+ * (consumeFifoLayers di atas snapshot tanpa tulis). Bila layer tak mencakup
+ * seluruh defisit (data lama), sisa dihargai rata-rata mengikuti kebijakan
+ * shortfall penjualan. Selalu positif (nilai absolut).
+ */
+async function valueFifoDeficit(
+  q: Queryable,
+  orgId: string,
+  itemId: string,
+  deficitQty: number,
+  fallbackUnitCostMinor: bigint,
+): Promise<bigint> {
+  const rows = await q
+    .select()
+    .from(inventoryLayers)
+    .where(and(eq(inventoryLayers.orgId, orgId), eq(inventoryLayers.itemId, itemId)))
+    .orderBy(asc(inventoryLayers.date), asc(inventoryLayers.createdAt));
+  const layers: FifoLayer[] = rows.map((l) => ({
+    id: l.id,
+    itemId: l.itemId,
+    date: l.date,
+    initialQty: Number(l.initialQty),
+    remainingQty: Number(l.remainingQty),
+    unitCostMinor: l.unitCostMinor,
+    referenceType: l.referenceType as FifoLayer["referenceType"],
+    referenceId: l.referenceId,
+  }));
+  const available = layers.reduce((a, l) => a + l.remainingQty, 0);
+  if (available + 1e-9 >= deficitQty) {
+    return consumeFifoLayers(layers, deficitQty).consumedCostMinor;
+  }
+  let value = 0n;
+  for (const l of layers) value += costForQty(l.unitCostMinor, l.remainingQty);
+  return value + costForQty(fallbackUnitCostMinor, deficitQty - available);
+}
+
 export async function createStockOpname(
   q: Queryable,
   orgId: string,
@@ -496,6 +534,9 @@ export async function createStockOpname(
 
   let totalDiffValueMinor = 0n;
 
+  const settings = await getInventorySettings(q, orgId);
+  const isFifo = settings?.valuationMethod === "FIFO";
+
   for (const it of data.items) {
     if (!Number.isFinite(it.physicalQty) || it.physicalQty < 0) {
       throw new Error("FISIK_TIDAK_VALID: kuantitas fisik harus angka >= 0");
@@ -506,7 +547,19 @@ export async function createStockOpname(
     const sysQty = Number(item.currentQty);
     const unitCostMinor = item.averageCostMinor;
     const diff = calculateStockDifference(sysQty, it.physicalQty, unitCostMinor);
-    totalDiffValueMinor += diff.differenceValueMinor;
+    let differenceValueMinor = diff.differenceValueMinor;
+    if (isFifo && diff.isDeficit) {
+      // FIFO: defisit dinilai per-layer tertua (tiruan consumeFifoLayers di
+      // atas snapshot, tanpa tulis) agar jurnal == nilai layer yang hilang.
+      differenceValueMinor = -await valueFifoDeficit(
+        q,
+        orgId,
+        item.id,
+        Math.abs(diff.differenceQty),
+        unitCostMinor,
+      );
+    }
+    totalDiffValueMinor += differenceValueMinor;
 
     await q.insert(stockOpnameItems).values({
       opnameId: opname.id,
@@ -515,7 +568,7 @@ export async function createStockOpname(
       physicalQty: qtyToDb(it.physicalQty),
       differenceQty: qtyToDb(diff.differenceQty),
       unitCostMinor,
-      differenceValueMinor: diff.differenceValueMinor,
+      differenceValueMinor,
       reason: it.reason ?? null,
     });
   }
@@ -726,6 +779,8 @@ async function applyOpnameStockToItems(
   },
 ): Promise<string> {
   let layerShortfall = "";
+  const applySettings = await getInventorySettings(q, orgId);
+  const applyIsFifo = applySettings?.valuationMethod === "FIFO";
   for (const line of opname.items) {
     const item = await getInventoryItem(q, orgId, line.itemId);
     if (!item) throw new Error(`ITEM_TIDAK_DITEMUKAN: ${line.itemId}`);
@@ -744,8 +799,48 @@ async function applyOpnameStockToItems(
     if (Math.abs(diffQty) < 1e-9) continue;
 
     const unitCostMinor = line.unitCostMinor;
-    const newTotalCostMinor = costForQty(unitCostMinor, physicalQty);
-    const diffValueMinor = costForQty(unitCostMinor, diffQty);
+    let newTotalCostMinor = costForQty(unitCostMinor, physicalQty);
+    let absDiffValueMinor = costForQty(unitCostMinor, diffQty);
+    let txnUnitCostMinor = unitCostMinor;
+
+    if (diffQty < 0) {
+      // Defisit: kurangi layer FIFO tertua lebih dulu (sumber kebenaran layer).
+      let toDeduct = Math.abs(diffQty);
+      let consumedCostMinor = 0n;
+      const layers = await q
+        .select()
+        .from(inventoryLayers)
+        .where(and(eq(inventoryLayers.orgId, orgId), eq(inventoryLayers.itemId, item.id)))
+        .orderBy(asc(inventoryLayers.date), asc(inventoryLayers.createdAt));
+      for (const layer of layers) {
+        if (toDeduct <= 1e-9) break;
+        const remaining = Number(layer.remainingQty);
+        if (remaining <= 1e-9) continue;
+        const take = Math.min(remaining, toDeduct);
+        await q.update(inventoryLayers)
+          .set({ remainingQty: qtyToDb(remaining - take) })
+          .where(eq(inventoryLayers.id, layer.id));
+        consumedCostMinor += costForQty(layer.unitCostMinor, take);
+        toDeduct -= take;
+      }
+      if (toDeduct > 1e-9) {
+        // Layer tidak mencakup seluruh defisit (inkonsistensi data lama):
+        // catat shortfall di catatan opname agar terlihat, tanpa membuat qty negatif.
+        // Sisa shortfall dihargai rata-rata mengikuti kebijakan shortfall penjualan.
+        consumedCostMinor += costForQty(unitCostMinor, toDeduct);
+        layerShortfall = `${layerShortfall}${layerShortfall ? "; " : ""}${item.code} kurang layer ${toDeduct}`;
+      }
+      if (applyIsFifo) {
+        // FIFO: nilai buku mengikuti layer yang benar-benar terpakai,
+        // sejajar dengan createStockOpname (jurnal == nilai layer).
+        newTotalCostMinor = item.totalCostMinor - consumedCostMinor;
+        absDiffValueMinor = consumedCostMinor;
+        const absDiff = Math.abs(diffQty);
+        txnUnitCostMinor = absDiff > 0
+          ? (consumedCostMinor * 10000n) / BigInt(Math.round(absDiff * 10000))
+          : unitCostMinor;
+      }
+    }
 
     await q.update(inventoryItems)
       .set({
@@ -762,8 +857,8 @@ async function applyOpnameStockToItems(
       date: opname.opnameDate,
       type: "ADJUSTMENT",
       qty: qtyToDb(diffQty),
-      unitCostMinor,
-      totalCostMinor: diffQty < 0 ? -diffValueMinor : diffValueMinor,
+      unitCostMinor: txnUnitCostMinor,
+      totalCostMinor: diffQty < 0 ? -absDiffValueMinor : absDiffValueMinor,
       resultingQty: qtyToDb(physicalQty),
       resultingTotalCostMinor: newTotalCostMinor,
       sourceType: "OPNAME",
@@ -782,30 +877,8 @@ async function applyOpnameStockToItems(
         referenceType: "ADJUSTMENT",
         referenceId: opname.id,
       });
-    } else {
-      // Defisit: kurangi layer FIFO tertua lebih dulu.
-      let toDeduct = Math.abs(diffQty);
-      const layers = await q
-        .select()
-        .from(inventoryLayers)
-        .where(and(eq(inventoryLayers.orgId, orgId), eq(inventoryLayers.itemId, item.id)))
-        .orderBy(asc(inventoryLayers.date), asc(inventoryLayers.createdAt));
-      for (const layer of layers) {
-        if (toDeduct <= 1e-9) break;
-        const remaining = Number(layer.remainingQty);
-        if (remaining <= 1e-9) continue;
-        const take = Math.min(remaining, toDeduct);
-        await q.update(inventoryLayers)
-          .set({ remainingQty: qtyToDb(remaining - take) })
-          .where(eq(inventoryLayers.id, layer.id));
-        toDeduct -= take;
-      }
-      if (toDeduct > 1e-9) {
-        // Layer tidak mencakup seluruh defisit (inkonsistensi data lama):
-        // catat shortfall di catatan opname agar terlihat, tanpa membuat qty negatif.
-        layerShortfall = `${layerShortfall}${layerShortfall ? "; " : ""}${item.code} kurang layer ${toDeduct}`;
-      }
     }
+    // Defisit: layer sudah dikurangi blok pengurang di atas sebelum pembaruan item.
   }
   return layerShortfall;
 }
