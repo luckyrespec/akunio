@@ -155,6 +155,13 @@
 			"when": 1788900005000,
 			"tag": "0021_seq_counters",
 			"breakpoints": true
+		},
+		{
+			"idx": 22,
+			"version": "7",
+			"when": 1788900006000,
+			"tag": "0022_reversal_fk",
+			"breakpoints": true
 		}
 	]
 }

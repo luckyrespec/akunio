@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   pgTable, uuid, text, integer, numeric, date,
-  timestamp, uniqueIndex, primaryKey, index, check,
+  timestamp, uniqueIndex, primaryKey, index, check, foreignKey,
 } from "drizzle-orm/pg-core";
 import { organizations, accounts, fiscalPeriods } from "./org";
 
@@ -33,6 +33,7 @@ export const journalEntries = pgTable(
     uniqueIndex("je_org_number_uq").on(t.orgId, t.number),
     uniqueIndex("je_org_idem_uq").on(t.orgId, t.idempotencyKey),
     index("je_org_date_idx").on(t.orgId, t.entryDate),
+    foreignKey({ columns: [t.reversalOfId], foreignColumns: [t.id], name: "je_reversal_of_fk" }),
   ],
 );
 

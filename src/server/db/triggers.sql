@@ -4,30 +4,50 @@ BEGIN
   RAISE EXCEPTION 'IMMUTABLE_POSTED: jurnal yang sudah diposting tidak boleh diubah';
 END $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS je_no_update ON journal_entries;
 CREATE TRIGGER je_no_update BEFORE UPDATE ON journal_entries
   FOR EACH ROW WHEN (OLD.status = 'POSTED')
   EXECUTE FUNCTION forbid_posted_mutation();
 
+DROP TRIGGER IF EXISTS je_no_delete ON journal_entries;
 CREATE TRIGGER je_no_delete BEFORE DELETE ON journal_entries
   FOR EACH ROW WHEN (OLD.status = 'POSTED')
   EXECUTE FUNCTION forbid_posted_mutation();
 
 -- Lines of a POSTED entry are frozen too (draft lines stay editable).
+-- UPDATE checks BOTH sides: moving a line OUT of a POSTED entry
+-- (OLD.entry_id) or INTO one (NEW.entry_id) is rejected. No domain code
+-- touches journal_lines.entry_id after creation, but the DB must not
+-- rely on that.
 CREATE OR REPLACE FUNCTION guard_journal_lines() RETURNS trigger AS $$
-DECLARE entry_status TEXT;
+DECLARE
+  old_status TEXT;
+  new_status TEXT;
 BEGIN
-  SELECT status INTO entry_status FROM journal_entries
-    WHERE id = COALESCE(NEW.entry_id, OLD.entry_id);
-  IF entry_status = 'POSTED' THEN
-    RAISE EXCEPTION 'IMMUTABLE_POSTED: baris jurnal terkunci';
+  IF TG_OP = 'INSERT' THEN
+    SELECT status INTO new_status FROM journal_entries
+      WHERE id = NEW.entry_id;
+    IF new_status = 'POSTED' THEN
+      RAISE EXCEPTION 'IMMUTABLE_POSTED: baris jurnal terkunci';
+    END IF;
+  ELSIF TG_OP = 'DELETE' THEN
+    SELECT status INTO old_status FROM journal_entries
+      WHERE id = OLD.entry_id;
+    IF old_status = 'POSTED' THEN
+      RAISE EXCEPTION 'IMMUTABLE_POSTED: baris jurnal terkunci';
+    END IF;
+  ELSE
+    SELECT status INTO old_status FROM journal_entries
+      WHERE id = OLD.entry_id;
+    SELECT status INTO new_status FROM journal_entries
+      WHERE id = NEW.entry_id;
+    IF old_status = 'POSTED' OR new_status = 'POSTED' THEN
+      RAISE EXCEPTION 'IMMUTABLE_POSTED: baris jurnal terkunci';
+    END IF;
   END IF;
   RETURN NULL;
 END $$ LANGUAGE plpgsql;
 
--- NOTE: jl_immutable does NOT guard re-parenting a line OUT of a posted
--- entry: UPDATE journal_lines SET entry_id = <draft> passes because
--- guard_journal_lines coalesces to NEW.entry_id (the draft). Unreachable via
--- domain code today — no code path touches journal_lines.entry_id after
--- creation.
+DROP TRIGGER IF EXISTS jl_immutable ON journal_lines;
 CREATE TRIGGER jl_immutable AFTER INSERT OR UPDATE OR DELETE ON journal_lines
   FOR EACH ROW EXECUTE FUNCTION guard_journal_lines();

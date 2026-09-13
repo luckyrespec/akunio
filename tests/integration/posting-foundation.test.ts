@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { makeOrg, truncateAll } from "./helpers";
 import { db } from "@/server/db";
@@ -63,5 +64,71 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("penomoran faktur anti-race",
     const r = await admin.query(
       `SELECT tablename FROM pg_policies WHERE tablename IN ('invoice_seq_counters','ast_seq_counters')`);
     expect(r.rows.map((x) => x.tablename).sort()).toEqual(["ast_seq_counters", "invoice_seq_counters"]);
+  });
+});
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("tutup loophole trigger + FK reversal", () => {
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+  const year = new Date().getFullYear();
+
+  beforeAll(async () => {
+    await truncateAll();
+  });
+
+  afterAll(async () => {
+    await truncateAll();
+    await admin.end();
+  });
+
+  async function seedPostedLinePlusDraft(): Promise<{ postedLineId: string; draftEntryId: string }> {
+    const { orgId } = await makeOrg("Loophole Co");
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+    const rows = await admin.query<{ id: string; code: string }>(
+      `SELECT id, code FROM accounts WHERE org_id=$1`, [orgId]);
+    const byCode = Object.fromEntries(rows.rows.map((r) => [r.code, r.id]));
+    // 1110 + 4200 selalu leaf di semua varian COA (bukan GROUP).
+    const kas = byCode["1110"];
+    const pendapatan = byCode["4200"];
+    const { postJournalEntry, createDraftJournalEntry } = await import("@/server/db/repos/journals.repo");
+    const { db } = await import("@/server/db");
+    const balanced = (memo: string, dateISO: string) => ({
+      dateISO, memo,
+      lines: [
+        { accountId: kas, debitMinor: 1_000_000n, creditMinor: 0n },
+        { accountId: pendapatan, debitMinor: 0n, creditMinor: 1_000_000n },
+      ],
+    });
+    const first = await db.transaction((tx) =>
+      postJournalEntry(tx as never, orgId, "tester@test.id", balanced("posted satu", `${year}-02-10`) as never));
+    await db.transaction((tx) =>
+      postJournalEntry(tx as never, orgId, "tester@test.id", balanced("posted dua", `${year}-02-10`) as never));
+    const draft = await db.transaction((tx) =>
+      createDraftJournalEntry(tx as never, orgId, balanced("draf tujuan", `${year}-02-11`) as never));
+    const line = await admin.query<{ id: string }>(
+      `SELECT id FROM journal_lines WHERE entry_id=$1 ORDER BY position LIMIT 1`, [first.id]);
+    return { postedLineId: line.rows[0].id, draftEntryId: draft.id };
+  }
+
+  it("pindah baris POSTED ke draf ditolak trigger", async () => {
+    const { postedLineId, draftEntryId } = await seedPostedLinePlusDraft();
+    await expect(admin.query(
+      `UPDATE journal_lines SET entry_id=$2 WHERE id=$1`, [postedLineId, draftEntryId],
+    )).rejects.toThrow();
+  });
+
+  async function postRandomReversalWithBogusTarget(orgId: string): Promise<void> {
+    const p = await admin.query<{ id: string }>(
+      `SELECT id FROM fiscal_periods WHERE org_id=$1 ORDER BY name LIMIT 1`, [orgId]);
+    await admin.query(
+      `INSERT INTO journal_entries (org_id, period_id, seq, number, entry_date, memo, status, reversal_of_id)
+       VALUES ($1, $2, 4242, 'JE-BOGUS-1', $3, 'reversal bogus', 'DRAFT', $4)`,
+      [orgId, p.rows[0].id, `${year}-02-12`, randomUUID()],
+    );
+  }
+
+  it("reversal_of_id tanpa target ditolak FK", async () => {
+    const { orgId } = await makeOrg("FK Co");
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+    await expect(postRandomReversalWithBogusTarget(orgId)).rejects.toThrow();
   });
 });
