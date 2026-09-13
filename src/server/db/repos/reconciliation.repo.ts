@@ -50,6 +50,7 @@ export async function createReconciliationRepo(
         and(
           eq(journalLines.orgId, orgId),
           eq(journalLines.accountId, input.bankAccountId),
+          eq(journalEntries.status, "POSTED"),
           lte(journalEntries.entryDate, input.statementDate)
         )
       );
@@ -244,6 +245,7 @@ export async function getUnmatchedLedgerLinesRepo(
   const conditions = [
     eq(journalLines.orgId, orgId),
     eq(journalLines.accountId, bankAccountId),
+    eq(journalEntries.status, "POSTED"),
   ];
 
   if (cutOffDate) {

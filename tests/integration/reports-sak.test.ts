@@ -140,3 +140,103 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("laporan SAK: akun kontra men
     expect(movementByCode(aggs, "3300")).toBe(-100_000n);
   });
 });
+
+// D2: draf kas (status DRAFT) harus diabaikan rekonsiliasi — saldo buku +
+// kandidat match hanya status='POSTED'. Tanpa filter POSTED, saldo buku
+// ikut menghitung draf (1_099_000n) dan draf muncul di unmatched.
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("rekonsiliasi POSTED-only", () => {
+  let orgId: string;
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+  let kas = "",
+    pendapatan = "";
+  const year = new Date().getFullYear();
+  const statementDate = `${year}-05-31`;
+
+  async function postCash(amountMinor: bigint) {
+    const { withOrg } = await import("@/server/db/repos/with-org");
+    const { createCashEntryRepo } = await import(
+      "@/server/db/repos/cash-bank.repo"
+    );
+    return withOrg(orgId, (tx) =>
+      createCashEntryRepo(
+        tx as never,
+        orgId,
+        "tester@test.id",
+        {
+          kind: "TERIMA",
+          entryDate: `${year}-05-01`,
+          cashAccountId: kas,
+          counterAccountId: pendapatan,
+          amountMinor,
+          memo: "Uji rekonsiliasi POSTED",
+        },
+        { post: true }
+      )
+    );
+  }
+
+  async function draftCash(amountMinor: bigint) {
+    const { withOrg } = await import("@/server/db/repos/with-org");
+    const { createCashEntryRepo } = await import(
+      "@/server/db/repos/cash-bank.repo"
+    );
+    return withOrg(orgId, (tx) =>
+      createCashEntryRepo(
+        tx as never,
+        orgId,
+        "tester@test.id",
+        {
+          kind: "TERIMA",
+          entryDate: `${year}-05-02`,
+          cashAccountId: kas,
+          counterAccountId: pendapatan,
+          amountMinor,
+          memo: "Uji rekonsiliasi DRAFT",
+        },
+        { post: false }
+      )
+    );
+  }
+
+  beforeAll(async () => {
+    await truncateAll();
+    orgId = (await makeOrg("PT Rekonsiliasi Posted")).orgId;
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+    const rows = await admin.query<{ id: string; code: string }>(
+      `SELECT id, code FROM accounts WHERE org_id=$1`,
+      [orgId]
+    );
+    const byCode = Object.fromEntries(rows.rows.map((r) => [r.code, r.id]));
+    kas = byCode["1110"];
+    pendapatan = byCode["4100"];
+  });
+  afterAll(async () => {
+    await admin.end();
+    await truncateAll();
+  });
+
+  it("draf kas diabaikan rekonsiliasi", async () => {
+    const posted = await postCash(100_000n);
+    const draft = await draftCash(999_000n);
+    const { db } = await import("@/server/db");
+    const {
+      createReconciliationRepo,
+      getUnmatchedLedgerLinesRepo,
+    } = await import("@/server/db/repos/reconciliation.repo");
+    const rec = await createReconciliationRepo(db as never, orgId, {
+      bankAccountId: kas,
+      statementDate,
+      statementBalanceMinor: 100_000n,
+    });
+    expect(rec.ledgerBalanceMinor).toBe(100_000n);
+    const unmatched = await getUnmatchedLedgerLinesRepo(
+      db as never,
+      orgId,
+      kas,
+      statementDate
+    );
+    const entryIds = unmatched.map((l) => l.entryId);
+    expect(entryIds).toContain(posted.journalEntryId);
+    expect(entryIds).not.toContain(draft.journalEntryId);
+  });
+});
