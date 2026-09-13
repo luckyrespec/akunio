@@ -782,6 +782,11 @@ export function FakturBaruClient({
                 {totals.taxMinor > 0n && <> + PPN {Money.fromMinor(totals.taxMinor).formatIdr()}</>}
                 {postToLedger ? " · akan diposting ke jurnal." : " · arsip saja, tanpa jurnal."}
               </p>
+              {recordingMethod === "PERIODIC" && isInvoice && (
+                <p className="mt-1.5 text-[11px] leading-relaxed text-ink-soft">
+                  Metode PERIODIC: HPP dihitung saat penyesuaian akhir tahun, sehingga laba kotor di sini belum final.
+                </p>
+              )}
             </CardContent>
           </Card>
 

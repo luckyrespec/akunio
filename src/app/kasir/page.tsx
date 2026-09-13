@@ -1,4 +1,6 @@
 import { requireContext } from "@/server/auth/guard";
+import { db } from "@/server/db";
+import { getInventorySettings } from "@/server/db/repos/inventory.repo";
 import { KasirShell } from "./_components/kasir-shell";
 import {
   getPosCashAccountsAction,
@@ -12,11 +14,12 @@ export const metadata = {
 };
 
 export default async function KasirPage() {
-  await requireContext(["OWNER", "ACCOUNTANT"]);
-  const [cashRes, catalogRes, shiftsRes] = await Promise.all([
+  const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+  const [cashRes, catalogRes, shiftsRes, invSettings] = await Promise.all([
     getPosCashAccountsAction(),
     getPosCatalogAction(),
     getOpenShiftsAction(),
+    getInventorySettings(db, ctx.orgId),
   ]);
   const error = !cashRes.ok ? cashRes.error : !catalogRes.ok ? catalogRes.error : !shiftsRes.ok ? shiftsRes.error : null;
 
@@ -27,5 +30,5 @@ export default async function KasirPage() {
       </p>
     );
   }
-  return <KasirShell cashAccounts={cashRes.data} catalog={catalogRes.data} shifts={shiftsRes.data} />;
+  return <KasirShell cashAccounts={cashRes.data} catalog={catalogRes.data} shifts={shiftsRes.data} recordingMethod={invSettings?.recordingMethod ?? "PERPETUAL"} />;
 }

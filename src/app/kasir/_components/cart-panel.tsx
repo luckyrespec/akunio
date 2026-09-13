@@ -44,6 +44,7 @@ export function CartPanel({
   loading,
   error,
   onSubmit,
+  recordingMethod,
 }: {
   cart: CartRow[];
   byId: Map<string, KasirCatalogItem>;
@@ -66,6 +67,7 @@ export function CartPanel({
   loading: boolean;
   error: string | null;
   onSubmit: () => void;
+  recordingMethod: "PERPETUAL" | "PERIODIC";
 }) {
   const count = cart.reduce((a, r) => a + r.qty, 0);
   const quickOptions = QUICK_CASH.filter((d) => d >= total).slice(0, 3);
@@ -269,6 +271,11 @@ export function CartPanel({
           <span className="text-xs text-ink-soft">Total bayar</span>
           <span className="tnum font-display text-xl font-bold text-ink">{Money.formatIdr(total)}</span>
         </div>
+        {recordingMethod === "PERIODIC" && (
+          <p className="text-[11px] leading-relaxed text-ink-soft">
+            Metode PERIODIC: HPP dihitung saat penyesuaian akhir tahun, sehingga laba kotor di sini belum final.
+          </p>
+        )}
         {error && <p data-testid="kasir-error" role="alert" className="text-xs font-medium text-red-600">{error}</p>}
         <button
           type="button"

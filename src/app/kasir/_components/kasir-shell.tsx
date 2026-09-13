@@ -14,10 +14,12 @@ export function KasirShell({
   cashAccounts,
   catalog,
   shifts,
+  recordingMethod,
 }: {
   cashAccounts: KasirCashAccount[];
   catalog: KasirCatalogItem[];
   shifts: KasirShift[];
+  recordingMethod: "PERPETUAL" | "PERIODIC";
 }) {
   const router = useRouter();
   const [query, setQuery] = React.useState("");
@@ -184,6 +186,7 @@ export function KasirShell({
           loading={loading}
           error={error}
           onSubmit={doCheckout}
+          recordingMethod={recordingMethod}
         />
       </div>
     </div>
