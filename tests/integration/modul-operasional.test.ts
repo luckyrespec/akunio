@@ -313,3 +313,301 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
     });
   }
 );
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
+  "modul operasional: POS B5",
+  () => {
+    let orgId: string;
+    let kas = "",
+      piutangCtl = "",
+      beban = "";
+    let barang = "";
+    const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+    const year = new Date().getFullYear();
+    const soldDate = `${year}-06-10`;
+
+    beforeAll(async () => {
+      await truncateAll();
+      orgId = (await makeOrg("PT POS B5")).orgId;
+      await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+      const rows = await admin.query<{ id: string; code: string }>(
+        `SELECT id, code FROM accounts WHERE org_id=$1`,
+        [orgId]
+      );
+      const byCode = Object.fromEntries(rows.rows.map((r) => [r.code, r.id]));
+      kas = byCode["1110"];
+      piutangCtl = byCode["1200"];
+      beban = byCode["5900"];
+      // Daftarkan 1200 sebagai akun kontrol PIUTANG agar penolakan akun
+      // kontrol sebagai akun selisih punya makna (registry subledger_controls).
+      await admin.query(
+        `INSERT INTO subledger_controls (org_id, kind, control_account_id)
+         VALUES ($1, 'PIUTANG', $2) ON CONFLICT DO NOTHING`,
+        [orgId, piutangCtl]
+      );
+      const { db } = await import("@/server/db");
+      const { createInventoryItem } = await import(
+        "@/server/db/repos/inventory.repo"
+      );
+      const item = await createInventoryItem(db, orgId, {
+        name: "Mie Instan",
+        initialQty: 50,
+        initialCostMinor: 10_000n,
+        standardSellingPriceMinor: 50_000n,
+      });
+      barang = item.id;
+    });
+    afterAll(async () => {
+      await admin.end();
+      await truncateAll();
+    });
+
+    function input(key: string) {
+      return { key };
+    }
+
+    async function checkout(arg: string | { key: string }) {
+      const key = typeof arg === "string" ? arg : arg.key;
+      const { db } = await import("@/server/db");
+      const { checkoutPosSale } = await import("@/server/db/repos/pos.repo");
+      return db.transaction((tx) =>
+        checkoutPosSale(tx as never, orgId, "kasir@toko.id", {
+          soldDate,
+          paymentMethod: "TUNAI",
+          cashAccountId: kas,
+          lines: [{ itemId: barang, qty: 1, unitPriceMinor: 50_000n }],
+          cashReceivedMinor: 50_000n,
+          idempotencyKey: key,
+        })
+      );
+    }
+
+    async function openShiftWithSale(keyPrefix: string) {
+      const { db } = await import("@/server/db");
+      const { openShift, checkoutPosSale } = await import(
+        "@/server/db/repos/pos.repo"
+      );
+      const shift = await db.transaction((tx) =>
+        openShift(tx as never, orgId, "kasir@toko.id", {
+          cashAccountId: kas,
+          openingCashMinor: 0n,
+        })
+      );
+      await db.transaction((tx) =>
+        checkoutPosSale(tx as never, orgId, "kasir@toko.id", {
+          soldDate,
+          paymentMethod: "TUNAI",
+          cashAccountId: kas,
+          lines: [{ itemId: barang, qty: 1, unitPriceMinor: 50_000n }],
+          cashReceivedMinor: 50_000n,
+          shiftId: shift.id,
+          idempotencyKey: `${keyPrefix}-${shift.id}`,
+        })
+      );
+      return shift;
+    }
+
+    async function closeWith(
+      shiftId: string,
+      varianceAccountId: string | null,
+      cashCountedMinor = 40_000n
+    ) {
+      const { db } = await import("@/server/db");
+      const { closeShift } = await import("@/server/db/repos/pos.repo");
+      return db.transaction((tx) =>
+        closeShift(tx as never, orgId, "kasir@toko.id", {
+          shiftId,
+          cashCountedMinor,
+          varianceAccountId,
+          dateISO: soldDate,
+        })
+      );
+    }
+
+    async function closeShiftWithVarianceAccount(varianceAccountId: string) {
+      const shift = await openShiftWithSale("b5-var");
+      try {
+        return await closeWith(shift.id, varianceAccountId);
+      } finally {
+        // Gagal tutup (tes RED) tidak boleh mengunci kas 1110 untuk tes berikut.
+        await closeWith(shift.id, beban).catch(() => {});
+      }
+    }
+
+    it("dupe checkout kembalikan nomor jurnal asli", async () => {
+      const f = await checkout(input("dup-pos"));
+      const s = await checkout(input("dup-pos"));
+      expect(s.journalNumber).toBe(f.journalNumber);
+      expect(s.journalNumber).not.toBe("");
+    });
+
+    it("dua baris item sama atribusikan biaya per baris", async () => {
+      const { db } = await import("@/server/db");
+      const {
+        checkoutPosSale,
+      } = await import("@/server/db/repos/pos.repo");
+      const { getEntryWithLines } = await import(
+        "@/server/db/repos/journals.repo"
+      );
+      const out = await db.transaction((tx) =>
+        checkoutPosSale(tx as never, orgId, "kasir@toko.id", {
+          soldDate,
+          paymentMethod: "TUNAI",
+          cashAccountId: kas,
+          lines: [
+            { itemId: barang, qty: 1, unitPriceMinor: 50_000n },
+            { itemId: barang, qty: 3, unitPriceMinor: 50_000n },
+          ],
+          cashReceivedMinor: 200_000n,
+          idempotencyKey: "b5-atribusi",
+        })
+      );
+      // Total HPP tetap 4 x 10rb pada jurnal.
+      const entry = await db.transaction((tx) =>
+        getEntryWithLines(tx as never, orgId, out.journalEntryId)
+      );
+      const hpp = entry!.lines.find((l) => l.memo?.startsWith("HPP "));
+      expect(hpp?.debitMinor).toBe(40_000n);
+      // Porsi per baris proporsional: qty 1 dan qty 3 masing-masing 10rb/unit.
+      const rows = (
+        await admin.query<{
+          qty: string;
+          unit_cost_minor: string;
+        }>(
+          `SELECT qty, unit_cost_minor FROM pos_sale_items
+           WHERE sale_id=$1 ORDER BY qty::float`,
+          [out.saleId]
+        )
+      ).rows;
+      expect(rows).toHaveLength(2);
+      expect(BigInt(rows[0].unit_cost_minor)).toBe(10_000n);
+      expect(BigInt(rows[1].unit_cost_minor)).toBe(10_000n);
+    });
+
+    it("akun kontrol ditolak sebagai akun selisih", async () => {
+      await expect(closeShiftWithVarianceAccount(piutangCtl)).rejects.toThrow(
+        /KONTROL/
+      );
+    });
+
+    it("tutup konkuren hanya satu draf selisih", async () => {
+      const { db } = await import("@/server/db");
+      const { openShift, checkoutPosSale, closeShift } = await import(
+        "@/server/db/repos/pos.repo"
+      );
+      const shift = await db.transaction((tx) =>
+        openShift(tx as never, orgId, "kasir@toko.id", {
+          cashAccountId: kas,
+          openingCashMinor: 0n,
+        })
+      );
+      await db.transaction((tx) =>
+        checkoutPosSale(tx as never, orgId, "kasir@toko.id", {
+          soldDate,
+          paymentMethod: "TUNAI",
+          cashAccountId: kas,
+          lines: [{ itemId: barang, qty: 1, unitPriceMinor: 50_000n }],
+          cashReceivedMinor: 50_000n,
+          shiftId: shift.id,
+          idempotencyKey: `b5-race-${shift.id}`,
+        })
+      );
+      const before = await admin.query<{ n: number }>(
+        `SELECT count(*)::int n FROM journal_entries WHERE org_id=$1 AND source='POS_SELISIH'`,
+        [orgId]
+      );
+      const results = await Promise.allSettled([
+        db.transaction((tx) =>
+          closeShift(tx as never, orgId, "kasir@toko.id", {
+            shiftId: shift.id,
+            cashCountedMinor: 40_000n,
+            varianceAccountId: beban,
+            dateISO: soldDate,
+          })
+        ),
+        db.transaction((tx) =>
+          closeShift(tx as never, orgId, "kasir@toko.id", {
+            shiftId: shift.id,
+            cashCountedMinor: 40_000n,
+            varianceAccountId: beban,
+            dateISO: soldDate,
+          })
+        ),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const after = await admin.query<{ n: number }>(
+        `SELECT count(*)::int n FROM journal_entries WHERE org_id=$1 AND source='POS_SELISIH'`,
+        [orgId]
+      );
+      expect(after.rows[0].n - before.rows[0].n).toBe(1);
+    });
+
+    it("laci hanya menghitung tunai (transfer/qris di luar ekspektasi)", async () => {
+      const { db } = await import("@/server/db");
+      const { openShift, checkoutPosSale, getShiftSummary } = await import(
+        "@/server/db/repos/pos.repo"
+      );
+      const shift = await db.transaction((tx) =>
+        openShift(tx as never, orgId, "kasir@toko.id", {
+          cashAccountId: kas,
+          openingCashMinor: 100_000n,
+        })
+      );
+      const sell = async (
+        method: "TUNAI" | "TRANSFER",
+        key: string,
+        accountId: string
+      ) =>
+        db.transaction((tx) =>
+          checkoutPosSale(tx as never, orgId, "kasir@toko.id", {
+            soldDate,
+            paymentMethod: method,
+            cashAccountId: accountId,
+            lines: [{ itemId: barang, qty: 1, unitPriceMinor: 50_000n }],
+            cashReceivedMinor: 50_000n,
+            shiftId: shift.id,
+            idempotencyKey: key,
+          })
+        );
+      const bankRows = await admin.query<{ id: string }>(
+        `SELECT id FROM accounts WHERE org_id=$1 AND code='1120'`,
+        [orgId]
+      );
+      await sell("TUNAI", `b5-laci-tunai-${shift.id}`, kas);
+      await sell("TRANSFER", `b5-laci-transfer-${shift.id}`, bankRows.rows[0].id);
+      const summary = await db.transaction((tx) =>
+        getShiftSummary(tx as never, orgId, shift.id)
+      );
+      expect(summary.tunaiMinor).toBe(50_000n);
+      expect(summary.transferMinor).toBe(50_000n);
+      expect(summary.expectedCashMinor).toBe(150_000n);
+      const { closeShift } = await import("@/server/db/repos/pos.repo");
+      const closed = await db.transaction((tx) =>
+        closeShift(tx as never, orgId, "kasir@toko.id", {
+          shiftId: shift.id,
+          cashCountedMinor: 150_000n,
+        })
+      );
+      expect(closed.shift.status).toBe("TUTUP");
+    });
+
+    it("picker akun selisih mengecualikan kas dan kontrol", async () => {
+      process.env.TEST_CTX_ORG = orgId;
+      try {
+        const { getVarianceAccountOptionsAction } = await import(
+          "@/server/actions/pos.actions"
+        );
+        const res = await getVarianceAccountOptionsAction();
+        expect(res.ok).toBe(true);
+        const codes = res.ok
+          ? res.data.map((a) => a.code)
+          : ([] as string[]);
+        expect(codes).not.toContain("1110");
+        expect(codes).not.toContain("1200");
+        expect(codes).toContain("5900");
+      } finally {
+        delete process.env.TEST_CTX_ORG;
+      }
+    });
+  }
+);

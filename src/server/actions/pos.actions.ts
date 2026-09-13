@@ -5,6 +5,7 @@ import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import { listAccounts } from "@/server/db/repos/accounts.repo";
+import { getControlKindByAccount } from "@/server/db/repos/subledger.repo";
 import { listInventoryItems } from "@/server/db/repos/inventory.repo";
 import {
   checkoutPosSale,
@@ -286,11 +287,23 @@ export async function getVarianceAccountOptionsAction() {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const rows = await listAccounts(db, ctx.orgId);
+    const controls = await db.transaction((tx) =>
+      getControlKindByAccount(tx as never, ctx.orgId));
+    // Flag kontrol dari registry subledger_controls; picker hanya menawarkan
+    // akun non-kas non-kontrol (laci = tunai saja, selisih = beban/pendapatan).
+    const options = rows.map((a) => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      archived: !!a.archivedAt,
+      isCash: a.isCash ?? false,
+      isControl: controls.has(a.id),
+    }));
     return {
       ok: true as const,
-      data: rows
-        .filter((a) => !a.archivedAt && !a.isCash)
-        .map((a) => ({ id: a.id, code: a.code, name: a.name })),
+      data: options
+        .filter((a) => !a.archived && !a.isCash && !a.isControl)
+        .map(({ id, code, name, isControl }) => ({ id, code, name, isControl })),
     };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal memuat akun." };

@@ -7,6 +7,7 @@ import { accounts } from "../schema/org";
 import { inventoryItems } from "../schema/inventory";
 import { journalEntries } from "../schema/journal";
 import { postJournalEntry, createDraftJournalEntry, postDraftEntry } from "./journals.repo";
+import { getControlKindByAccount } from "./subledger.repo";
 import { resolveRevenueAccountId, resolveCogsAccountId } from "./accounts.repo";
 import { getInventorySettings, lockInventoryPolicy } from "./inventory.repo";
 import { findPeriodByDate } from "./periods.repo";
@@ -90,11 +91,20 @@ export async function checkoutPosSale(
       .where(and(eq(posSales.orgId, orgId), eq(posSales.idempotencyKey, input.idempotencyKey)))
       .limit(1);
     if (dupe) {
+      let journalNumber = "";
+      if (dupe.journalEntryId) {
+        const [je] = await q
+          .select({ number: journalEntries.number })
+          .from(journalEntries)
+          .where(eq(journalEntries.id, dupe.journalEntryId))
+          .limit(1);
+        journalNumber = je?.number ?? "";
+      }
       return {
         saleId: dupe.id,
         number: dupe.number,
         journalEntryId: dupe.journalEntryId!,
-        journalNumber: "",
+        journalNumber,
         kasEntryId: dupe.kasEntryId!,
         totalMinor: dupe.totalMinor,
         changeMinor: dupe.changeMinor,
@@ -278,9 +288,13 @@ export async function checkoutPosSale(
     idempotencyKey: input.idempotencyKey ?? null,
   });
 
-  for (const p of prepared) {
+  // hppLinks sejajar prepared menurut urutan loop stok di atas (by-index):
+  // dua baris item yang sama punya biaya sendiri-sendiri, `find` refId
+  // akan menempelkan biaya baris pertama ke semua baris.
+  for (let i = 0; i < prepared.length; i++) {
+    const p = prepared[i];
     const unitCost = p.qty > 0 && recording === "PERPETUAL"
-      ? (hppLinks.find((h) => h.refId === p.master.id)?.amountMinor ?? 0n)
+      ? (hppLinks[i]?.amountMinor ?? 0n)
       : 0n;
     await q.insert(posSaleItems).values({
       orgId,
@@ -437,21 +451,36 @@ export async function closeShift(
   actorEmail: string,
   input: { shiftId: string; cashCountedMinor: bigint; varianceAccountId?: string | null; dateISO?: string },
 ): Promise<{ shift: typeof posShifts.$inferSelect; varianceMinor: bigint; varianceJournalEntryId: string | null }> {
+  // Serikan tutup konkuren per shift: yang kalah menunggu, lalu melihat
+  // status TUTUP dan ditolak — hanya satu draf selisih yang tercipta.
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`shift:${input.shiftId}`}))`);
   const summary = await getShiftSummary(q, orgId, input.shiftId);
   if (summary.shift.status !== "BUKA") throw new Error("SHIFT_SUDAH_TUTUP");
   if (input.cashCountedMinor < 0n) throw new Error("KAS_HITUNG_TIDAK_VALID");
   const variance = input.cashCountedMinor - summary.expectedCashMinor;
   const dateISO = input.dateISO ?? new Date().toISOString().slice(0, 10);
 
-  let varianceJournalEntryId: string | null = summary.shift.varianceJournalEntryId;
-  if (variance !== 0n && input.varianceAccountId && !varianceJournalEntryId) {
-    const [varianceAcc] = await q
+  // Akun selisih divalidasi saat dipilih (bukan saat guard jurnal menalaknya):
+  // arsip, rekening kas, dan akun kontrol subledger semuanya ditolak.
+  let varianceAcc: typeof accounts.$inferSelect | null = null;
+  if (input.varianceAccountId) {
+    const [row] = await q
       .select()
       .from(accounts)
       .where(and(eq(accounts.orgId, orgId), eq(accounts.id, input.varianceAccountId)))
       .limit(1);
-    if (!varianceAcc) throw new Error("AKUN_TIDAK_DITEMUKAN");
-    if (varianceAcc.archivedAt) throw new Error("AKUN_DIARSIPKAN");
+    if (!row) throw new Error("AKUN_TIDAK_DITEMUKAN");
+    if (row.archivedAt) throw new Error("AKUN_DIARSIPKAN");
+    if (row.isCash) throw new Error("AKUN_KAS_DITOLAK_SEBAGAI_SELISIH: akun selisih bukan rekening kas");
+    const controlKind = (await getControlKindByAccount(q, orgId)).get(row.id);
+    if (controlKind) {
+      throw new Error(`AKUN_KONTROL_DITOLAK_SEBAGAI_SELISIH: akun kontrol ${controlKind} tidak bisa dipakai sebagai akun selisih`);
+    }
+    varianceAcc = row;
+  }
+
+  let varianceJournalEntryId: string | null = summary.shift.varianceJournalEntryId;
+  if (variance !== 0n && varianceAcc && !varianceJournalEntryId) {
     const abs = variance < 0n ? -variance : variance;
     const draft = await createDraftJournalEntry(q, orgId, {
       dateISO,
