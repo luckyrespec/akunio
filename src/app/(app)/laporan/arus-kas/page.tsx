@@ -1,15 +1,11 @@
 import { eq } from "drizzle-orm";
 import { withOrg } from "@/server/db/repos/with-org";
 import { requireContext } from "@/server/auth/guard";
-import { accounts, organizations } from "@/server/db/schema/org";
-import { reportMetaMap } from "@/server/db/repos/accounts.repo";
+import { organizations } from "@/server/db/schema/org";
 import { listPeriods } from "@/server/db/repos/periods.repo";
 import { getProfile } from "@/server/db/repos/onboarding.repo";
-import { postedLinesBetween, loadPeriodOrDefault } from "@/server/reports/build";
-import { aggregateFromLines, signed } from "@/core/reports/aggregates";
-import {
-  cashFlowIndirect, incomeStatement, movementByPrefix,
-} from "@/core/reports/statements";
+import { loadPeriodOrDefault } from "@/server/reports/build";
+import { buildCashFlow } from "@/server/reports/cash-flow";
 import {
   StatementShell,
   ReportRowView,
@@ -30,41 +26,19 @@ export default async function ArusKasPage({
       .where(eq(organizations.id, ctx.orgId))
       .limit(1);
     const profile = await getProfile(tx, ctx.orgId);
-    const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
     const period = await loadPeriodOrDefault(tx, ctx.orgId, sp.period);
     const options = await listPeriods(tx, ctx.orgId);
     const fromISO = cumulative ? `${period.endsOn.slice(0, 4)}-01-01` : period.startsOn;
-    const lines = await postedLinesBetween(tx, ctx.orgId, fromISO, period.endsOn);
-    return { org, profile, accRows, period, options, lines };
+    // Komposisi via helper bersama @/server/reports/cash-flow (dipakai juga
+    // test D4) — halaman tidak memodel ulang bucket prefix.
+    const cf = await buildCashFlow(tx, ctx.orgId, fromISO, period.endsOn);
+    return { org, profile, period, options, cf };
   });
 
   const entityName =
     data.profile?.businessName || data.org?.name || "Entitas Usaha Akunio";
 
-  const metas = reportMetaMap(data.accRows);
-  const periodAggs = aggregateFromLines(data.lines, metas);
-  const is = incomeStatement(periodAggs);
-
-  const cf = cashFlowIndirect({
-    netIncomeMinor: is.netIncomeMinor,
-    deltaPiutangMinor: movementByPrefix(periodAggs, "12"),
-    deltaPersediaanMinor: movementByPrefix(periodAggs, "13"),
-    deltaUtangUsahaMinor: movementByPrefix(periodAggs, "21"),
-    depreciationMinor: movementByPrefix(periodAggs, "56"),
-    investingMinor: -movementByPrefix(periodAggs, "15"),
-    financingMinor:
-      movementByPrefix(periodAggs, "31") +
-      movementByPrefix(periodAggs, "24") -
-      movementByPrefix(periodAggs, "33"),
-  });
-
-  const deltaKasMinor = periodAggs
-    .filter((a) => a.meta.isCash || a.meta.isBank)
-    .reduce((sum, a) => sum + signed(a.meta, a), 0n);
-  const lainLainMinor =
-    deltaKasMinor - cf.operatingMinor - cf.investingMinor - cf.financingMinor;
-  const netChangeTiedMinor =
-    cf.operatingMinor + cf.investingMinor + cf.financingMinor + lainLainMinor;
+  const cf = data.cf;
 
   return (
     <StatementShell
@@ -85,7 +59,9 @@ export default async function ArusKasPage({
               "NI": "Laba atau rugi bersih dari Laporan Laba Rugi periode berjalan sebagai titik awal rekonsiliasi.",
               "ADJ.PIUTANG": "Kenaikan piutang mengurangi kas (karena penjualan belum diterima tunai), sedangkan penurunan piutang menambah kas.",
               "ADJ.PERSEDIAAN": "Kenaikan persediaan mengurangi kas (dana terikat pada stok belanja barang), sedangkan penurunan persediaan menambah kas.",
+              "ADJ.DIMUKA": "Kenaikan beban dibayar di muka mengurangi kas (dana keluar sebelum beban diakui), sedangkan amortisasi menambah kembali kas operasi.",
               "ADJ.UTANG": "Kenaikan utang usaha menahan kas keluar (pembayaran ke pemasok ditangguhkan), sehingga diperlakukan sebagai penambah kas.",
+              "ADJ.UTANGPAJAK": "Kenaikan utang pajak menahan kas keluar (pajak terutang belum dibayar), sehingga diperlakukan sebagai penambah kas operasi.",
               "ADJ.PENYUSUTAN": "Penyusutan merupakan beban non-kas sehingga ditambahkan kembali ke laba bersih.",
             };
             return (
@@ -143,10 +119,27 @@ export default async function ArusKasPage({
           />
         </section>
 
-        {lainLainMinor !== 0n && (
+        {cf.pajakMinor !== 0n && (
+          <section className="space-y-2">
+            <ReportSectionHeader title="KETERBUKAAN PAJAK DIBAYAR" />
+            <ReportRowView
+              indent={1}
+              label="Pajak Penghasilan Dibayar (kas)"
+              minor={cf.pajakMinor}
+              tooltip="Kas neto untuk pajak dengan metode tidak langsung: perubahan utang pajak (23xx) dikurangi beban pajak (57xx). Bukan penambah total — sudah tercakup di aktivitas operasi."
+            />
+          </section>
+        )}
+
+        {cf.residualMinor !== 0n && (
           <section className="space-y-2">
             <ReportSectionHeader title="PENYESUAIAN KAS LAINNYA" />
-            <ReportRowView indent={1} label="Penyesuaian Mutasi Kas Lainnya" minor={lainLainMinor} />
+            <ReportRowView
+              indent={1}
+              label="Mutasi kas lainnya (unmapped)"
+              minor={cf.residualMinor}
+              tooltip="Selisih mutasi kas yang belum terpetakan ke kategori operasi, investasi, atau pendanaan. Bila material (lebih dari 1% delta kas), Doctor mencatat temuan untuk ditelaah."
+            />
           </section>
         )}
 
@@ -156,7 +149,7 @@ export default async function ArusKasPage({
             bold
             isGrandTotal
             label="KENAIKAN (PENURUNAN) NETTO KAS DAN SETARA KAS"
-            minor={netChangeTiedMinor}
+            minor={cf.netChangeTiedMinor}
             variant="grand-total"
           />
         </div>

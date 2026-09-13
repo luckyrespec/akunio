@@ -506,3 +506,134 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("kas dasbor posisi hari ini +
     expect(activityIds).not.toContain(draftJournalId);
   });
 });
+
+// D4: arus kas berkategori — komposisi via helper produksi bersama
+// (@/server/reports/cash-flow, dipakai arus-kas/page.tsx + test; pelajaran
+// R11 — test memanggil helper yang sama, bukan memodel ulang komposisi
+// halaman). Fixture via repo layer (postJournalEntry/createAccount):
+// operasi + investasi + bayar utang pendek + bayar pajak + amortisasi dimuka.
+// Residu material = >1% delta kas (abs) → temuan Doctor.
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("arus kas tanpa plug pada fixture lengkap", () => {
+  let orgId: string;
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+  const byCode = new Map<string, string>();
+  const year = new Date().getFullYear();
+
+  async function post(input: object) {
+    const { postJournalEntry } = await import("@/server/db/repos/journals.repo");
+    const { db } = await import("@/server/db");
+    return db.transaction((tx) =>
+      postJournalEntry(tx as never, orgId, "tester@test.id", input as never));
+  }
+
+  beforeAll(async () => {
+    await truncateAll();
+    orgId = (await makeOrg("PT Arus Kas")).orgId;
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+
+    const { db } = await import("@/server/db");
+    const { createAccount } = await import("@/server/db/repos/accounts.repo");
+    // 1500 Peralatan adalah akun GRUP (anak 1590) — seperti D1, tanam leaf
+    // postable 1510 untuk belanja modal.
+    await db.transaction((tx) =>
+      createAccount(tx as never, {
+        orgId, code: "1510", name: "Peralatan Kantor",
+        type: "ASET", normal: "D", parentCode: "1500",
+      }));
+
+    const rows = await admin.query<{ id: string; code: string }>(
+      `SELECT id, code FROM accounts WHERE org_id=$1`, [orgId]);
+    for (const r of rows.rows) byCode.set(r.code, r.id);
+    const id = (code: string): string => {
+      const v = byCode.get(code);
+      if (!v) throw new Error(`AKUN_UJI_HILANG: ${code}`);
+      return v;
+    };
+
+    // Operasi: jual tunai 1jt
+    await post({
+      dateISO: `${year}-06-10`, memo: "Jual tunai",
+      lines: [
+        { accountId: id("1110"), debitMinor: 1_000_000n, creditMinor: 0n },
+        { accountId: id("4100"), debitMinor: 0n, creditMinor: 1_000_000n },
+      ],
+    });
+    // Investasi: beli peralatan 5jt tunai
+    await post({
+      dateISO: `${year}-06-11`, memo: "Beli peralatan",
+      lines: [
+        { accountId: id("1510"), debitMinor: 5_000_000n, creditMinor: 0n },
+        { accountId: id("1110"), debitMinor: 0n, creditMinor: 5_000_000n },
+      ],
+    });
+    // Utang pendek: beban terutang 600rb (bukan persediaan — 1300 adalah
+    // akun kontrol subledger, wajib via modul), bayar 250rb
+    await post({
+      dateISO: `${year}-06-12`, memo: "Beban terutang",
+      lines: [
+        { accountId: id("5200"), debitMinor: 600_000n, creditMinor: 0n },
+        { accountId: id("2100"), debitMinor: 0n, creditMinor: 600_000n },
+      ],
+    });
+    await post({
+      dateISO: `${year}-06-13`, memo: "Bayar utang usaha",
+      lines: [
+        { accountId: id("2100"), debitMinor: 250_000n, creditMinor: 0n },
+        { accountId: id("1110"), debitMinor: 0n, creditMinor: 250_000n },
+      ],
+    });
+    // Dimuka: bayar sewa dimuka 1,2jt, amortisasi 300rb
+    await post({
+      dateISO: `${year}-06-14`, memo: "Bayar sewa dimuka",
+      lines: [
+        { accountId: id("1600"), debitMinor: 1_200_000n, creditMinor: 0n },
+        { accountId: id("1110"), debitMinor: 0n, creditMinor: 1_200_000n },
+      ],
+    });
+    await post({
+      dateISO: `${year}-06-15`, memo: "Amortisasi sewa dimuka",
+      lines: [
+        { accountId: id("5300"), debitMinor: 300_000n, creditMinor: 0n },
+        { accountId: id("1600"), debitMinor: 0n, creditMinor: 300_000n },
+      ],
+    });
+    // Pajak: akru PPh 400rb, bayar 250rb (parsial → Δ23 neto +150rb,
+    // menguji penyesuaian utang pajak nonzero)
+    await post({
+      dateISO: `${year}-06-16`, memo: "Akru PPh",
+      lines: [
+        { accountId: id("5700"), debitMinor: 400_000n, creditMinor: 0n },
+        { accountId: id("2300"), debitMinor: 0n, creditMinor: 400_000n },
+      ],
+    });
+    await post({
+      dateISO: `${year}-06-17`, memo: "Bayar PPh",
+      lines: [
+        { accountId: id("2300"), debitMinor: 250_000n, creditMinor: 0n },
+        { accountId: id("1110"), debitMinor: 0n, creditMinor: 250_000n },
+      ],
+    });
+  });
+  afterAll(async () => { await admin.end(); await truncateAll(); });
+
+  it("arus kas tanpa plug pada fixture lengkap", async () => {
+    const { db } = await import("@/server/db");
+    // Helper produksi yang SAMA dipakai arus-kas/page.tsx — tanpa model
+    // ulang komposisi di test.
+    const { buildCashFlow } = await import("@/server/reports/cash-flow");
+    const cf = await db.transaction((tx) =>
+      buildCashFlow(tx as never, orgId, `${year}-06-01`, `${year}-06-30`));
+
+    // Kas: +1jt −5jt −250rb −1,2jt −250rb = −5,7jt.
+    expect(cf.deltaKasMinor).toBe(-5_700_000n);
+    // Tanpa plug: kategori 21xx/23xx/57xx/16xx eksplisit menutup semua mutasi.
+    expect(cf.residualMinor).toBe(0n);
+    // Kas untuk pajak = Δ23 − beban 57 = +150rb − 400rb = −250rb (kas keluar).
+    expect(cf.pajakMinor).toBe(-250_000n);
+    expect(cf.buckets.deltaDimukaMinor).toBe(900_000n);
+    expect(cf.buckets.deltaUtangUsahaMinor).toBe(350_000n);
+    // Operasi: NI −300rb (1jt − 600rb − 300rb − 400rb) − Δ16 900rb
+    // + Δ21 350rb + Δ23 150rb.
+    expect(cf.operatingMinor).toBe(-700_000n);
+  });
+});

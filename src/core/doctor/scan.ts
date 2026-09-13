@@ -6,6 +6,7 @@ import { listEntriesWithLines } from "@/server/db/repos/journals.repo";
 import { listPeriods } from "@/server/db/repos/periods.repo";
 import { abnormalBalances, duplicates, missingReceipts, oddDates, type FindingDraft } from "./rules";
 import { createFinding } from "@/server/db/repos/findings.repo";
+import { buildCashFlow, isCashFlowResidualMaterial } from "@/server/reports/cash-flow";
 import { journalDocuments } from "@/server/db/schema/ai";
 import { eq, inArray } from "drizzle-orm";
 
@@ -18,6 +19,7 @@ export interface DoctorScanResult {
     duplicates: number;
     missingReceipts: number;
     oddDates: number;
+    cashFlowResidual: number;
   };
 }
 
@@ -126,12 +128,36 @@ export async function runDoctorAuditScan(
     }
   }
 
+  // 4. Residu arus kas material (D4): mutasi kas tak terpetakan (unmapped)
+  // pada periode OPEN berjalan. Ambang >1% delta kas (abs) — pola enqueue
+  // sama seperti draf lain di bawah (dedup via existingStatusMap).
+  const cashFlowResidualDrafts: FindingDraft[] = [];
+  const openNow = periods
+    .filter((p) => p.status === "OPEN" && p.startsOn <= todayISO)
+    .sort((a, b) => b.endsOn.localeCompare(a.endsOn))[0];
+  if (openNow) {
+    const through = openNow.endsOn <= todayISO ? openNow.endsOn : todayISO;
+    const cf = await buildCashFlow(q, orgId, openNow.startsOn, through);
+    if (isCashFlowResidualMaterial(cf.residualMinor, cf.deltaKasMinor)) {
+      cashFlowResidualDrafts.push({
+        type: "cashFlowResidual",
+        severity: "MEDIUM",
+        evidence: {
+          period: openNow.name,
+          residualMinor: cf.residualMinor.toString(),
+          deltaKasMinor: cf.deltaKasMinor.toString(),
+        },
+      });
+    }
+  }
+
   // Gabungkan semua temuan
   const allDrafts: FindingDraft[] = [
     ...abnormalDrafts,
     ...duplicateDrafts,
     ...oddDateDrafts,
     ...missingReceiptDrafts,
+    ...cashFlowResidualDrafts,
   ];
 
   // Hindari pembuatan ulang temuan yang sudah tercatat (OPEN, RESOLVED, atau DISMISSED)
@@ -170,6 +196,8 @@ export async function runDoctorAuditScan(
   penalty += openDrafts.filter((d) => d.type === "duplicates").length * 7;
   penalty += openDrafts.filter((d) => d.type === "missingReceipts").length * 5;
   penalty += openDrafts.filter((d) => d.type === "oddDates").length * 7;
+  // cashFlowResidual: dicatat sebagai temuan tanpa penalti skor (informatif —
+  // residu unmapped ditelaah via laporan arus kas, bukan penalti kesehatan).
   const healthScore = Math.max(0, Math.min(100, 100 - penalty));
 
   return {
@@ -181,6 +209,7 @@ export async function runDoctorAuditScan(
       duplicates: openDrafts.filter((d) => d.type === "duplicates").length,
       missingReceipts: openDrafts.filter((d) => d.type === "missingReceipts").length,
       oddDates: openDrafts.filter((d) => d.type === "oddDates").length,
+      cashFlowResidual: openDrafts.filter((d) => d.type === "cashFlowResidual").length,
     },
   };
 }

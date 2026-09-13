@@ -92,7 +92,11 @@ export interface CashFlowInput {
   netIncomeMinor: bigint;
   deltaPiutangMinor: bigint;
   deltaPersediaanMinor: bigint;
+  // D4: penyesuaian operasi eksplisit per kategori SAK EMKM (opsional agar
+  // pemanggil lama tetap kompilasi — default 0n = perilaku pra-D4).
+  deltaDimukaMinor?: bigint; // 16xx beban dibayar di muka (aset lancar)
   deltaUtangUsahaMinor: bigint;
+  deltaUtangPajakMinor?: bigint; // 23xx utang pajak (liabilitas pendek)
   depreciationMinor: bigint;
   investingMinor: bigint;
   financingMinor: bigint;
@@ -107,16 +111,21 @@ export interface CashFlowResult {
 }
 
 export function cashFlowIndirect(i: CashFlowInput): CashFlowResult {
+  const deltaDimukaMinor = i.deltaDimukaMinor ?? 0n;
+  const deltaUtangPajakMinor = i.deltaUtangPajakMinor ?? 0n;
   const rows: ReportRow[] = [
     { code: "NI", name: "Laba Bersih", movementMinor: i.netIncomeMinor },
     { code: "ADJ.PIUTANG", name: "Perubahan Piutang Usaha", movementMinor: -i.deltaPiutangMinor },
     { code: "ADJ.PERSEDIAAN", name: "Perubahan Persediaan", movementMinor: -i.deltaPersediaanMinor },
+    { code: "ADJ.DIMUKA", name: "Perubahan Beban Dibayar di Muka", movementMinor: -deltaDimukaMinor },
     { code: "ADJ.UTANG", name: "Perubahan Utang Usaha", movementMinor: i.deltaUtangUsahaMinor },
+    { code: "ADJ.UTANGPAJAK", name: "Perubahan Utang Pajak", movementMinor: deltaUtangPajakMinor },
     { code: "ADJ.PENYUSUTAN", name: "Beban Penyusutan", movementMinor: i.depreciationMinor },
   ];
   const operatingMinor =
-    i.netIncomeMinor - i.deltaPiutangMinor - i.deltaPersediaanMinor +
-    i.deltaUtangUsahaMinor + i.depreciationMinor;
+    i.netIncomeMinor - i.deltaPiutangMinor - i.deltaPersediaanMinor -
+    deltaDimukaMinor + i.deltaUtangUsahaMinor + deltaUtangPajakMinor +
+    i.depreciationMinor;
   return {
     operatingMinor,
     investingMinor: i.investingMinor,
