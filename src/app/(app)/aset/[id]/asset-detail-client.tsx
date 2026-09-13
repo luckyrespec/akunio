@@ -87,6 +87,14 @@ export function AssetDetailClient({
                 ? "Lunas Susut"
                 : "Dilepas"}
             </Badge>
+            {currentAsset.acquisitionPosted === false && (
+              <Badge
+                variant="outline"
+                className="border-amber-500/40 text-amber-700 bg-amber-500/10"
+              >
+                Belum Dijurnal
+              </Badge>
+            )}
           </div>
           <p className="text-xs font-mono text-ink-soft mt-0.5">
             Kode: {currentAsset.code} • Kategori: {currentAsset.category.replace(/_/g, " ")}

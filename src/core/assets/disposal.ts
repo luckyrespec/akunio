@@ -41,6 +41,12 @@ export function calculateAssetDisposal(
   const gainLossMinor = proceedsMinor - bookValueAtDisposalMinor;
   const isGain = gainLossMinor >= 0n;
 
+  // Hasil penjualan tanpa akun Kas/Bank penerima = jurnal tak seimbang —
+  // tolak sejak inti agar semua pemanggil (repo, aksi, AI) konsisten.
+  if (proceedsMinor > 0n && !depositAccountId) {
+    throw new Error("KAS_PENJUALAN_WAJIB");
+  }
+
   const journalLines: DisposalJournalLine[] = [];
 
   // 1. Debit Kas/Bank jika ada uang diterima dari penjualan

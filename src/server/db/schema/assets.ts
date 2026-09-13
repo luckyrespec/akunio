@@ -6,6 +6,7 @@ import {
   date,
   numeric,
   integer,
+  boolean,
   timestamp,
   uniqueIndex,
   primaryKey,
@@ -53,6 +54,7 @@ export const fixedAssets = pgTable(
     })
       .notNull()
       .default("ACTIVE"),
+    acquisitionPosted: boolean("acquisition_posted").notNull().default(false),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

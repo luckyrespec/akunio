@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import type { Queryable } from "./queryable";
 import {
   fixedAssets,
@@ -6,7 +6,7 @@ import {
   assetDisposals,
 } from "../schema/assets";
 import { accounts } from "../schema/org";
-import { postJournalEntry } from "./journals.repo";
+import { findEntryByIdempotencyKey, postJournalEntry } from "./journals.repo";
 import { calculateDepreciationSchedule } from "@/core/assets/depreciation";
 import { calculateAssetDisposal } from "@/core/assets/disposal";
 
@@ -25,6 +25,7 @@ export interface CreateFixedAssetInput {
   accumulatedDepAccountId: string;
   depreciationExpenseAccountId: string;
   notes?: string;
+  acquisitionPosted?: boolean;
 }
 
 export async function nextAssetCode(
@@ -75,6 +76,7 @@ export async function createFixedAsset(
       accumulatedDepAccountId: input.accumulatedDepAccountId,
       depreciationExpenseAccountId: input.depreciationExpenseAccountId,
       status: "ACTIVE",
+      acquisitionPosted: input.acquisitionPosted ?? false,
       notes: input.notes,
     })
     .returning();
@@ -206,6 +208,11 @@ export async function postMonthlyDepreciation(
   },
 ) {
   const { orgId, periodName, postedBy } = params;
+  const idempotencyKey = `dep-${orgId}-${periodName}`;
+
+  // Serikan run susut konkuren per org+periode: pemenang posting satu jurnal,
+  // yang kalah menunggu lock lalu runtuh ke jurnal yang sama (kontrak idempotency).
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`dep:${orgId}:${periodName}`}))`);
 
   // Find all scheduled depreciation lines for this period across all active assets
   const lines = await q
@@ -230,7 +237,10 @@ export async function postMonthlyDepreciation(
     );
 
   if (lines.length === 0) {
-    return { postedCount: 0, journalEntryId: null };
+    // Tak ada baris terjadwal: bila jurnal periode ini sudah ada (run ganda
+    // konkuren — pemenang sudah komit), kembalikan jurnal yang sama.
+    const existing = await findEntryByIdempotencyKey(q, orgId, idempotencyKey);
+    return { postedCount: 0, journalEntryId: existing?.id ?? null };
   }
 
   // Filter out zero amount lines
@@ -281,9 +291,9 @@ export async function postMonthlyDepreciation(
   const depDate = validLines[0].depDate;
   const journalResult = await postJournalEntry(q, orgId, postedBy, {
     dateISO: depDate,
-    memo: `Penyusutan Aset Tetap Periode ${periodName}`,
-    source: "AI",
-    idempotencyKey: `dep-${orgId}-${periodName}`,
+    memo: `Penyusutan ${periodName}`,
+    source: "MANUAL",
+    idempotencyKey,
     lines: glLines,
   });
 
@@ -358,6 +368,30 @@ export async function disposeAsset(
 
   if (!asset) throw new Error("ASET_TIDAK_DITEMUKAN");
   if (asset.status === "DISPOSED") throw new Error("ASET_SUDAH_DILEPAS");
+
+  // Penjualan wajib menunjuk akun Kas/Bank penerima hasil penjualan.
+  if (disposalType === "SALE" && !depositAccountId) {
+    throw new Error("KAS_PENJUALAN_WAJIB");
+  }
+  if (proceedsMinor > 0n && !depositAccountId) {
+    throw new Error("KAS_PENJUALAN_WAJIB");
+  }
+
+  // Susut terjadwal yang tanggalnya <= tanggal pelepasan wajib diposting dulu
+  // agar nilai buku saat disposal sudah final.
+  const pendingDep = await q
+    .select({ id: assetDepreciationLines.id })
+    .from(assetDepreciationLines)
+    .where(
+      and(
+        eq(assetDepreciationLines.orgId, orgId),
+        eq(assetDepreciationLines.assetId, assetId),
+        eq(assetDepreciationLines.status, "SCHEDULED"),
+        lte(assetDepreciationLines.depreciationDate, disposalDate),
+      ),
+    )
+    .limit(1);
+  if (pendingDep.length > 0) throw new Error("SUSUT_BELUM_POSTING");
 
   // Sum total accumulated depreciation already posted
   const postedDepLines = await q

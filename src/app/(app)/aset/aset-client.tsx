@@ -291,6 +291,14 @@ export function AsetClient({
                           ? "Lunas Susut"
                           : "Dilepas"}
                       </Badge>
+                      {asset.acquisitionPosted === false && (
+                        <Badge
+                          variant="outline"
+                          className="ml-1.5 border-amber-500/40 text-amber-700 bg-amber-500/10"
+                        >
+                          Belum Dijurnal
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link href={`/aset/${asset.id}`}>

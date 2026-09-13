@@ -1,9 +1,12 @@
 import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   postMonthlyDepreciation,
   listFixedAssets,
   createFixedAsset,
 } from "@/server/db/repos/assets.repo";
+import { postJournalEntry } from "@/server/db/repos/journals.repo";
+import { buildAcquisitionJournal } from "@/core/assets/acquisition";
 import { Money } from "@/core/money/money";
 import {
   evaluatePeriodReadiness,
@@ -112,6 +115,8 @@ export const assetsAndClosingToolDefs: ToolDefinition[] = [
         accumulatedDepAccountId: { type: "string", description: "Id akun akumulasi penyusutan" },
         depreciationExpenseAccountId: { type: "string", description: "Id akun beban penyusutan" },
         salvageValueText: { type: "string", description: "Nilai sisa Rupiah (opsional, default 0)" },
+        postAcquisition: { type: "boolean", description: "Posting jurnal perolehan atomik Dr akun aset / Cr akun lawan (default true). Bila false, kartu aset berstatus BELUM_DIJURNAL." },
+        counterAccountId: { type: "string", description: "Id akun lawan jurnal perolehan (kas/bank, utang, atau modal) — wajib bila postAcquisition true" },
         notes: { type: "string", description: "Catatan (opsional)" },
       },
       required: [
@@ -215,11 +220,13 @@ export const assetsAndClosingHandlers: Record<string, ToolHandler> = {
     }
 
     try {
-      const res = await postMonthlyDepreciation(db, {
-        orgId,
-        periodName,
-        postedBy: actorEmail,
-      });
+      const res = await withOrg(orgId, (tx) =>
+        postMonthlyDepreciation(tx, {
+          orgId,
+          periodName,
+          postedBy: actorEmail,
+        }),
+      );
 
       return {
         success: true,
@@ -355,21 +362,49 @@ export const assetsAndClosingHandlers: Record<string, ToolHandler> = {
         return { success: false, error: `${k} wajib diisi (cari id akun via list_accounts).` };
       }
     }
+    // postAcquisition default true: pendaftaran + jurnal perolehan atomik.
+    const postAcquisition = args.postAcquisition !== false;
+    const counterAccountId = String(args.counterAccountId ?? "").trim();
+    if (postAcquisition && !counterAccountId) {
+      return { success: false, error: "counterAccountId wajib diisi bila postAcquisition true (cari id akun kas/bank via list_accounts)." };
+    }
     try {
-      const asset = await createFixedAsset(db, {
-        orgId,
-        name,
-        category: category as (typeof categories)[number],
-        acquisitionDate,
-        inServiceDate: acquisitionDate,
-        acquisitionCostMinor,
-        salvageValueMinor,
-        usefulLifeMonths,
-        depreciationMethod: method as (typeof methods)[number],
-        assetAccountId: String(args.assetAccountId),
-        accumulatedDepAccountId: String(args.accumulatedDepAccountId),
-        depreciationExpenseAccountId: String(args.depreciationExpenseAccountId),
-        notes: args.notes ? String(args.notes) : undefined,
+      const { asset, journalEntryId } = await withOrg(orgId, async (tx) => {
+        const created = await createFixedAsset(tx, {
+          orgId,
+          name,
+          category: category as (typeof categories)[number],
+          acquisitionDate,
+          inServiceDate: acquisitionDate,
+          acquisitionCostMinor,
+          salvageValueMinor,
+          usefulLifeMonths,
+          depreciationMethod: method as (typeof methods)[number],
+          assetAccountId: String(args.assetAccountId),
+          accumulatedDepAccountId: String(args.accumulatedDepAccountId),
+          depreciationExpenseAccountId: String(args.depreciationExpenseAccountId),
+          acquisitionPosted: postAcquisition,
+          notes: args.notes ? String(args.notes) : undefined,
+        });
+        let jeId: string | null = null;
+        if (postAcquisition) {
+          const je = await postJournalEntry(
+            tx,
+            orgId,
+            _actor,
+            buildAcquisitionJournal({
+              assetId: created.id,
+              assetCode: created.code,
+              assetName: created.name,
+              assetAccountId: String(args.assetAccountId),
+              counterAccountId,
+              acquisitionCostMinor,
+              acquisitionDate,
+            }),
+          );
+          jeId = je.id;
+        }
+        return { asset: created, journalEntryId: jeId };
       });
       return {
         success: true,
@@ -377,7 +412,12 @@ export const assetsAndClosingHandlers: Record<string, ToolHandler> = {
           id: asset.id,
           code: asset.code,
           name: asset.name,
-          message: `Aset ${asset.code} terdaftar beserta jadwal penyusutannya.`,
+          journalEntryId,
+          acquisitionPosted: postAcquisition,
+          status: postAcquisition ? undefined : "BELUM_DIJURNAL",
+          message: postAcquisition
+            ? `Aset ${asset.code} terdaftar beserta jadwal penyusutan dan jurnal perolehannya.`
+            : `Aset ${asset.code} terdaftar beserta jadwal penyusutannya, tetapi BELUM_DIJURNAL (jurnal perolehan belum diposting).`,
         },
       };
     } catch (err: unknown) {

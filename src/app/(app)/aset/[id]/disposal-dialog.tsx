@@ -80,6 +80,14 @@ export function DisposalDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // Guard sisi klien (server menegakkan KAS_PENJUALAN_WAJIB pula):
+    // penjualan wajib menunjuk akun Kas/Bank penerima.
+    if (disposalType === "SALE" && !depositAccountId) {
+      setError("Penjualan aset wajib memilih akun Kas/Bank penerima hasil penjualan.");
+      return;
+    }
+
     setLoading(true);
 
     try {

@@ -75,6 +75,7 @@ export async function createFixedAssetAction(payload: {
         assetAccountId: payload.assetAccountId,
         accumulatedDepAccountId: payload.accumulatedDepAccountId,
         depreciationExpenseAccountId: payload.depreciationExpenseAccountId,
+        acquisitionPosted: false,
         notes: payload.notes?.trim(),
       });
 
@@ -140,6 +141,7 @@ export async function createAssetWithAcquisitionAction(payload: {
         assetAccountId: payload.assetAccountId,
         accumulatedDepAccountId: payload.accumulatedDepAccountId,
         depreciationExpenseAccountId: payload.depreciationExpenseAccountId,
+        acquisitionPosted: payload.postAcquisition,
         notes: payload.notes?.trim(),
       });
 
@@ -283,6 +285,12 @@ export async function disposeAssetAction(payload: {
     revalidatePath("/jurnal");
     return { ok: true, data: result };
   } catch (err) {
+    if (err instanceof Error && err.message === "KAS_PENJUALAN_WAJIB") {
+      return { ok: false, error: "Penjualan aset wajib memilih akun Kas/Bank penerima hasil penjualan." };
+    }
+    if (err instanceof Error && err.message === "SUSUT_BELUM_POSTING") {
+      return { ok: false, error: "Posting penyusutan terjadwal sampai tanggal pelepasan terlebih dahulu sebelum melepas aset." };
+    }
     return fail(err);
   }
 }
