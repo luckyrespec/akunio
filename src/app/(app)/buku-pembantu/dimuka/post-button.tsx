@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Play } from "lucide-react";
+import { Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { postAmortizationAction } from "@/server/actions/prepaid.actions";
 
@@ -31,7 +31,7 @@ export function PostAmortButton({ contractId, periodName }: { contractId?: strin
         }}
         className="bg-terra text-white hover:bg-terra/90 text-xs h-9 rounded-xl gap-1.5 shadow-2xs"
       >
-        <Play className="size-3.5" />
+        {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
         <span>{pending ? "Memposting…" : "Posting bulan ini"}</span>
       </Button>
       {result && <p className="text-xs text-ink-soft">{result}</p>}

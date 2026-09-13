@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { runSubledgerCheckAction } from "@/server/actions/subledger.actions";
 
@@ -35,7 +35,7 @@ export function RunCheckButton() {
         }}
         className="bg-terra text-white hover:bg-terra/90 text-xs gap-1.5 shadow-xs"
       >
-        <RefreshCw className="size-3.5" />
+        {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
         <span>{pending ? "Memeriksa…" : "Jalankan Pemeriksaan"}</span>
       </Button>
       {result && <p className="text-xs text-ink-soft">{result}</p>}

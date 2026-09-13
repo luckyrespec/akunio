@@ -125,11 +125,12 @@ export function DimukaForm({
         <Textarea id="dimuka-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Nomor kwitansi, alamat ruko…" />
       </div>
       {totalMinor !== null && totalMinor > 0n && Number.isInteger(monthsNum) && monthsNum >= 1 && (
-        <p className="text-xs text-ink-soft">
-          Estimasi amortisasi per bulan{" "}
-          <strong className="font-mono text-ink tnum">{Money.formatIdr(totalMinor / BigInt(monthsNum))}</strong>
-          {" "}selama {monthsNum} bulan.
-        </p>
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-rule bg-canvas/50 px-3.5 py-2.5">
+          <span className="text-xs text-ink-soft">Estimasi amortisasi per bulan · {monthsNum} bulan</span>
+          <span className="font-display text-lg font-semibold tracking-tight text-ink tnum">
+            {Money.formatIdr(totalMinor / BigInt(monthsNum))}
+          </span>
+        </div>
       )}
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
       <Button

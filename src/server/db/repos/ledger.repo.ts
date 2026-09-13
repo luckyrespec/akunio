@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, lte } from "drizzle-orm";
 import { accounts } from "../schema/org";
 import { journalEntries, journalLines } from "../schema/journal";
 import type { Queryable } from "./queryable";
@@ -7,6 +7,7 @@ import { toMinor } from "./journals.repo";
 type AccountRow = typeof accounts.$inferSelect;
 
 export interface LedgerRow {
+  entryId: string;
   number: string;
   entryDate: string;
   memo: string;
@@ -15,16 +16,29 @@ export interface LedgerRow {
   balanceMinor: bigint;
 }
 
+export interface LedgerRange {
+  from?: string;
+  to?: string;
+}
+
 export async function getLedger(
-  q: Queryable, orgId: string, accountId: string,
-): Promise<{ account: AccountRow; rows: LedgerRow[] }> {
+  q: Queryable, orgId: string, accountId: string, range?: LedgerRange,
+): Promise<{ account: AccountRow; rows: LedgerRow[]; openingMinor: bigint }> {
   const accRows = await q.select().from(accounts)
     .where(and(eq(accounts.orgId, orgId), eq(accounts.id, accountId)))
     .limit(1);
   const account = accRows[0];
   if (!account) throw new Error("AKUN_TIDAK_DITEMUKAN");
 
+  const conds = [
+    eq(journalLines.orgId, orgId),
+    eq(journalLines.accountId, accountId),
+    eq(journalEntries.status, "POSTED"),
+  ];
+  if (range?.to) conds.push(lte(journalEntries.entryDate, range.to));
+
   const raw = await q.select({
+    entryId: journalEntries.id,
     number: journalEntries.number,
     entryDate: journalEntries.entryDate,
     memo: journalEntries.memo,
@@ -36,29 +50,38 @@ export async function getLedger(
   })
     .from(journalLines)
     .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
-    .where(and(
-      eq(journalLines.orgId, orgId),
-      eq(journalLines.accountId, accountId),
-      eq(journalEntries.status, "POSTED"),
-    ))
+    .where(and(...conds))
     .orderBy(asc(journalEntries.entryDate), asc(journalEntries.seq), asc(journalLines.position));
 
   const isDebitNormal = account.normal === "D";
+  let opening = 0n;
   let running = 0n;
-  const rows: LedgerRow[] = raw.map((r) => {
+  let started = false;
+  const rows: LedgerRow[] = [];
+  for (const r of raw) {
     const d = toMinor(r.debit);
     const c = toMinor(r.credit);
-    running += isDebitNormal ? d - c : c - d;
-    return {
+    const delta = isDebitNormal ? d - c : c - d;
+    if (range?.from && r.entryDate < range.from) {
+      opening += delta;
+      continue;
+    }
+    if (!started) {
+      running = opening;
+      started = true;
+    }
+    running += delta;
+    rows.push({
+      entryId: r.entryId,
       number: r.number,
       entryDate: r.entryDate,
       memo: r.lineMemo ?? r.memo,
       debitMinor: d,
       creditMinor: c,
       balanceMinor: running,
-    };
-  });
-  return { account, rows };
+    });
+  }
+  return { account, rows, openingMinor: opening };
 }
 
 export interface AccountBalance {

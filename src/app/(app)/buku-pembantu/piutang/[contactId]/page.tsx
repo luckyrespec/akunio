@@ -5,6 +5,7 @@ import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { getContactCard } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
+import { AnimatedNumber } from "@/components/motion";
 import { Money } from "@/core/money/money";
 import { Reveal } from "@/components/motion";
 import { ContactCardTable } from "@/components/subsidiary/contact-ledger";
@@ -56,7 +57,7 @@ export default async function PiutangCardPage({ params }: PiutangCardPageProps) 
           </div>
           <div className="rounded-2xl border border-rule bg-paper p-3.5 shadow-2xs md:col-span-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Sisa Piutang</span>
-            <p className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink tnum">{Money.formatIdr(sisa)}</p>
+            <AnimatedNumber minor={sisa} className="mt-1 block font-display text-2xl font-semibold tracking-tight text-ink tnum" />
           </div>
         </div>
       </Reveal>

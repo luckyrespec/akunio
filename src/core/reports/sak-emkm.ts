@@ -103,7 +103,7 @@ export function buildSakEmkmBalanceSheet(
   const equityRows = [...equityList];
   equityRows.push({
     code: "3999",
-    name: "Laba (Rugi) Periode Berjalan",
+    name: "Laba (Rugi) Tahun Berjalan",
     movementMinor: netIncomeMinor,
   });
   sortByCode(equityRows);

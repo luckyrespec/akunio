@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
@@ -6,6 +7,8 @@ import { db } from "@/server/db";
 import { getPrepaidCard } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { AnimatedNumber } from "@/components/motion";
+import { MeterFill } from "@/components/subsidiary/animated";
 import { Money } from "@/core/money/money";
 import { PostAmortButton } from "../post-button";
 
@@ -40,9 +43,12 @@ export default async function DimukaDetailPage({ params }: { params: Promise<{ i
         </div>
         <div>
           <p className="text-ink-soft">Sisa ({Math.min(pct, 100)}% diakui)</p>
-          <p className="mt-1 font-mono font-bold text-ink text-sm">{Money.formatIdr(c.remainingMinor)}</p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink/10">
-            <div className="h-full rounded-full bg-terra" style={{ width: `${Math.max(Math.min(pct, 100), 2)}%` }} />
+          <AnimatedNumber
+            minor={c.remainingMinor}
+            className="mt-1 block font-display text-xl font-semibold tracking-tight text-ink tnum"
+          />
+          <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-ink/10">
+            <MeterFill fill={Math.max(Math.min(pct, 100), 2)} title={`Terakui ${Math.min(pct, 100)}%`} />
           </div>
         </div>
       </div>
@@ -52,10 +58,10 @@ export default async function DimukaDetailPage({ params }: { params: Promise<{ i
           <strong className="font-mono text-ink">{Money.formatIdr(nextLine.amountMinor)}</strong>.
         </p>
       )}
-      <div className="overflow-hidden rounded-xl border border-rule bg-paper shadow-xs">
+      <div className="overflow-hidden rounded-xl border border-rule bg-paper shadow-2xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-rule bg-canvas/70 text-ink-soft font-semibold uppercase tracking-wider text-[11px]">
+          <table className="w-full text-left text-xs tnum">
+            <thead className="border-b border-rule bg-canvas/80 text-ink-soft font-semibold uppercase tracking-wider text-[11px]">
               <tr>
                 <th className="px-4 py-3">Periode</th>
                 <th className="px-4 py-3">Tanggal</th>
@@ -67,8 +73,12 @@ export default async function DimukaDetailPage({ params }: { params: Promise<{ i
               </tr>
             </thead>
             <tbody className="divide-y divide-rule/60 text-ink">
-              {lines.map((l) => (
-                <tr key={l.id} className="hover:bg-canvas/40 transition-colors">
+              {lines.map((l, i) => (
+                <tr
+                  key={l.id}
+                  className="row-enter hover:bg-canvas/40 transition-colors"
+                  style={{ "--row-i": i } as CSSProperties}
+                >
                   <td className="px-4 py-3 font-mono font-semibold">{l.periodName}</td>
                   <td className="px-4 py-3 font-mono text-ink-soft">{l.amortDate}</td>
                   <td className="px-4 py-3 text-right font-mono tnum">{Money.formatIdr(l.amountMinor)}</td>
@@ -86,7 +96,7 @@ export default async function DimukaDetailPage({ params }: { params: Promise<{ i
                   </td>
                   <td className="px-4 py-3">
                     {l.journalEntryId ? (
-                      <Link href={`/jurnal/${l.journalEntryId}`} className="font-medium text-terra hover:underline">
+                      <Link href={`/jurnal/${l.journalEntryId}`} className="focus-ring rounded-md font-medium text-terra hover:underline">
                         Lihat jurnal
                       </Link>
                     ) : (
@@ -96,6 +106,21 @@ export default async function DimukaDetailPage({ params }: { params: Promise<{ i
                 </tr>
               ))}
             </tbody>
+            {lines.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-rule rule-double bg-canvas/70 font-semibold">
+                  <td colSpan={2} className="px-4 py-3.5 text-right uppercase text-[11px] tracking-wider text-ink-soft">
+                    Total kontrak
+                  </td>
+                  <td className="px-4 py-3.5 text-right font-mono tnum">{Money.formatIdr(c.totalMinor)}</td>
+                  <td className="px-4 py-3.5 text-right font-mono tnum">{Money.formatIdr(c.accumulatedMinor)}</td>
+                  <td className="px-4 py-3.5 text-right font-mono text-base font-bold text-ink tnum">
+                    {Money.formatIdr(c.remainingMinor)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

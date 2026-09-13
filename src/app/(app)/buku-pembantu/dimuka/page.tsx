@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { ArrowLeft, Plus } from "lucide-react";
+import type { CSSProperties } from "react";
+import { ArrowLeft, FileText, Plus } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { listPrepaidCards } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AnimatedNumber } from "@/components/motion";
 import { Money } from "@/core/money/money";
 import { FilterBar } from "@/components/subsidiary/filter-bar";
 
@@ -47,6 +49,8 @@ export default async function DimukaListPage({
   });
   const isFiltering = q !== "" || activeSt !== "SEMUA";
   const totalSisa = filtered.reduce((a, r) => a + r.remainingMinor, 0n);
+  const totalAll = filtered.reduce((a, r) => a + r.totalMinor, 0n);
+  const totalAcc = filtered.reduce((a, r) => a + r.accumulatedMinor, 0n);
   const hrefFor = (nextSt: string) => {
     const p = new URLSearchParams();
     if (q) p.set("q", q);
@@ -75,7 +79,7 @@ export default async function DimukaListPage({
       />
       <p className="text-xs text-ink-soft" role="status">
         {isFiltering ? `${filtered.length} dari ${rows.length} kontrak` : `${rows.length} kontrak`} · sisa belum diamortisasi{" "}
-        <strong className="font-mono text-ink tnum">{Money.formatIdr(totalSisa)}</strong>
+        <AnimatedNumber minor={totalSisa} className="font-display text-lg font-semibold tracking-tight text-ink tnum" />
       </p>
       <FilterBar
         q={q}
@@ -83,10 +87,10 @@ export default async function DimukaListPage({
         pills={STATUS_OPTIONS.map((s) => ({ value: s, label: STATUS_LABEL[s], href: hrefFor(s), active: s === activeSt }))}
         searchPlaceholder="Cari kode / nama / penerima…"
       />
-      <div className="overflow-hidden rounded-xl border border-rule bg-paper shadow-xs">
+      <div className="overflow-hidden rounded-xl border border-rule bg-paper shadow-2xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-rule bg-canvas/70 text-ink-soft font-semibold uppercase tracking-wider text-[11px]">
+          <table className="w-full text-left text-xs tnum">
+            <thead className="border-b border-rule bg-canvas/80 text-ink-soft font-semibold uppercase tracking-wider text-[11px]">
               <tr>
                 <th className="px-4 py-3">Kode</th>
                 <th className="px-4 py-3">Kontrak</th>
@@ -99,16 +103,27 @@ export default async function DimukaListPage({
             <tbody className="divide-y divide-rule/60 text-ink">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-ink-soft">
-                    {isFiltering ? "Tidak ada kontrak yang cocok dengan filter." : "Belum ada kontrak. Klik “Tambah Kontrak” untuk mencatat sewa/asuransi dibayar di muka."}
+                  <td colSpan={6} className="px-4 py-12 text-center text-ink-soft">
+                    {isFiltering ? (
+                      "Tidak ada kontrak yang cocok dengan filter."
+                    ) : (
+                      <>
+                        <FileText className="mx-auto mb-2 size-8 text-ink-soft/40" />
+                        <p className="text-xs">Belum ada kontrak. Klik “Tambah Kontrak” untuk mencatat sewa/asuransi dibayar di muka.</p>
+                      </>
+                    )}
                   </td>
                 </tr>
               ) : (
-                filtered.map((r) => (
-                  <tr key={r.id} className="hover:bg-canvas/40 transition-colors">
+                filtered.map((r, i) => (
+                  <tr
+                    key={r.id}
+                    className="row-enter hover:bg-canvas/40 transition-colors"
+                    style={{ "--row-i": i } as CSSProperties}
+                  >
                     <td className="px-4 py-3 font-mono font-semibold text-terra">{r.code}</td>
                     <td className="px-4 py-3 font-medium">
-                      <Link href={`/buku-pembantu/dimuka/${r.id}`} className="hover:text-terra transition-colors">
+                      <Link href={`/buku-pembantu/dimuka/${r.id}`} className="focus-ring rounded-md hover:text-terra transition-colors">
                         {r.name}
                       </Link>
                       {r.vendor && <span className="block text-[11px] font-normal text-ink-soft">{r.vendor}</span>}
@@ -125,6 +140,21 @@ export default async function DimukaListPage({
                 ))
               )}
             </tbody>
+            {filtered.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-rule rule-double bg-canvas/70 font-semibold">
+                  <td colSpan={2} className="px-4 py-3.5 text-right uppercase text-[11px] tracking-wider text-ink-soft">
+                    Total
+                  </td>
+                  <td className="px-4 py-3.5 text-right font-mono tnum">{Money.formatIdr(totalAll)}</td>
+                  <td className="px-4 py-3.5 text-right font-mono tnum">{Money.formatIdr(totalAcc)}</td>
+                  <td className="px-4 py-3.5 text-right font-mono text-base font-bold text-ink tnum">
+                    {Money.formatIdr(totalSisa)}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Package } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
@@ -8,6 +9,7 @@ import { stockStatus, formatQty, avgCost } from "@/core/subledger/cards";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { MeterFill } from "@/components/subsidiary/animated";
+import { AnimatedNumber } from "@/components/motion";
 import { Money } from "@/core/money/money";
 import { Reveal } from "@/components/motion";
 
@@ -78,13 +80,13 @@ export default async function ItemCardPage({ params }: ItemCardPageProps) {
           </div>
           <div className="rounded-2xl border border-rule bg-paper p-3.5 shadow-2xs">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Saldo Nilai</span>
-            <p className="mt-1 font-mono text-base font-bold text-ink">{Money.formatIdr(item.totalCostMinor)}</p>
+            <AnimatedNumber minor={item.totalCostMinor} className="mt-1 block font-display text-xl font-semibold tracking-tight text-ink tnum" />
           </div>
         </div>
       </Reveal>
 
       <Reveal delay={0.1}>
-        <div className="rounded-xl border border-rule overflow-hidden">
+        <div className="rounded-xl border border-rule bg-paper shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left tnum" aria-label="Kartu mutasi persediaan">
               <thead>
@@ -116,7 +118,12 @@ export default async function ItemCardPage({ params }: ItemCardPageProps) {
                   </tr>
                 ) : (
                   rows.map((r, i) => (
-                    <tr key={`${r.date}-${i}`} data-testid="kartu-row" className="hover:bg-canvas/40 transition-colors">
+                    <tr
+                      key={`${r.date}-${i}`}
+                      data-testid="kartu-row"
+                      className="row-enter hover:bg-canvas/40 transition-colors"
+                      style={{ "--row-i": i } as CSSProperties}
+                    >
                       <td className="px-4 py-2.5 whitespace-nowrap text-ink-soft">{r.date}</td>
                       <td className="px-4 py-2.5 text-ink max-w-60 truncate" title={r.desc}>{r.desc}</td>
                       <td className="px-4 py-2.5 font-mono text-ink-soft whitespace-nowrap">{r.ref}</td>

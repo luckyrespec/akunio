@@ -4,7 +4,7 @@ import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { listContactCards } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
-import { Money } from "@/core/money/money";
+import { AnimatedNumber } from "@/components/motion";
 import { ContactListTable } from "@/components/subsidiary/contact-ledger";
 import { FilterBar } from "@/components/subsidiary/filter-bar";
 
@@ -54,7 +54,7 @@ export default async function PiutangListPage({
       />
       <p className="text-xs text-ink-soft" role="status">
         {isFiltering ? `${filtered.length} dari ${rows.length} pelanggan` : `${rows.length} pelanggan`} · sisa tertagih{" "}
-        <strong className="font-mono text-ink tnum">{Money.formatIdr(totalSisa)}</strong>
+        <AnimatedNumber minor={totalSisa} className="font-display text-lg font-semibold tracking-tight text-ink tnum" />
       </p>
       <FilterBar
         q={q}

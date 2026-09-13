@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import type { CSSProperties } from "react";
+import { ArrowLeft, ChevronRight, FileText } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
 import { listItemCards } from "@/server/db/repos/subsidiary.repo";
 import { stockStatus, formatQty } from "@/core/subledger/cards";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { AnimatedNumber } from "@/components/motion";
 import { Money } from "@/core/money/money";
 import { FilterBar } from "@/components/subsidiary/filter-bar";
 
@@ -57,7 +59,7 @@ export default async function PersediaanListPage({
       />
       <p className="text-xs text-ink-soft" role="status">
         {isFiltering ? `${filtered.length} dari ${items.length} barang` : `${items.length} barang`} · total nilai{" "}
-        <strong className="font-mono text-ink tnum">{Money.formatIdr(totalNilai)}</strong>
+        <AnimatedNumber minor={totalNilai} className="font-display text-lg font-semibold tracking-tight text-ink tnum" />
       </p>
       <FilterBar
         q={q}
@@ -70,7 +72,7 @@ export default async function PersediaanListPage({
         }))}
         searchPlaceholder="Cari kode atau nama barang…"
       />
-      <div className="rounded-xl border border-rule overflow-hidden">
+      <div className="rounded-xl border border-rule bg-paper shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left tnum">
             <thead>
@@ -101,15 +103,23 @@ export default async function PersediaanListPage({
                         </p>
                       </>
                     ) : (
-                      "Belum ada barang. Tambahkan lewat Persediaan → Daftar Barang."
+                      <>
+                        <FileText className="mx-auto mb-2 size-8 text-ink-soft/40" />
+                        <p className="text-xs">Belum ada barang. Tambahkan lewat Persediaan → Daftar Barang.</p>
+                      </>
                     )}
                   </td>
                 </tr>
               ) : (
-                filtered.map((it) => {
+                filtered.map((it, i) => {
                   const status = stockStatus(Number(it.currentQty), Number(it.minStockAlert ?? "0"));
                   return (
-                    <tr key={it.id} data-testid="persediaan-row" className="hover:bg-canvas/40 transition-colors">
+                    <tr
+                      key={it.id}
+                      data-testid="persediaan-row"
+                      className="row-enter hover:bg-canvas/40 transition-colors"
+                      style={{ "--row-i": i } as CSSProperties}
+                    >
                       <td className="px-4 py-3 font-mono font-bold text-ink">{it.code}</td>
                       <td className="px-4 py-3 font-medium text-ink max-w-55 truncate" title={it.name}>{it.name}</td>
                       <td className="px-4 py-3 text-ink-soft">{it.unit}</td>
@@ -123,7 +133,7 @@ export default async function PersediaanListPage({
                         <Link
                           href={`/buku-pembantu/persediaan/${it.id}`}
                           aria-label={`Buka kartu ${it.code} ${it.name}`}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-terra hover:underline"
+                          className="focus-ring inline-flex items-center gap-1 rounded-md text-xs font-semibold text-terra hover:underline"
                         >
                           <span>Lihat kartu</span>
                           <ChevronRight className="size-3.5" />
@@ -134,6 +144,19 @@ export default async function PersediaanListPage({
                 })
               )}
             </tbody>
+            {filtered.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-rule rule-double bg-canvas/70 font-semibold">
+                  <td colSpan={5} className="px-4 py-3.5 text-right uppercase text-[11px] tracking-wider text-ink-soft">
+                    Total Nilai Persediaan
+                  </td>
+                  <td className="px-4 py-3.5 text-right font-mono text-base font-bold text-ink">
+                    {Money.formatIdr(totalNilai)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
