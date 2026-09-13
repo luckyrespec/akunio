@@ -203,3 +203,65 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
     });
   }
 );
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
+  "modul operasional: AI record_invoice_payment ikut posting",
+  () => {
+    let orgId: string;
+    let invNumber = "";
+    const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+    const year = new Date().getFullYear();
+
+    beforeAll(async () => {
+      await truncateAll();
+      orgId = (await makeOrg("PT AI Pelunasan Posting")).orgId;
+      await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+      const { db } = await import("@/server/db");
+      const { contacts, invoices } = await import(
+        "@/server/db/schema/invoicing"
+      );
+      const [c] = await db
+        .insert(contacts)
+        .values({ orgId, type: "CUSTOMER", name: "PT AI Bayar" })
+        .returning();
+      invNumber = `INV-${year}-0902`;
+      await db.insert(invoices).values({
+        orgId,
+        type: "INVOICE",
+        invoiceNumber: invNumber,
+        contactId: c.id,
+        issueDate: `${year}-06-01`,
+        dueDate: `${year}-06-30`,
+        subtotalMinor: 100_000n,
+        totalMinor: 100_000n,
+        status: "ISSUED",
+      });
+    });
+    afterAll(async () => {
+      await admin.end();
+      await truncateAll();
+    });
+
+    it("AI record_invoice_payment menghasilkan jurnal", async () => {
+      const { executeNaraTool } = await import("@/server/ai/nara-tools");
+      const out = await executeNaraTool(orgId, "t@t.id", "record_invoice_payment", {
+        invoiceNumber: invNumber,
+        amount: 500,
+        accountCode: "1110",
+        paymentDate: `${year}-06-11`,
+      });
+      expect(out.success).toBe(true);
+      const paymentId = (out.data as { paymentId?: string } | undefined)?.paymentId;
+      const row = paymentId
+        ? await admin.query<{ journal_entry_id: string | null }>(
+            `SELECT journal_entry_id FROM invoice_payments WHERE id=$1`,
+            [paymentId]
+          )
+        : await admin.query<{ journal_entry_id: string | null }>(
+            `SELECT journal_entry_id FROM invoice_payments WHERE invoice_id=(SELECT id FROM invoices WHERE org_id=$1 AND invoice_number=$2)`,
+            [orgId, invNumber]
+          );
+      expect(row.rows[0].journal_entry_id).not.toBeNull();
+    });
+  }
+);

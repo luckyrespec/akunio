@@ -202,8 +202,10 @@ export const invoicingHandlers: Record<string, ToolHandler> = {
     };
   },
 
-  record_invoice_payment: async (orgId, _actorEmail, args) => {
+  record_invoice_payment: async (orgId, actorEmail, args) => {
     const { recordInvoicePaymentRepo } = await import("@/server/db/repos/invoices.repo");
+    const { postInvoicePaymentToLedger } = await import("@/server/invoicing/posting");
+    const { withOrg } = await import("@/server/db/repos/with-org");
     const { invoices } = await import("@/server/db/schema/invoicing");
     const { accounts } = await import("@/server/db/schema/org");
     const { eq, and } = await import("drizzle-orm");
@@ -240,24 +242,42 @@ export const invoicingHandlers: Record<string, ToolHandler> = {
     const amountMinor = BigInt(Math.round(amtNumber * 100));
     const paymentDate = String(args.paymentDate || new Date().toISOString().slice(0, 10));
 
-    const res = await recordInvoicePaymentRepo(db, orgId, {
-      invoiceId: inv.id,
-      amountMinor,
-      paymentDate,
-      paymentAccountId: acc.id,
-      referenceNumber: args.referenceNumber ? String(args.referenceNumber) : null,
-      notes: args.notes ? String(args.notes) : null,
+    // Samakan default auto-post UI (recordInvoicePaymentAction): pelunasan
+    // langsung diposting ke jurnal + log kas dalam withOrg yang sama
+    // (guard B2 + dedup A6 + log kas otomatis ikut via kedua repo ini).
+    // Gagal posting bukan kegagalan catat — kembalikan postWarning
+    // (preseden createInvoiceWithPostingAction) agar user bisa posting manual.
+    const { res, journalEntryId, postWarning } = await withOrg(orgId, async (tx) => {
+      const res = await recordInvoicePaymentRepo(tx as never, orgId, {
+        invoiceId: inv.id,
+        amountMinor,
+        paymentDate,
+        paymentAccountId: acc.id,
+        referenceNumber: args.referenceNumber ? String(args.referenceNumber) : null,
+        notes: args.notes ? String(args.notes) : null,
+      });
+      let journalEntryId: string | null = null;
+      let postWarning: string | null = null;
+      try {
+        journalEntryId = await postInvoicePaymentToLedger(tx as never, orgId, res.payment.id, actorEmail);
+      } catch (e) {
+        postWarning = e instanceof Error ? e.message : "Gagal memposting pelunasan ke jurnal.";
+      }
+      return { res, journalEntryId, postWarning };
     });
 
     const remainingMinor = res.updatedInvoice.totalMinor - res.updatedInvoice.amountPaidMinor;
     return {
       success: true,
       data: {
+        paymentId: res.payment.id,
+        journalEntryId,
+        postWarning,
         invoiceNumber: inv.invoiceNumber,
         amountPaidFormatted: Money.fromMinor(res.updatedInvoice.amountPaidMinor).formatIdr(),
         remainingFormatted: Money.fromMinor(remainingMinor > 0n ? remainingMinor : 0n).formatIdr(),
         status: res.updatedInvoice.status,
-        suggestions: [`Posting Pelunasan ke Jurnal`, `Lihat Faktur`],
+        suggestions: journalEntryId ? [`Lihat Jurnal`, `Lihat Faktur`] : [`Posting Pelunasan ke Jurnal`, `Lihat Faktur`],
       },
     };
   },
