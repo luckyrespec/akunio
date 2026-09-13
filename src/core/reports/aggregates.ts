@@ -43,5 +43,6 @@ export function signed(
   meta: ReportAccountMeta,
   a: { debitMinor: bigint; creditMinor: bigint },
 ): bigint {
-  return meta.normal === "D" ? a.debitMinor - a.creditMinor : a.creditMinor - a.debitMinor;
+  const net = meta.normal === "D" ? a.debitMinor - a.creditMinor : a.creditMinor - a.debitMinor;
+  return meta.contra ? -net : net;
 }
