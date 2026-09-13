@@ -13,13 +13,25 @@ export const metadata = {
   description: "Kasir cepat untuk toko dagang dan warung — jual, terima bayar, cetak struk.",
 };
 
+type RecordingMethod = "PERPETUAL" | "PERIODIC";
+
+// Catatan PERIODIC hanya informatif — halaman kasir tak boleh 500 bila read preferensi gagal.
+async function getRecordingMethodSafe(orgId: string): Promise<RecordingMethod> {
+  try {
+    const s = await getInventorySettings(db, orgId);
+    return s?.recordingMethod ?? "PERPETUAL";
+  } catch {
+    return "PERPETUAL";
+  }
+}
+
 export default async function KasirPage() {
   const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-  const [cashRes, catalogRes, shiftsRes, invSettings] = await Promise.all([
+  const [cashRes, catalogRes, shiftsRes, recordingMethod] = await Promise.all([
     getPosCashAccountsAction(),
     getPosCatalogAction(),
     getOpenShiftsAction(),
-    getInventorySettings(db, ctx.orgId),
+    getRecordingMethodSafe(ctx.orgId),
   ]);
   const error = !cashRes.ok ? cashRes.error : !catalogRes.ok ? catalogRes.error : !shiftsRes.ok ? shiftsRes.error : null;
 
@@ -30,5 +42,5 @@ export default async function KasirPage() {
       </p>
     );
   }
-  return <KasirShell cashAccounts={cashRes.data} catalog={catalogRes.data} shifts={shiftsRes.data} recordingMethod={invSettings?.recordingMethod ?? "PERPETUAL"} />;
+  return <KasirShell cashAccounts={cashRes.data} catalog={catalogRes.data} shifts={shiftsRes.data} recordingMethod={recordingMethod} />;
 }

@@ -7,6 +7,18 @@ import { FakturBaruClient } from "./faktur-baru-client";
 import type { InvoiceType } from "@/server/db/schema/invoicing";
 import { eq } from "drizzle-orm";
 
+type RecordingMethod = "PERPETUAL" | "PERIODIC";
+
+// Catatan PERIODIC hanya informatif — halaman faktur tak boleh 500 bila read preferensi gagal.
+async function getRecordingMethodSafe(orgId: string): Promise<RecordingMethod> {
+  try {
+    const s = await getInventorySettings(db, orgId);
+    return s?.recordingMethod ?? "PERPETUAL";
+  } catch {
+    return "PERPETUAL";
+  }
+}
+
 export default async function FakturBaruPage({
   searchParams,
 }: {
@@ -16,11 +28,11 @@ export default async function FakturBaruPage({
   const sp = await searchParams;
   const tipe: InvoiceType = sp.tipe === "bill" ? "BILL" : "INVOICE";
 
-  const [contactsList, [org], catalogItems, settings] = await Promise.all([
+  const [contactsList, [org], catalogItems, recordingMethod] = await Promise.all([
     listContactsRepo(db, ctx.orgId),
     db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.orgId)),
     listInventoryItems(db, ctx.orgId),
-    getInventorySettings(db, ctx.orgId),
+    getRecordingMethodSafe(ctx.orgId),
   ]);
 
   return (
@@ -44,7 +56,7 @@ export default async function FakturBaruPage({
             qty: i.currentQty,
             unit: i.unit,
           }))}
-        recordingMethod={settings?.recordingMethod ?? "PERPETUAL"}
+        recordingMethod={recordingMethod}
       />
     </section>
   );
