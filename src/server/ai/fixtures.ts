@@ -96,7 +96,7 @@ export const EVAL_CASES: Array<{ name: string; input: string; expected: DraftEnt
       dateISO: "2026-01-15", memo: "Penjualan barang tunai",
       lines: [
         { accountCode: "1110", debitText: "2.000.000", creditText: "", confidence: 0.9, reason: "Penerimaan kas" },
-        { accountCode: "4100", debitText: "", creditText: "2.000.000", confidence: 0.9, reason: "Pendapatan usaha" },
+        { accountCode: "4200", debitText: "", creditText: "2.000.000", confidence: 0.9, reason: "Pendapatan lain-lain" },
       ],
       overallConfidence: 0.9, explanation: "Penjualan tunai menambah Kas dan Pendapatan.",
     },
@@ -156,7 +156,7 @@ export const EVAL_CASES: Array<{ name: string; input: string; expected: DraftEnt
       dateISO: "2026-01-15", memo: "Penjualan barang tunai termasuk PPN 11%",
       lines: [
         { accountCode: "1110", debitText: "11.000.000", creditText: "", confidence: 0.9, reason: "Total penerimaan kas" },
-        { accountCode: "4100", debitText: "", creditText: "10.000.000", confidence: 0.85, reason: "Nilai penjualan sebelum PPN" },
+        { accountCode: "4200", debitText: "", creditText: "10.000.000", confidence: 0.85, reason: "Nilai penjualan sebelum PPN" },
         { accountCode: "2200", debitText: "", creditText: "1.000.000", confidence: 0.85, reason: "PPN Keluaran 11%" },
       ],
       overallConfidence: 0.88, explanation: "Penjualan 10 juta + PPN Keluaran 1 juta, diterima tunai 11 juta.",

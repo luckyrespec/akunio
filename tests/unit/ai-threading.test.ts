@@ -184,4 +184,12 @@ describe("B6 ai threading + resolver", () => {
     else process.env.GEMINI_MODEL = prev;
     expect(models.getGeminiModel()).toBe("gemini-3.5-flash-lite");
   });
+
+  it("fuzzy ke akun GROUP ditandai unresolved", () => {
+    const res = resolveDraftAccounts({ lines: [{ accountCode: "Pendapatan Usaha" }] }, ONBOARDED_ACCOUNTS);
+    expect(res.lines[0]?.unresolved).toBe(true);
+    expect(res.lines[0]?.accountId).toBeNull();
+    expect(res.lines[0]?.matchedName).toBe("Pendapatan Usaha");
+    expect(res.warnings.join(" ")).toMatch(/induk|GROUP/i);
+  });
 });

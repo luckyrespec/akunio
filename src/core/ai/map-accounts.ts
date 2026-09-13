@@ -73,6 +73,27 @@ export function resolveDraftAccounts(
       if (!best || s > best.score) best = { a, score: s };
     }
     if (best && best.score >= minScore) {
+      // Kriteria postable yang sama dengan exact-match: hasil fuzzy ke akun
+      // induk (GROUP) atau arsip → unresolved agar review memblokir, bukan
+      // ter-resolve diam-diam lalu gagal saat posting.
+      if (accounts.some((a) => a.parentCode === best.a.code)) {
+        warnings.push(
+          `Baris ${n}: akun ${l.accountCode} cocok fuzzy ke ${best.a.code} (${best.a.name}) yang adalah akun induk (GROUP) — pilih akun detail yang bisa diposting`,
+        );
+        return {
+          accountCode: l.accountCode, accountId: null,
+          matchedName: best.a.name, unresolved: true,
+        };
+      }
+      if (best.a.archivedAt) {
+        warnings.push(
+          `Baris ${n}: akun ${l.accountCode} cocok fuzzy ke ${best.a.code} (${best.a.name}) yang sudah diarsipkan — pilih akun aktif`,
+        );
+        return {
+          accountCode: l.accountCode, accountId: null,
+          matchedName: best.a.name, unresolved: true,
+        };
+      }
       warnings.push(
         `Baris ${n}: akun ${l.accountCode} tidak dikenal, dipilih ${best.a.code} (${best.score.toFixed(2)})`,
       );
