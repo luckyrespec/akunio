@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/server/auth/guard";
 import { db, type Db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getEntryWithLines } from "@/server/db/repos/journals.repo";
 import {
   createInvoiceRepo,
@@ -238,7 +239,7 @@ class PreviewAbort {
 export async function previewInvoiceJournalAction(invoiceId: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       const entryId = await postInvoiceToLedger(tx as unknown as Db, ctx.orgId, invoiceId, ctx.userEmail);
       const entry = await getEntryWithLines(tx, ctx.orgId, entryId);
       if (!entry) throw new Error("Gagal membaca draf jurnal.");

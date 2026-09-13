@@ -531,3 +531,27 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("unifikasi money + batas atas
       } as never))).rejects.toThrow("MELEBIHI_BATAS");
   });
 });
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("konteks org withOrg (A9)", () => {
+  beforeAll(async () => {
+    await truncateAll();
+  });
+
+  afterAll(async () => {
+    await truncateAll();
+  });
+
+  it("withOrg menetapkan app.current_org dalam tx", async () => {
+    // CATATAN A9: brief menulis withOrg(db, orgId, fn), tetapi helper
+    // aktual (with-org.ts + semua pemanggil existing) bersignatur
+    // withOrg(orgId, fn) — tes ini mengunci kontrak aktual tersebut.
+    const { withOrg } = await import("@/server/db/repos/with-org");
+    const { sql } = await import("drizzle-orm");
+    const { orgId } = await makeOrg("Ctx Co");
+    const seen = await withOrg(orgId, async (tx) => {
+      const r = await tx.execute(sql`SELECT current_setting('app.current_org') AS v`);
+      return (r.rows[0] as { v: string }).v;
+    });
+    expect(seen).toBe(orgId);
+  });
+});

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { requireContext } from "@/server/auth/guard";
 import { accounts, organizations } from "@/server/db/schema/org";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
@@ -29,7 +29,7 @@ export default async function CalkPage({
   const sp = await searchParams;
   const forceRefresh = sp.refresh === "1" || sp.refresh === "true";
 
-  const data = await db.transaction(async (tx) => {
+  const data = await withOrg(ctx.orgId, async (tx) => {
     const [org] = await tx
       .select()
       .from(organizations)

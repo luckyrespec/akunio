@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
 import { todayISO } from "@/lib/date";
 import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { accounts, organizations } from "@/server/db/schema/org";
 import { findPeriodByDate } from "@/server/db/repos/periods.repo";
 import { evaluatePeriodReadiness } from "@/server/db/repos/periods-closing.repo";
@@ -52,7 +53,7 @@ export default async function DasborPage() {
   const yearStartISO = `${year}-01-01`;
   const yearEndISO = `${year}-12-31`;
 
-  const data = await db.transaction(async (tx) => {
+  const data = await withOrg(ctx.orgId, async (tx) => {
     const period = await findPeriodByDate(tx, ctx.orgId, today);
     const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, ctx.orgId));
     const cashLines = await postedLinesThrough(tx, ctx.orgId, yearEndISO);

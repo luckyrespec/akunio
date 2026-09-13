@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
 import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { fixedAssets } from "@/server/db/schema/assets";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import {
@@ -59,7 +60,7 @@ export async function createFixedAssetAction(payload: {
       ? Money.parseIdr(payload.salvageValueText).minor
       : 0n;
 
-    const asset = await db.transaction(async (tx) => {
+    const asset = await withOrg(ctx.orgId, async (tx) => {
       const r = await createFixedAsset(tx, {
         orgId: ctx.orgId,
         name: payload.name.trim(),
@@ -124,7 +125,7 @@ export async function createAssetWithAcquisitionAction(payload: {
       return { ok: false, error: "Pilih akun lawan untuk jurnal perolehan (Kas/Bank, Utang, atau Modal)." };
     }
 
-    const result = await db.transaction(async (tx) => {
+    const result = await withOrg(ctx.orgId, async (tx) => {
       const asset = await createFixedAsset(tx, {
         orgId: ctx.orgId,
         name: payload.name.trim(),
@@ -206,7 +207,7 @@ export async function postMonthlyDepreciationAction(
 ): Promise<AssetActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const result = await db.transaction(async (tx) => {
+    const result = await withOrg(ctx.orgId, async (tx) => {
       const r = await postMonthlyDepreciation(tx, {
         orgId: ctx.orgId,
         periodName,
@@ -249,7 +250,7 @@ export async function disposeAssetAction(payload: {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const proceedsMinor = Money.parseIdr(payload.proceedsText || "0").minor;
 
-    const result = await db.transaction(async (tx) => {
+    const result = await withOrg(ctx.orgId, async (tx) => {
       const r = await disposeAsset(tx, {
         orgId: ctx.orgId,
         assetId: payload.assetId,
