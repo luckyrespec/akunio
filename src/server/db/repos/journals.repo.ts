@@ -17,7 +17,7 @@ import type { SubledgerKind } from "../schema/subledger";
 
 export class PostingError extends Error {
   constructor(readonly issues: Array<Record<string, unknown>>) {
-    super("VALIDASI_GAGAL");
+    super(`VALIDASI_GAGAL: ${issues.map((i) => String(i.code ?? "?")).join(",")}`);
   }
 }
 
@@ -49,8 +49,8 @@ async function assertSubledgerControl(
   if (first.code === "SUBLEDGER_REF_WAJIB") {
     throw new Error(`SUBLEDGER_REF_WAJIB: baris ${code} wajib membawa rincian ${first.kind}`);
   }
-  if (first.code === "SUBLEDGER_KIND_TIDAK_COCok") {
-    throw new Error(`SUBLEDGER_KIND_TIDAK_COCok: baris ${code} mengharapkan ${first.expected}, dapat ${first.actual}`);
+  if (first.code === "SUBLEDGER_KIND_TIDAK_COCOK") {
+    throw new Error(`SUBLEDGER_KIND_TIDAK_COCOK: baris ${code} mengharapkan ${first.expected}, dapat ${first.actual}`);
   }
   throw new Error(`SUBLEDGER_TOTAL_TIDAK_COCok: total rincian tidak sama dengan nominal baris ${code}`);
 }
@@ -83,6 +83,36 @@ export function toMinor(numericStr: string): bigint {
   const [w, f = ""] = s.split(".");
   const v = BigInt(w) * 100n + BigInt(f.padEnd(2, "0").slice(0, 2));
   return neg ? -v : v;
+}
+
+// Penomoran JE-YYYY-NNNN year-scoped per org; dipakai postJournalEntry +
+// createDraftJournalEntry agar kedua jalur berbagi satu sumber penomoran.
+export async function nextJournalNumber(
+  q: Queryable,
+  orgId: string,
+  period: { id: string; name: string },
+): Promise<{ seq: number; number: string }> {
+  // Numbers are year-scoped (JE-YYYY-NNNN unique per org) while counters are
+  // stored per period; the xact lock makes the cross-period read-modify-write
+  // atomic against other postings in the same org-year.
+  const year = period.name.slice(0, 4);
+  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:${year}`}))`);
+  const counterRes = await q.execute(sql`
+    INSERT INTO journal_seq_counters (org_id, period_id, last)
+    VALUES (${orgId}, ${period.id}, 1)
+    ON CONFLICT (org_id, period_id)
+    DO UPDATE SET last = journal_seq_counters.last + 1
+    RETURNING last
+  `);
+  const periodSeq = Number((counterRes.rows?.[0] as { last: number } | undefined)?.last ?? 1);
+  const baseRes = await q.execute<{ base: number }>(sql`
+    SELECT COALESCE(SUM(c.last), 0)::int AS base
+    FROM journal_seq_counters c
+    JOIN fiscal_periods p ON p.id = c.period_id
+    WHERE c.org_id = ${orgId} AND left(p.name, 4) = ${year} AND c.period_id <> ${period.id}
+  `);
+  const seq = periodSeq + Number(baseRes.rows?.[0]?.base ?? 0);
+  return { seq, number: journalNumber(period.name, seq) };
 }
 
 export interface LineView {
@@ -388,27 +418,7 @@ export async function postJournalEntry(
   }
   await assertSubledgerControl(q, orgId, { ...input, isLegacyReversal: legacyReversal }, orgAccounts);
 
-  // Numbers are year-scoped (JE-YYYY-NNNN unique per org) while counters are
-  // stored per period; the xact lock makes the cross-period read-modify-write
-  // atomic against other postings in the same org-year.
-  const year = period.name.slice(0, 4);
-  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:${year}`}))`);
-  const counterRes = await q.execute(sql`
-    INSERT INTO journal_seq_counters (org_id, period_id, last)
-    VALUES (${orgId}, ${period.id}, 1)
-    ON CONFLICT (org_id, period_id)
-    DO UPDATE SET last = journal_seq_counters.last + 1
-    RETURNING last
-  `);
-  const periodSeq = Number((counterRes.rows?.[0] as { last: number } | undefined)?.last ?? 1);
-  const baseRes = await q.execute<{ base: number }>(sql`
-    SELECT COALESCE(SUM(c.last), 0)::int AS base
-    FROM journal_seq_counters c
-    JOIN fiscal_periods p ON p.id = c.period_id
-    WHERE c.org_id = ${orgId} AND left(p.name, 4) = ${year} AND c.period_id <> ${period.id}
-  `);
-  const seq = periodSeq + Number(baseRes.rows?.[0]?.base ?? 0);
-  const number = journalNumber(period.name, seq);
+  const { seq, number } = await nextJournalNumber(q, orgId, period);
 
   const [entry] = await q.insert(journalEntries).values({
     orgId,
@@ -472,24 +482,7 @@ export async function createDraftJournalEntry(
 
   await assertSubledgerControl(q, orgId, input, orgAccounts);
 
-  const year = period.name.slice(0, 4);
-  await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:${year}`}))`);
-  const counterRes = await q.execute(sql`
-    INSERT INTO journal_seq_counters (org_id, period_id, last)
-    VALUES (${orgId}, ${period.id}, 1)
-    ON CONFLICT (org_id, period_id)
-    DO UPDATE SET last = journal_seq_counters.last + 1
-    RETURNING last
-  `);
-  const periodSeq = Number((counterRes.rows?.[0] as { last: number } | undefined)?.last ?? 1);
-  const baseRes = await q.execute<{ base: number }>(sql`
-    SELECT COALESCE(SUM(c.last), 0)::int AS base
-    FROM journal_seq_counters c
-    JOIN fiscal_periods p ON p.id = c.period_id
-    WHERE c.org_id = ${orgId} AND left(p.name, 4) = ${year} AND c.period_id <> ${period.id}
-  `);
-  const seq = periodSeq + Number(baseRes.rows?.[0]?.base ?? 0);
-  const number = journalNumber(period.name, seq);
+  const { seq, number } = await nextJournalNumber(q, orgId, period);
 
   const [entry] = await q.insert(journalEntries).values({
     orgId,
@@ -532,7 +525,9 @@ export async function postDraftEntry(
   if (entry.status === "POSTED") return { id: entry.id, number: entry.number };
   const period = await findPeriodByDate(q, orgId, entry.entryDate);
   if (!period || period.status !== "OPEN") throw new PostingError([{ code: "PERIODE_TUTUP" }]);
-  const draftLineRows = await q.select().from(journalLines).where(eq(journalLines.entryId, entry.id));
+  const draftLineRows = await q.select().from(journalLines)
+    .where(eq(journalLines.entryId, entry.id))
+    .orderBy(asc(journalLines.position));
   const draftLinkRows = await listLinksForEntry(q, orgId, entry.id);
   const draftLinksByLine = new Map<string, Array<{ kind: "PIUTANG" | "UTANG" | "PERSEDIAAN"; refId: string; amountMinor: bigint }>>();
   for (const r of draftLinkRows) {
@@ -542,7 +537,9 @@ export async function postDraftEntry(
     draftLinksByLine.set(r.lineId, arr);
   }
   const draftOrgAccounts = await q.select().from(accounts).where(eq(accounts.orgId, orgId));
-  await assertSubledgerControl(q, orgId, {
+  // Draf divalidasi ulang penuh saat posting: isinya bisa berubah sejak
+  // pembuatan (draf editable) atau akunnya diarsip setelah draf dibuat.
+  const draftInput: JournalEntryInput = {
     dateISO: entry.entryDate,
     memo: entry.memo,
     source: (entry.source ?? "MANUAL") as JournalEntryInput["source"],
@@ -552,7 +549,12 @@ export async function postDraftEntry(
       creditMinor: toMinor(l.credit),
       subledgerLinks: draftLinksByLine.get(l.id) ?? [],
     })),
-  }, draftOrgAccounts);
+  };
+  const draftIssues = validateEntry(draftInput, period.status);
+  if (draftIssues.length > 0) throw new PostingError(draftIssues);
+  const draftAcctIssues = checkPostingAccounts(draftInput.lines, postingMetaMap(draftOrgAccounts));
+  if (draftAcctIssues.length > 0) throw new PostingError(draftAcctIssues);
+  await assertSubledgerControl(q, orgId, draftInput, draftOrgAccounts);
   const [updated] = await q.update(journalEntries)
     .set({ status: "POSTED", postedAt: new Date(), postedBy: actorEmail })
     .where(and(eq(journalEntries.id, entry.id), eq(journalEntries.status, "DRAFT")))

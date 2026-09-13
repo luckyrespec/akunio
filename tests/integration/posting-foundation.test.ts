@@ -132,3 +132,85 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("tutup loophole trigger + FK 
     await expect(postRandomReversalWithBogusTarget(orgId)).rejects.toThrow();
   });
 });
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("postDraftEntry validasi penuh", () => {
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+  const year = new Date().getFullYear();
+
+  beforeAll(async () => {
+    await truncateAll();
+  });
+
+  afterAll(async () => {
+    await truncateAll();
+    await admin.end();
+  });
+
+  async function seedLeafOrg(name: string): Promise<{ orgId: string; kas: string; pendapatan: string }> {
+    const { orgId } = await makeOrg(name);
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+    const rows = await admin.query<{ id: string; code: string }>(
+      `SELECT id, code FROM accounts WHERE org_id=$1`, [orgId]);
+    const byCode = Object.fromEntries(rows.rows.map((r) => [r.code, r.id]));
+    // 1110 + 4200 selalu leaf di semua varian COA (bukan GROUP).
+    return { orgId, kas: byCode["1110"], pendapatan: byCode["4200"] };
+  }
+
+  async function createValidDraft(orgId: string, kas: string, pendapatan: string) {
+    const { createDraftJournalEntry } = await import("@/server/db/repos/journals.repo");
+    const { db } = await import("@/server/db");
+    return db.transaction((tx) =>
+      createDraftJournalEntry(tx as never, orgId, {
+        dateISO: `${year}-02-10`,
+        memo: "draf valid",
+        lines: [
+          { accountId: kas, debitMinor: 1_000_000n, creditMinor: 0n },
+          { accountId: pendapatan, debitMinor: 0n, creditMinor: 1_000_000n },
+        ],
+      } as never));
+  }
+
+  it("draf tak-seimbang ditolak saat posting", async () => {
+    const { orgId, kas, pendapatan } = await seedLeafOrg("DrafUnbalanced Co");
+    const draft = await createValidDraft(orgId, kas, pendapatan);
+    // createDraftJournalEntry memvalidasi saat pembuatan, jadi selipkan
+    // ketidakseimbangan langsung via SQL (draf masih editable) sebelum posting.
+    await admin.query(
+      `UPDATE journal_lines SET debit = '20000.00' WHERE entry_id = $1 AND position = 0`,
+      [draft.id],
+    );
+    const { postDraftEntry } = await import("@/server/db/repos/journals.repo");
+    const { db } = await import("@/server/db");
+    await expect(db.transaction((tx) => postDraftEntry(tx as never, orgId, "a@b.c", draft.id)))
+      .rejects.toThrow("UNBALANCED");
+  });
+
+  it("draf akun grup/arsip ditolak saat posting", async () => {
+    const { postDraftEntry } = await import("@/server/db/repos/journals.repo");
+    const { db } = await import("@/server/db");
+
+    // Kasus grup: arahkan satu baris draf valid ke akun induk (punya anak).
+    const g = await seedLeafOrg("DrafGrup Co");
+    const draftG = await createValidDraft(g.orgId, g.kas, g.pendapatan);
+    const parent = await admin.query<{ id: string }>(
+      `SELECT p.id FROM accounts p WHERE p.org_id = $1
+       AND EXISTS (SELECT 1 FROM accounts c WHERE c.org_id = $1 AND c.parent_code = p.code)
+       LIMIT 1`,
+      [g.orgId],
+    );
+    expect(parent.rows[0]?.id).toBeTruthy();
+    await admin.query(
+      `UPDATE journal_lines SET account_id = $2 WHERE entry_id = $1 AND position = 1`,
+      [draftG.id, parent.rows[0].id],
+    );
+    await expect(db.transaction((tx) => postDraftEntry(tx as never, g.orgId, "a@b.c", draftG.id)))
+      .rejects.toThrow("GROUP_ACCOUNT");
+
+    // Kasus arsip: buat draf valid lalu arsipkan akunnya, baru posting.
+    const a = await seedLeafOrg("DrafArsip Co");
+    const draftA = await createValidDraft(a.orgId, a.kas, a.pendapatan);
+    await admin.query(`UPDATE accounts SET archived_at = now() WHERE id = $1`, [a.kas]);
+    await expect(db.transaction((tx) => postDraftEntry(tx as never, a.orgId, "a@b.c", draftA.id)))
+      .rejects.toThrow("ARCHIVED_ACCOUNT");
+  });
+});

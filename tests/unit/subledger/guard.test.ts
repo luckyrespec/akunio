@@ -29,7 +29,7 @@ describe("validateSubledgerControl", () => {
       lines: [line({ links: [{ kind: "PIUTANG", refId: "c1", amountMinor: 7_500_000n }] })],
       controlByAccountId: controls, source: "DOCUMENT",
     });
-    expect(issues[0]).toMatchObject({ code: "SUBLEDGER_KIND_TIDAK_COCok", expected: "PERSEDIAAN", actual: "PIUTANG" });
+    expect(issues[0]).toMatchObject({ code: "SUBLEDGER_KIND_TIDAK_COCOK", expected: "PERSEDIAAN", actual: "PIUTANG" });
   });
 
   it("total link tidak sama ditolak", () => {

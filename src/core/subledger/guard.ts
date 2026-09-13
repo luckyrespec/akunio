@@ -19,7 +19,7 @@ export interface GuardLineInput {
 export type SubledgerIssue =
   | { code: "AKUN_KONTROL_WAJIB_VIA_MODUL"; index: number; kind: SubledgerKind }
   | { code: "SUBLEDGER_REF_WAJIB"; index: number; kind: SubledgerKind }
-  | { code: "SUBLEDGER_KIND_TIDAK_COCok"; index: number; expected: SubledgerKind; actual: SubledgerKind }
+  | { code: "SUBLEDGER_KIND_TIDAK_COCOK"; index: number; expected: SubledgerKind; actual: SubledgerKind }
   | { code: "SUBLEDGER_TOTAL_TIDAK_COCok"; index: number; expectedMinor: bigint; actualMinor: bigint };
 
 export const MANUAL_SOURCES: ReadonlySet<JournalSource> = new Set([
@@ -66,7 +66,7 @@ export function validateSubledgerControl(args: {
     }
     for (const link of links) {
       if (link.kind !== kind) {
-        issues.push({ code: "SUBLEDGER_KIND_TIDAK_COCok", index, expected: kind, actual: link.kind });
+        issues.push({ code: "SUBLEDGER_KIND_TIDAK_COCOK", index, expected: kind, actual: link.kind });
         return;
       }
     }
