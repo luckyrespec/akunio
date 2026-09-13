@@ -637,3 +637,177 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("arus kas tanpa plug pada fix
     expect(cf.operatingMinor).toBe(-700_000n);
   });
 });
+
+// D4-fix1: flag Doctor residu arus kas + dedup per periode (tanpa nominal).
+// (a) residu material (>1% |delta kas| via helper produksi
+//     isCashFlowResidualMaterial) → tepat 1 temuan cashFlowResidual walau scan
+//     dijalankan 2x dengan nominal residu berbeda (dedup per periode).
+// (b) residu imaterial (<=1%) → tanpa temuan.
+// Fixture: setoran PPN Keluaran tunai (Dr 2200 / Cr 1110) — 22xx tak terpetakan
+// bucket mana pun sehingga menjadi residu unmapped murni; tanggal = startsOn
+// periode OPEN berjalan (jendela yang sama dipakai runDoctorAuditScan).
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("flag Doctor residu + dedup per periode", () => {
+  let orgMat = "";
+  let orgImmat = "";
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+  const byCodeMat = new Map<string, string>();
+  const byCodeImmat = new Map<string, string>();
+  let winFrom = "";
+  let winThrough = "";
+
+  async function postTo(orgId: string, byCode: Map<string, string>, input: object) {
+    const { postJournalEntry } = await import("@/server/db/repos/journals.repo");
+    const { db } = await import("@/server/db");
+    return db.transaction((tx) =>
+      postJournalEntry(tx as never, orgId, "tester@test.id", input as never));
+  }
+
+  function idOf(byCode: Map<string, string>, code: string): string {
+    const v = byCode.get(code);
+    if (!v) throw new Error(`AKUN_UJI_HILANG: ${code}`);
+    return v;
+  }
+
+  beforeAll(async () => {
+    await truncateAll();
+    orgMat = (await makeOrg("PT Residu Doctor")).orgId;
+    orgImmat = (await makeOrg("PT Residu Imaterial")).orgId;
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgMat);
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgImmat);
+
+    // Jendela scan = seleksi yang sama seperti runDoctorAuditScan (periode
+    // OPEN berjalan, through = min(endsOn, today)).
+    const { db } = await import("@/server/db");
+    const { listPeriods } = await import("@/server/db/repos/periods.repo");
+    const periods = await db.transaction((tx) => listPeriods(tx as never, orgMat));
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const openNow = periods
+      .filter((p) => p.status === "OPEN" && p.startsOn <= todayISO)
+      .sort((a, b) => b.endsOn.localeCompare(a.endsOn))[0];
+    if (!openNow) throw new Error("PERIODE_OPEN_HILANG");
+    winFrom = openNow.startsOn;
+    winThrough = openNow.endsOn <= todayISO ? openNow.endsOn : todayISO;
+
+    for (const [orgId, byCode] of [[orgMat, byCodeMat], [orgImmat, byCodeImmat]] as const) {
+      const rows = await admin.query<{ id: string; code: string }>(
+        `SELECT id, code FROM accounts WHERE org_id=$1`, [orgId]);
+      for (const r of rows.rows) byCode.set(r.code, r.id);
+    }
+
+    // Bantalan saldo normal di LUAR jendela scan (agar abnormalBalances tak
+    // ikut terpicu — tanpa bantalan, 1110/2200 bersaldo satu sisi berlawanan
+    // normal dan mengaburkan hitungan temuan). Periode disiapkan bila belum ada
+    // (aman di tepi tahun); tak memengaruhi arus kas jendela berjalan.
+    const wy = Number(winFrom.slice(0, 4));
+    const wm = Number(winFrom.slice(5, 7));
+    const pmTotal = wy * 12 + (wm - 1) - 1;
+    const cushionYM = `${Math.floor(pmTotal / 12)}-${String((pmTotal % 12) + 1).padStart(2, "0")}`;
+    await ensureMonthPeriod(admin, orgMat, cushionYM);
+    await ensureMonthPeriod(admin, orgImmat, cushionYM);
+    const cushionDate = `${cushionYM}-10`;
+    for (const [orgId, byCode] of [[orgMat, byCodeMat], [orgImmat, byCodeImmat]] as const) {
+      await postTo(orgId, byCode, {
+        dateISO: cushionDate, memo: "Modal awal tunai",
+        lines: [
+          { accountId: idOf(byCode, "1110"), debitMinor: 10_000_000n, creditMinor: 0n },
+          { accountId: idOf(byCode, "3100"), debitMinor: 0n, creditMinor: 10_000_000n },
+        ],
+      });
+      await postTo(orgId, byCode, {
+        dateISO: cushionDate, memo: "Akru PPh awal",
+        lines: [
+          { accountId: idOf(byCode, "5700"), debitMinor: 2_000_000n, creditMinor: 0n },
+          { accountId: idOf(byCode, "2200"), debitMinor: 0n, creditMinor: 2_000_000n },
+        ],
+      });
+    }
+
+    // (a) Material: setoran PPN 500rb tunai → deltaKas −500rb, residu −500rb
+    // (100% dari |delta kas|).
+    await postTo(orgMat, byCodeMat, {
+      dateISO: winFrom, memo: "Setoran PPN tunai 1",
+      lines: [
+        { accountId: idOf(byCodeMat, "2200"), debitMinor: 500_000n, creditMinor: 0n },
+        { accountId: idOf(byCodeMat, "1110"), debitMinor: 0n, creditMinor: 500_000n },
+      ],
+    });
+    // (b) Imaterial: jual tunai 5jt (terpetakan via NI) + setoran PPN kecil
+    // 5rb → residual −5rb = 0,1% dari |delta kas| 4.995.000.
+    await postTo(orgImmat, byCodeImmat, {
+      dateISO: winFrom, memo: "Jual tunai",
+      lines: [
+        { accountId: idOf(byCodeImmat, "1110"), debitMinor: 5_000_000n, creditMinor: 0n },
+        { accountId: idOf(byCodeImmat, "4100"), debitMinor: 0n, creditMinor: 5_000_000n },
+      ],
+    });
+    await postTo(orgImmat, byCodeImmat, {
+      dateISO: winFrom, memo: "Setoran PPN kecil",
+      lines: [
+        { accountId: idOf(byCodeImmat, "2200"), debitMinor: 5_000n, creditMinor: 0n },
+        { accountId: idOf(byCodeImmat, "1110"), debitMinor: 0n, creditMinor: 5_000n },
+      ],
+    });
+  });
+  afterAll(async () => { await admin.end(); await truncateAll(); });
+
+  it("residu material → 1 temuan walau scan 2x dengan nominal berbeda", async () => {
+    const { db } = await import("@/server/db");
+    const { buildCashFlow, isCashFlowResidualMaterial } =
+      await import("@/server/reports/cash-flow");
+    const { runDoctorAuditScan } = await import("@/core/doctor/scan");
+    const { listFindings } = await import("@/server/db/repos/findings.repo");
+
+    // Ambang dari implementasi (abs terhadap delta kas).
+    const cf1 = await db.transaction((tx) =>
+      buildCashFlow(tx as never, orgMat, winFrom, winThrough));
+    expect(cf1.deltaKasMinor).toBe(-500_000n);
+    expect(cf1.residualMinor).toBe(-500_000n);
+    expect(isCashFlowResidualMaterial(cf1.residualMinor, cf1.deltaKasMinor)).toBe(true);
+
+    const r1 = await db.transaction((tx) => runDoctorAuditScan(tx as never, orgMat));
+    expect(r1.breakdown.cashFlowResidual).toBe(1);
+    expect(r1.newFindingsCount).toBe(1);
+    let rows = await listFindings(db as never, orgMat);
+    expect(rows.filter((f) => f.type === "cashFlowResidual").length).toBe(1);
+
+    // Residu berubah nominal antar-scan (setoran susulan 200rb) — dedup per
+    // periode berarti scan kedua tidak menambah temuan.
+    await postTo(orgMat, byCodeMat, {
+      dateISO: winFrom, memo: "Setoran PPN tunai 2",
+      lines: [
+        { accountId: idOf(byCodeMat, "2200"), debitMinor: 200_000n, creditMinor: 0n },
+        { accountId: idOf(byCodeMat, "1110"), debitMinor: 0n, creditMinor: 200_000n },
+      ],
+    });
+    const cf2 = await db.transaction((tx) =>
+      buildCashFlow(tx as never, orgMat, winFrom, winThrough));
+    expect(cf2.residualMinor).toBe(-700_000n);
+    expect(isCashFlowResidualMaterial(cf2.residualMinor, cf2.deltaKasMinor)).toBe(true);
+
+    const r2 = await db.transaction((tx) => runDoctorAuditScan(tx as never, orgMat));
+    expect(r2.newFindingsCount).toBe(0);
+    expect(r2.breakdown.cashFlowResidual).toBe(1);
+    rows = await listFindings(db as never, orgMat);
+    expect(rows.filter((f) => f.type === "cashFlowResidual").length).toBe(1);
+  });
+
+  it("residu imaterial (<=1%) → tanpa temuan", async () => {
+    const { db } = await import("@/server/db");
+    const { buildCashFlow, isCashFlowResidualMaterial } =
+      await import("@/server/reports/cash-flow");
+    const { runDoctorAuditScan } = await import("@/core/doctor/scan");
+    const { listFindings } = await import("@/server/db/repos/findings.repo");
+
+    const cf = await db.transaction((tx) =>
+      buildCashFlow(tx as never, orgImmat, winFrom, winThrough));
+    expect(cf.deltaKasMinor).toBe(4_995_000n);
+    expect(cf.residualMinor).toBe(-5_000n);
+    expect(isCashFlowResidualMaterial(cf.residualMinor, cf.deltaKasMinor)).toBe(false);
+
+    const r = await db.transaction((tx) => runDoctorAuditScan(tx as never, orgImmat));
+    expect(r.newFindingsCount).toBe(0);
+    expect(r.breakdown.cashFlowResidual).toBe(0);
+    const rows = await listFindings(db as never, orgImmat);
+    expect(rows.filter((f) => f.type === "cashFlowResidual").length).toBe(0);
+  });
+});

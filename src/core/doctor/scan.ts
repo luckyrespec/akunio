@@ -23,6 +23,24 @@ export interface DoctorScanResult {
   };
 }
 
+// D4-fix1: kunci dedup temuan — residu arus kas dinormalisasi per (org,
+// periode) TANPA nominal. Nominal (residualMinor/deltaKasMinor) berubah
+// antar-scan dan membuat temuan open menumpuk bila ikut dikunci. Org sudah
+// tersekat via listFindings(q, orgId), jadi `type:period` cukup. Baris lama
+// (evidence JSON penuh) tetap cocok karena evidence tersimpan memuat period.
+function dedupKey(type: string, evidence: Record<string, unknown>): string {
+  if (
+    type === "cashFlowResidual" &&
+    typeof evidence.period === "string" &&
+    evidence.period !== ""
+  ) {
+    return `${type}:${evidence.period}`;
+  }
+  const keyDetail =
+    evidence.code || evidence.entryId || evidence.dateISO || JSON.stringify(evidence);
+  return `${type}:${keyDetail}`;
+}
+
 export async function runDoctorAuditScan(
   q: Queryable,
   orgId: string,
@@ -166,15 +184,13 @@ export async function runDoctorAuditScan(
   const existingStatusMap = new Map<string, string>();
   for (const e of allExisting) {
     const ev = (e.evidence as Record<string, unknown>) ?? {};
-    const keyDetail = ev.code || ev.entryId || ev.dateISO || JSON.stringify(ev);
-    existingStatusMap.set(`${e.type}:${keyDetail}`, e.status);
+    existingStatusMap.set(dedupKey(e.type, ev), e.status);
   }
 
   let newlyCreatedCount = 0;
   for (const draft of allDrafts) {
     const ev = draft.evidence ?? {};
-    const keyDetail = ev.code || ev.entryId || ev.dateISO || JSON.stringify(ev);
-    const key = `${draft.type}:${keyDetail}`;
+    const key = dedupKey(draft.type, ev);
     // Jika belum pernah ada temuan sama sekali untuk entitas ini:
     if (!existingStatusMap.has(key)) {
       await createFinding(q, orgId, draft);
@@ -186,8 +202,7 @@ export async function runDoctorAuditScan(
   // Hitung Health Score & Breakdown HANYA dari temuan yang masih berstatus OPEN
   const openDrafts = allDrafts.filter((draft) => {
     const ev = draft.evidence ?? {};
-    const keyDetail = ev.code || ev.entryId || ev.dateISO || JSON.stringify(ev);
-    const key = `${draft.type}:${keyDetail}`;
+    const key = dedupKey(draft.type, ev);
     return existingStatusMap.get(key) === "open";
   });
 
