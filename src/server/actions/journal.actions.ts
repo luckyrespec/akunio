@@ -7,6 +7,7 @@ import { withOrg } from "@/server/db/repos/with-org";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import {
   postJournalEntry, getPostedEntry, linkDocumentToEntry, PostingError,
+  findReversalEntries,
 } from "@/server/db/repos/journals.repo";
 import { makeReversal } from "@/core/journals/validate";
 import { issueToMessage } from "@/core/journals/messages";
@@ -23,6 +24,15 @@ export interface ActionResult {
   error?: string;
   number?: string;
   id?: string;
+}
+
+// revalidatePath melempar di luar request-scope Next (mis. vitest di balik
+// seam TEST_CTX_ORG) — padahal posting/audit sudah komit. Pola yang sama
+// dipakai tax.actions.ts agar server action tetap teruji langsung.
+function safeRevalidate(path: string) {
+  try {
+    revalidatePath(path);
+  } catch {}
 }
 
 function fail(e: unknown): ActionResult {
@@ -42,6 +52,8 @@ export async function createAndPostAction(payload: {
   memo: string;
   lines: Array<{ accountId: string; debitText: string; creditText: string }>;
   document?: { id: string; fileName?: string };
+  /** Kunci per submit dari client (crypto.randomUUID per form instance). */
+  idempotencyKey?: string;
 }): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]); // viewer may not post
@@ -49,7 +61,7 @@ export async function createAndPostAction(payload: {
       dateISO: payload.dateISO,
       memo: payload.memo.trim() || "(tanpa keterangan)",
       source: "MANUAL" as const,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: payload.idempotencyKey?.trim() || crypto.randomUUID(),
       lines: payload.lines.map((l) => ({
         accountId: l.accountId,
         debitMinor: Money.parseIdr(l.debitText.trim() === "" ? "0" : l.debitText).minor,
@@ -73,7 +85,7 @@ export async function createAndPostAction(payload: {
       });
       return r;
     });
-    revalidatePath("/jurnal");
+    safeRevalidate("/jurnal");
     return { ok: true, number: out.number, id: out.id };
   } catch (e) {
     return fail(e);
@@ -86,6 +98,9 @@ export async function reverseEntryAction(entryId: string, dateISO: string): Prom
     const out = await withOrg(ctx.orgId, async (tx) => {
       const original = await getPostedEntry(tx, ctx.orgId, entryId);
       if (!original) throw new Error("JURNAL_TIDAK_DITEMUKAN");
+      // Idempoten: balikan ganda (double-klik / retry) kembali ke record sama.
+      const [existing] = await findReversalEntries(tx, ctx.orgId, original.id);
+      if (existing) return { id: existing.id, number: existing.number };
       const reversalInput = makeReversal(
         {
           number: original.number,
@@ -95,7 +110,9 @@ export async function reverseEntryAction(entryId: string, dateISO: string): Prom
         },
         dateISO,
       );
-      reversalInput.idempotencyKey = crypto.randomUUID();
+      // Kunci deterministik per jurnal asal: race konkuren runtuh ke satu
+      // record via tangkapan je_org_idem_uq di postJournalEntry.
+      reversalInput.idempotencyKey = `reversal-${original.id}`;
       const r = await postJournalEntry(tx, ctx.orgId, ctx.userEmail, reversalInput, {
         reversalOfId: original.id,
       });
@@ -106,8 +123,8 @@ export async function reverseEntryAction(entryId: string, dateISO: string): Prom
       });
       return r;
     });
-    revalidatePath("/jurnal");
-    return { ok: true, number: out.number };
+    safeRevalidate("/jurnal");
+    return { ok: true, number: out.number, id: out.id };
   } catch (e) {
     return fail(e);
   }

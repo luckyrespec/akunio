@@ -214,3 +214,68 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("postDraftEntry validasi penu
       .rejects.toThrow("ARCHIVED_ACCOUNT");
   });
 });
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("idempotency ujung-ke-ujung + reverse idempoten", () => {
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+  const year = new Date().getFullYear();
+
+  beforeAll(async () => {
+    await truncateAll();
+  });
+
+  afterAll(async () => {
+    await truncateAll();
+    await admin.end();
+  });
+
+  async function seedLeafOrg(name: string): Promise<{ orgId: string; kas: string; pendapatan: string }> {
+    const { orgId } = await makeOrg(name);
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+    const rows = await admin.query<{ id: string; code: string }>(
+      `SELECT id, code FROM accounts WHERE org_id=$1`, [orgId]);
+    const byCode = Object.fromEntries(rows.rows.map((r) => [r.code, r.id]));
+    // 1110 + 4200 selalu leaf di semua varian COA (bukan GROUP).
+    return { orgId, kas: byCode["1110"], pendapatan: byCode["4200"] };
+  }
+
+  // Helper test lokal: posting 2 baris seimbang via postJournalEntry
+  // dengan idempotencyKey eksplisit (pola byCode seperti suite lain).
+  async function postWithKey(orgId: string, kas: string, pendapatan: string, key: string) {
+    const { postJournalEntry } = await import("@/server/db/repos/journals.repo");
+    const { db } = await import("@/server/db");
+    return db.transaction((tx) =>
+      postJournalEntry(tx as never, orgId, "tester@test.id", {
+        dateISO: `${year}-02-10`,
+        memo: "idem",
+        idempotencyKey: key,
+        lines: [
+          { accountId: kas, debitMinor: 1_000_000n, creditMinor: 0n },
+          { accountId: pendapatan, debitMinor: 0n, creditMinor: 1_000_000n },
+        ],
+      } as never));
+  }
+
+  it("double postJournalEntry key sama kembali existing", async () => {
+    const { orgId, kas, pendapatan } = await seedLeafOrg("Idem Co");
+    const p1 = await postWithKey(orgId, kas, pendapatan, "k-1");
+    const p2 = await postWithKey(orgId, kas, pendapatan, "k-1");
+    expect(p2.id).toBe(p1.id);
+  });
+
+  it("reverse ganda kembali reversal yang sama", async () => {
+    const { orgId, kas, pendapatan } = await seedLeafOrg("Reverse Idem Co");
+    const posted = await postWithKey(orgId, kas, pendapatan, "k-seed-reverse");
+    process.env.TEST_CTX_ORG = orgId;
+    try {
+      const { reverseEntryAction } = await import("@/server/actions/journal.actions");
+      const r1 = await reverseEntryAction(posted.id, `${year}-02-11`);
+      expect(r1.ok).toBe(true);
+      expect(r1.id).toBeTruthy();
+      const r2 = await reverseEntryAction(posted.id, `${year}-02-11`);
+      expect(r2.ok).toBe(true);
+      expect(r2.id).toBe(r1.id);
+    } finally {
+      delete process.env.TEST_CTX_ORG;
+    }
+  });
+});

@@ -130,6 +130,9 @@ export function CashEntryForm({
   const [memo, setMemo] = React.useState("");
   const [file, setFile] = React.useState<File | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  // Kunci idempotency per submit (preseden kasir-shell): double-klik / retry
+  // mengirim key yang sama sehingga runtuh ke satu jurnal; diputar tiap sukses.
+  const idemRef = React.useRef(crypto.randomUUID());
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const head = CARD_HEAD[kind];
@@ -212,12 +215,14 @@ export function CashEntryForm({
       fd.set("amount", amount);
       fd.set("memo", memo.trim());
       fd.set("post", post ? "1" : "0");
+      fd.set("idempotencyKey", idemRef.current);
       if (documentId) {
         fd.set("documentId", documentId);
         if (documentFileName) fd.set("documentFileName", documentFileName);
       }
       const res = await createCashEntryAction(fd);
       if (!res.ok) throw new Error(friendlyError(res.error));
+      idemRef.current = crypto.randomUUID();
       router.push(`${detailBasePath}/${res.data.id}`);
       router.refresh();
     } catch (e) {

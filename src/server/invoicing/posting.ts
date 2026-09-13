@@ -484,6 +484,9 @@ export async function postInvoiceToLedger(
         dateISO: inv.issueDate,
         memo,
         source: "DOCUMENT",
+        // Kunci deterministik per faktur: posting ulang (retry / double-klik
+        // tombol posting) kembali ke jurnal yang sama, bukan jurnal ganda.
+        idempotencyKey: `inv-${inv.id}`,
         lines,
       }
     );
@@ -708,6 +711,9 @@ export async function postInvoicePaymentToLedger(
         dateISO: payment.paymentDate,
         memo,
         source: "DOCUMENT",
+        // Kunci deterministik per pembayaran: pelunasan yang sama tak pernah
+        // menghasilkan dua jurnal (guard journalEntryId + kunci ini).
+        idempotencyKey: `invpay-${payment.id}`,
         lines,
       }
     );

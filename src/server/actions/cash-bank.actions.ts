@@ -45,6 +45,10 @@ export async function createCashEntryAction(formData: FormData) {
       };
     }
     const post = formData.get("post") !== "0";
+    // Kunci per submit dari client (hidden field crypto.randomUUID); fallback
+    // server agar pemanggil lama tanpa key tetap terproteksi per pemanggilan.
+    const idempotencyKey =
+      String(formData.get("idempotencyKey") ?? "").trim() || crypto.randomUUID();
     const documentId = (formData.get("documentId") as string) || null;
     const documentFileName =
       (formData.get("documentFileName") as string) || undefined;
@@ -62,6 +66,7 @@ export async function createCashEntryAction(formData: FormData) {
             contactId,
             amountMinor,
             memo,
+            idempotencyKey,
           },
           { post }
         );

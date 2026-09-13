@@ -65,6 +65,9 @@ export function NewEntryForm({
   const [isMemoExpanded, setIsMemoExpanded] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Kunci idempotency per submit (preseden kasir-shell): double-klik / retry
+  // mengirim key yang sama sehingga runtuh ke satu jurnal; diputar tiap sukses.
+  const idemRef = useRef(crypto.randomUUID());
   const reduceMotion = useReducedMotion();
 
   const [rows, setRows] = useState<Row[]>([
@@ -159,11 +162,13 @@ export function NewEntryForm({
             creditText,
           })),
           document,
+          idempotencyKey: idemRef.current,
         });
         if (!res.ok) {
           setError(res.error ?? "Gagal memposting jurnal.");
           return;
         }
+        idemRef.current = crypto.randomUUID();
         if (mode === "post-new") {
           setFlash({ id: res.id ?? "", number: res.number ?? "" });
           resetForm();

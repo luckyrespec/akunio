@@ -384,6 +384,25 @@ export async function findReversalEntries(
 
 export interface PostResult { id: string; number: string }
 
+/** Cari jurnal existing berdasar kunci idempotency (kontrak: key sama → record sama). */
+export async function findEntryByIdempotencyKey(
+  q: Queryable, orgId: string, key: string,
+): Promise<PostResult | null> {
+  const [dupe] = await q.select({ id: journalEntries.id, number: journalEntries.number })
+    .from(journalEntries)
+    .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.idempotencyKey, key)))
+    .limit(1);
+  return dupe ?? null;
+}
+
+/** True bila error adalah pelanggaran unik je_org_idem_uq (jendela race double-submit). */
+function isIdemConflict(e: unknown): boolean {
+  const pg = e as { code?: unknown; constraint?: unknown } | null;
+  if (!pg || typeof pg !== "object" || pg.code !== "23505") return false;
+  if (pg.constraint === "je_org_idem_uq") return true;
+  return e instanceof Error && e.message.includes("je_org_idem_uq");
+}
+
 export async function postJournalEntry(
   q: Queryable,
   orgId: string,
@@ -392,10 +411,10 @@ export async function postJournalEntry(
   opts: { reversalOfId?: string } = {},
 ): Promise<PostResult> {
   if (input.idempotencyKey) {
-    const [dupe] = await q.select({ id: journalEntries.id, number: journalEntries.number })
-      .from(journalEntries)
-      .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.idempotencyKey, input.idempotencyKey)))
-      .limit(1);
+    // Serikan double-submit konkuren per org+key: yang kalah menunggu lock,
+    // lalu pre-check di bawah melihat baris pemenang yang sudah komit.
+    await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:idem:${input.idempotencyKey}`}))`);
+    const dupe = await findEntryByIdempotencyKey(q, orgId, input.idempotencyKey);
     if (dupe) return dupe;
   }
 
@@ -420,18 +439,32 @@ export async function postJournalEntry(
 
   const { seq, number } = await nextJournalNumber(q, orgId, period);
 
-  const [entry] = await q.insert(journalEntries).values({
-    orgId,
-    periodId: period.id,
-    seq,
-    number,
-    entryDate: input.dateISO,
-    memo: input.memo,
-    source: input.source ?? "MANUAL",
-    status: "DRAFT",
-    reversalOfId: opts.reversalOfId ?? null,
-    idempotencyKey: input.idempotencyKey ?? null,
-  }).returning({ id: journalEntries.id });
+  let entry: { id: string };
+  try {
+    [entry] = await q.insert(journalEntries).values({
+      orgId,
+      periodId: period.id,
+      seq,
+      number,
+      entryDate: input.dateISO,
+      memo: input.memo,
+      source: input.source ?? "MANUAL",
+      status: "DRAFT",
+      reversalOfId: opts.reversalOfId ?? null,
+      idempotencyKey: input.idempotencyKey ?? null,
+    }).returning({ id: journalEntries.id });
+  } catch (e) {
+    // Jendela race sisa (key ditulis jalur lain tanpa lock): kembalikan
+    // record existing, bukan error mentah. Di dalam transaksi yang sudah
+    // abort, SELECT ikut gagal — jatuhkan error asli bila begitu.
+    if (input.idempotencyKey && isIdemConflict(e)) {
+      try {
+        const existing = await findEntryByIdempotencyKey(q, orgId, input.idempotencyKey);
+        if (existing) return existing;
+      } catch {}
+    }
+    throw e;
+  }
 
   const insertedLines = await q.insert(journalLines).values(input.lines.map((l, i) => ({
     orgId,
@@ -470,6 +503,12 @@ export async function createDraftJournalEntry(
   input: JournalEntryInput,
   opts: { reversalOfId?: string } = {},
 ): Promise<PostResult> {
+  if (input.idempotencyKey) {
+    await q.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:idem:${input.idempotencyKey}`}))`);
+    const dupe = await findEntryByIdempotencyKey(q, orgId, input.idempotencyKey);
+    if (dupe) return dupe;
+  }
+
   const period = await findPeriodByDate(q, orgId, input.dateISO);
   if (!period) throw new PostingError([{ code: "PERIODE_TIDAK_DITEMUKAN" }]);
 
@@ -484,18 +523,29 @@ export async function createDraftJournalEntry(
 
   const { seq, number } = await nextJournalNumber(q, orgId, period);
 
-  const [entry] = await q.insert(journalEntries).values({
-    orgId,
-    periodId: period.id,
-    seq,
-    number,
-    entryDate: input.dateISO,
-    memo: input.memo,
-    source: input.source ?? "MANUAL",
-    status: "DRAFT",
-    reversalOfId: opts.reversalOfId ?? null,
-    idempotencyKey: input.idempotencyKey ?? null,
-  }).returning({ id: journalEntries.id });
+  let entry: { id: string };
+  try {
+    [entry] = await q.insert(journalEntries).values({
+      orgId,
+      periodId: period.id,
+      seq,
+      number,
+      entryDate: input.dateISO,
+      memo: input.memo,
+      source: input.source ?? "MANUAL",
+      status: "DRAFT",
+      reversalOfId: opts.reversalOfId ?? null,
+      idempotencyKey: input.idempotencyKey ?? null,
+    }).returning({ id: journalEntries.id });
+  } catch (e) {
+    if (input.idempotencyKey && isIdemConflict(e)) {
+      try {
+        const existing = await findEntryByIdempotencyKey(q, orgId, input.idempotencyKey);
+        if (existing) return existing;
+      } catch {}
+    }
+    throw e;
+  }
 
   const insertedDraftLines = await q.insert(journalLines).values(input.lines.map((l, i) => ({
     orgId,
