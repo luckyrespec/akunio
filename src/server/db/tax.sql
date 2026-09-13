@@ -25,6 +25,7 @@ CREATE INDEX IF NOT EXISTS tax_summaries_org_year_idx
   ON tax_summaries (org_id, tax_year);
 
 -- Perbarui constraint source di journal_entries agar mencakup 'TAX' + kas-bank
+-- KANONIS: satu-satunya definisi je_source_chk. Source baru ditambah di sini + src/server/db/schema/journal.ts + src/core/journals/types.ts.
 ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS je_source_chk;
 ALTER TABLE journal_entries ADD CONSTRAINT je_source_chk
   CHECK (source IN ('MANUAL','AI','DOCUMENT','IMPORT','STOCK_OPNAME','TAX','KAS_BAYAR','KAS_TERIMA','KAS_TRANSFER','DIMUKA','POS','POS_SELISIH'));

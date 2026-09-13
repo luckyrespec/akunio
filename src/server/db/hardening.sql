@@ -6,9 +6,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS je_reversal_once_uq
 ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS je_status_chk;
 ALTER TABLE journal_entries ADD CONSTRAINT je_status_chk
   CHECK (status IN ('DRAFT','POSTED'));
-ALTER TABLE journal_entries DROP CONSTRAINT IF EXISTS je_source_chk;
-ALTER TABLE journal_entries ADD CONSTRAINT je_source_chk
-  CHECK (source IN ('MANUAL','AI','DOCUMENT','IMPORT','STOCK_OPNAME'));
+-- je_source_chk dimiliki tax.sql (penulis alfabetis terakhir menang). Jangan definisikan ulang di sini.
 ALTER TABLE fiscal_periods DROP CONSTRAINT IF EXISTS period_status_chk;
 ALTER TABLE fiscal_periods ADD CONSTRAINT period_status_chk
   CHECK (status IN ('OPEN','CLOSED','LOCKED'));
