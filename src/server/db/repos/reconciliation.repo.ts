@@ -9,6 +9,7 @@ import {
 import { accounts } from "../schema/org";
 import { journalLines, journalEntries } from "../schema/journal";
 import { eq, and, desc, sql, lte, isNull } from "drizzle-orm";
+import { toMinor } from "./journals.repo";
 
 export interface CreateReconciliationInput {
   bankAccountId: string;
@@ -56,8 +57,8 @@ export async function createReconciliationRepo(
     let debitSum = 0n;
     let creditSum = 0n;
     for (const l of lines) {
-      debitSum += BigInt(Math.round(parseFloat(l.debit) * 100));
-      creditSum += BigInt(Math.round(parseFloat(l.credit) * 100));
+      debitSum += toMinor(l.debit);
+      creditSum += toMinor(l.credit);
     }
     // For asset account: Balance = Debit - Credit
     ledgerBalanceMinor = debitSum - creditSum;
@@ -276,7 +277,7 @@ export async function getUnmatchedLedgerLinesRepo(
     date: r.entryDate,
     number: r.entryNumber,
     memo: r.memo || r.entryMemo,
-    debitMinor: BigInt(Math.round(parseFloat(r.debit) * 100)),
-    creditMinor: BigInt(Math.round(parseFloat(r.credit) * 100)),
+    debitMinor: toMinor(r.debit),
+    creditMinor: toMinor(r.credit),
   }));
 }

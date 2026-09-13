@@ -318,7 +318,7 @@ export function NaraHitlApprovalCard({
                 }, 0n);
                 return total > 0n ? (
                   <p className="text-[11px] text-ink-soft">
-                    Total <strong className="text-ink font-mono">{formatRupiahInput(total.toString())}</strong>
+                    Total <strong className="text-ink font-mono">{Money.fromMinor(total).formatIdr()}</strong>
                     {" "}— {terbilangRupiah(total)}
                   </p>
                 ) : null;

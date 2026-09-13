@@ -52,10 +52,28 @@ export function RecordPaymentDialog({
 
   const remainingMinor = invoice ? invoice.totalMinor - invoice.amountPaidMinor : 0n;
 
+  /** minor → string desimal editable ("10000.55") — tanpa Number()/100 agar sen tak terpotong. */
+  function minorToDecimalString(minor: bigint): string {
+    const neg = minor < 0n;
+    const v = neg ? -minor : minor;
+    const whole = v / 100n;
+    const frac = v % 100n;
+    return `${neg ? "-" : ""}${whole.toString()}${frac === 0n ? "" : `.${frac.toString().padStart(2, "0")}`}`;
+  }
+
+  /** string desimal ("10000.55") → minor eksak; null bila format tak valid. Tanpa parseFloat. */
+  function parseDecimalToMinor(raw: string): bigint | null {
+    const m = /^(-)?(\d+)(?:\.(\d{1,2}))?$/.exec(raw.trim());
+    if (!m) return null;
+    const sign = m[1] ? -1n : 1n;
+    const whole = BigInt(m[2]);
+    const frac = m[3] ? BigInt(m[3].padEnd(2, "0")) : 0n;
+    return sign * (whole * 100n + frac);
+  }
+
   React.useEffect(() => {
     if (invoice) {
-      const remainingNum = Number(remainingMinor / 100n);
-      setAmountStr(String(remainingNum > 0 ? remainingNum : ""));
+      setAmountStr(remainingMinor > 0n ? minorToDecimalString(remainingMinor) : "");
       setPaymentDate(new Date().toISOString().slice(0, 10));
       setReferenceNumber("");
       setNotes("");
@@ -74,8 +92,8 @@ export function RecordPaymentDialog({
     e.preventDefault();
     if (!invoice) return;
 
-    const amtNum = parseFloat(amountStr);
-    if (isNaN(amtNum) || amtNum <= 0) {
+    const amountMinor = parseDecimalToMinor(amountStr);
+    if (amountMinor === null || amountMinor <= 0n) {
       setError("Jumlah pembayaran harus lebih dari Rp 0.");
       return;
     }
@@ -89,7 +107,6 @@ export function RecordPaymentDialog({
     setError(null);
 
     try {
-      const amountMinor = BigInt(Math.round(amtNum * 100));
       const res = await recordInvoicePaymentAction(
         {
           invoiceId: invoice.id,

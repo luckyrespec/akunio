@@ -86,8 +86,15 @@ function emptyRow(): ItemRow {
   };
 }
 
+/** Teks rupiah desimal ("500000", "10000.55") → minor eksak. Tanpa parseFloat. */
 function toMinorSafe(numText: string): bigint {
-  return BigInt(Math.round((parseFloat(numText) || 0) * 100));
+  const m = /^(-)?(\d+)(?:\.(\d+))?$/.exec(numText.trim().replace(",", "."));
+  if (!m) return 0n;
+  const sign = m[1] ? -1n : 1n;
+  const frac3 = (m[3] ?? "").padEnd(3, "0").slice(0, 3);
+  let minor = BigInt(m[2]) * 100n + BigInt(frac3.slice(0, 2));
+  if (frac3[2]! >= "5") minor += 1n;
+  return sign * minor;
 }
 
 export function FakturBaruClient({

@@ -7,8 +7,13 @@ export type ValidationIssue =
   | { code: "NEGATIVE_AMOUNT"; index: number }
   | { code: "LINE_EMPTY"; index: number }
   | { code: "LINE_BOTH_SIDES"; index: number }
+  | { code: "MELEBIHI_BATAS"; index: number }
   | { code: "UNBALANCED"; debitMinor: bigint; creditMinor: bigint }
   | { code: "PERIOD_NOT_OPEN"; periodStatus: PeriodStatus };
+
+// Batas atas kolom numeric(18,2): 18 digit, 2 di belakang koma →
+// minor maksimum = 10^18 - 1 (Rp9.999.999.999.999.999,99).
+export const MAX_MINOR = 9_999_999_999_999_999_99n;
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -32,6 +37,9 @@ export function validateEntry(
   e.lines.forEach((l, i) => {
     if (l.debitMinor < 0n || l.creditMinor < 0n)
       issues.push({ code: "NEGATIVE_AMOUNT", index: i });
+    if (l.debitMinor > MAX_MINOR || l.debitMinor < -MAX_MINOR
+      || l.creditMinor > MAX_MINOR || l.creditMinor < -MAX_MINOR)
+      issues.push({ code: "MELEBIHI_BATAS", index: i });
     if (l.debitMinor === 0n && l.creditMinor === 0n)
       issues.push({ code: "LINE_EMPTY", index: i });
     else if (l.debitMinor !== 0n && l.creditMinor !== 0n)

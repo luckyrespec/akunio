@@ -466,3 +466,68 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("reversal warisi source + mir
     }
   });
 });
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("unifikasi money + batas atas (A8)", () => {
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+  const year = new Date().getFullYear();
+
+  beforeAll(async () => {
+    await truncateAll();
+  });
+
+  afterAll(async () => {
+    await truncateAll();
+    await admin.end();
+  });
+
+  async function seedBankOrg(name: string): Promise<{ orgId: string; bank: string; pendapatan: string }> {
+    const { orgId } = await makeOrg(name);
+    await (await import("@/server/bootstrap/seed-org")).seedOrgData(orgId);
+    const rows = await admin.query<{ id: string; code: string }>(
+      `SELECT id, code FROM accounts WHERE org_id=$1`, [orgId]);
+    const byCode = Object.fromEntries(rows.rows.map((r) => [r.code, r.id]));
+    // 1110 + 4200 selalu leaf di semua varian COA (bukan GROUP).
+    return { orgId, bank: byCode["1110"], pendapatan: byCode["4200"] };
+  }
+
+  it("rekonsiliasi eksak pada nominal sen", async () => {
+    const { orgId, bank, pendapatan } = await seedBankOrg("Sen Co");
+    const { postJournalEntry } = await import("@/server/db/repos/journals.repo");
+    const { createReconciliationRepo } = await import("@/server/db/repos/reconciliation.repo");
+    const { db } = await import("@/server/db");
+    // Posting garis 10.000,55 dan 0,05 ke akun bank; ledgerBalance == 10.000,60 persis.
+    await db.transaction((tx) =>
+      postJournalEntry(tx as never, orgId, "tester@test.id", {
+        dateISO: `${year}-02-10`,
+        memo: "sen",
+        lines: [
+          { accountId: bank, debitMinor: 1_000_055n, creditMinor: 0n },
+          { accountId: bank, debitMinor: 5n, creditMinor: 0n },
+          { accountId: pendapatan, debitMinor: 0n, creditMinor: 1_000_060n },
+        ],
+      } as never));
+    const rec = await createReconciliationRepo(db as never, orgId, {
+      bankAccountId: bank,
+      statementDate: `${year}-02-28`,
+      statementBalanceMinor: 1_000_060n,
+    });
+    expect(rec.ledgerBalanceMinor).toBe(1_000_060n);
+  });
+
+  it("nominal melebihi numeric(18,2) ditolak validate", async () => {
+    const { orgId, bank, pendapatan } = await seedBankOrg("Batas Co");
+    const { postJournalEntry } = await import("@/server/db/repos/journals.repo");
+    const { db } = await import("@/server/db");
+    // Di atas kapasitas numeric(18,2): minor 9_999_999_999_999_999_99n+.
+    const huge = 9_999_999_999_999_999_99n + 1n;
+    await expect(db.transaction((tx) =>
+      postJournalEntry(tx as never, orgId, "tester@test.id", {
+        dateISO: `${year}-02-10`,
+        memo: "huge",
+        lines: [
+          { accountId: bank, debitMinor: huge, creditMinor: 0n },
+          { accountId: pendapatan, debitMinor: 0n, creditMinor: huge },
+        ],
+      } as never))).rejects.toThrow("MELEBIHI_BATAS");
+  });
+});

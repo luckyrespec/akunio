@@ -6,7 +6,7 @@ import { aiDrafts } from "../schema/ai";
 import { bankReconciliations } from "../schema/reconciliation";
 import { assetDepreciationLines, fixedAssets } from "../schema/assets";
 import { invoices } from "../schema/invoicing";
-import { postJournalEntry } from "./journals.repo";
+import { postJournalEntry, toMinor } from "./journals.repo";
 import {
   evaluatePreClosingChecklist,
   type PreClosingChecklistResult,
@@ -94,8 +94,8 @@ export async function evaluatePeriodReadiness(
       ),
     );
 
-  const totalDebit = BigInt(Math.round(parseFloat(tbRes[0]?.totalDebit ?? "0") * 100));
-  const totalCredit = BigInt(Math.round(parseFloat(tbRes[0]?.totalCredit ?? "0") * 100));
+  const totalDebit = toMinor(tbRes[0]?.totalDebit ?? "0");
+  const totalCredit = toMinor(tbRes[0]?.totalCredit ?? "0");
   const diffMinor = totalDebit > totalCredit ? totalDebit - totalCredit : totalCredit - totalDebit;
 
   return evaluatePreClosingChecklist({
@@ -181,12 +181,12 @@ export async function closePeriod(
 
     const revenueBalances = revRows.map((r) => ({
       accountId: r.accountId,
-      balanceCreditMinor: BigInt(Math.round(parseFloat(r.creditTotal) * 100)),
+      balanceCreditMinor: toMinor(r.creditTotal),
     }));
 
     const expenseBalances = expRows.map((e) => ({
       accountId: e.accountId,
-      balanceDebitMinor: BigInt(Math.round(parseFloat(e.debitTotal) * 100)),
+      balanceDebitMinor: toMinor(e.debitTotal),
     }));
 
     const closingLines = generateYearEndClosingLines({
