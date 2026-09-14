@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { Pool, type PoolClient } from "pg";
 import { db } from "@/server/db";
-import { makeOrg, truncateAll } from "./helpers";
+import { makeOrg, truncateAll, guardTestDb } from "./helpers";
 import { accounts } from "@/server/db/schema/org";
 import { subledgerControls } from "@/server/db/schema/subledger";
 import { prepaidContracts } from "@/server/db/schema/prepaid";
@@ -43,6 +43,8 @@ function overrideTestUrl(): string | null {
 }
 
 async function ensureRlsTestRole(admin: Pool, ownerUrl: string): Promise<void> {
+  // M5: pagar SEBELUM DDL peran — jangan pernah buat peran test di DB non-test.
+  guardTestDb(ownerUrl);
   const escPwd = RLS_TEST_PASSWORD.replaceAll("'", "''");
   await admin.query(`
     DO $$

@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import "dotenv/config";
 
-function guardTestDb(url: string): string {
+export function guardTestDb(url: string): string {
   if (!/ledger_test/.test(url)) {
     throw new Error(
       `SAFETY: refusing to touch non-test database (${url}). Run "bun run test:db:setup" first.`,
