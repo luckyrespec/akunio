@@ -12,7 +12,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   findReversalEntries,
   getPostedEntry,
@@ -47,21 +47,23 @@ export default async function JurnalDetailPage({
 
   let entry;
   try {
-    entry = await db.transaction((tx) => getPostedEntry(tx, ctx.orgId, id));
+    entry = await withOrg(ctx.orgId, (tx) => getPostedEntry(tx, ctx.orgId, id));
   } catch {
     entry = null;
   }
   if (!entry) notFound();
 
-  const [docs, reversals] = await Promise.all([
-    listEntryDocuments(db, ctx.orgId, entry.id),
-    findReversalEntries(db, ctx.orgId, entry.id),
-  ]);
+  const [docs, reversals] = await withOrg(ctx.orgId, async (tx) =>
+    Promise.all([
+      listEntryDocuments(tx, ctx.orgId, entry.id),
+      findReversalEntries(tx, ctx.orgId, entry.id),
+    ]),
+  );
 
   let originalNumber: string | null = null;
   if (entry.reversalOfId) {
     try {
-      const orig = await db.transaction((tx) => getPostedEntry(tx, ctx.orgId, entry.reversalOfId!));
+      const orig = await withOrg(ctx.orgId, (tx) => getPostedEntry(tx, ctx.orgId, entry.reversalOfId!));
       originalNumber = orig?.number ?? null;
     } catch {
       originalNumber = null;

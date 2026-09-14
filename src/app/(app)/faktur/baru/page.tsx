@@ -1,5 +1,5 @@
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listContactsRepo } from "@/server/db/repos/contacts.repo";
 import { getInventorySettings, listInventoryItems } from "@/server/db/repos/inventory.repo";
 import { organizations } from "@/server/db/schema/org";
@@ -10,9 +10,12 @@ import { eq } from "drizzle-orm";
 type RecordingMethod = "PERPETUAL" | "PERIODIC";
 
 // Catatan PERIODIC hanya informatif — halaman faktur tak boleh 500 bila read preferensi gagal.
-async function getRecordingMethodSafe(orgId: string): Promise<RecordingMethod> {
+async function getRecordingMethodSafe(
+  q: Parameters<typeof getInventorySettings>[0],
+  orgId: string,
+): Promise<RecordingMethod> {
   try {
-    const s = await getInventorySettings(db, orgId);
+    const s = await getInventorySettings(q, orgId);
     return s?.recordingMethod ?? "PERPETUAL";
   } catch {
     return "PERPETUAL";
@@ -28,12 +31,14 @@ export default async function FakturBaruPage({
   const sp = await searchParams;
   const tipe: InvoiceType = sp.tipe === "bill" ? "BILL" : "INVOICE";
 
-  const [contactsList, [org], catalogItems, recordingMethod] = await Promise.all([
-    listContactsRepo(db, ctx.orgId),
-    db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.orgId)),
-    listInventoryItems(db, ctx.orgId),
-    getRecordingMethodSafe(ctx.orgId),
-  ]);
+  const [contactsList, [org], catalogItems, recordingMethod] = await withOrg(ctx.orgId, (tx) =>
+    Promise.all([
+      listContactsRepo(tx, ctx.orgId),
+      tx.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.orgId)),
+      listInventoryItems(tx, ctx.orgId),
+      getRecordingMethodSafe(tx, ctx.orgId),
+    ]),
+  );
 
   return (
     <section className="w-full space-y-0">

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getFinding } from "@/server/db/repos/findings.repo";
 import { PageHeader } from "@/components/page-header";
 import { TemuanDetailActions } from "./temuan-detail-actions";
@@ -18,7 +18,7 @@ interface Props {
 export default async function TemuanDetailPage({ params }: Props) {
   const { id } = await params;
   const ctx = await requireContext();
-  const row = await getFinding(db, ctx.orgId, id);
+  const row = await withOrg(ctx.orgId, (tx) => getFinding(tx, ctx.orgId, id));
   if (!row) notFound();
 
   const finding: FindingView = {
@@ -33,17 +33,19 @@ export default async function TemuanDetailPage({ params }: Props) {
   // Cek apakah temuan ini sudah memiliki draf koreksi yang masih PENDING
   const { aiDrafts } = await import("@/server/db/schema/ai");
   const { and, eq, sql } = await import("drizzle-orm");
-  const [pendingDraft] = await db
-    .select({ id: aiDrafts.id })
-    .from(aiDrafts)
-    .where(
-      and(
-        eq(aiDrafts.orgId, ctx.orgId),
-        eq(aiDrafts.status, "PENDING"),
-        sql`${aiDrafts.draft}->>'findingId' = ${finding.id}`,
-      ),
-    )
-    .limit(1);
+  const [pendingDraft] = await withOrg(ctx.orgId, (tx) =>
+    tx
+      .select({ id: aiDrafts.id })
+      .from(aiDrafts)
+      .where(
+        and(
+          eq(aiDrafts.orgId, ctx.orgId),
+          eq(aiDrafts.status, "PENDING"),
+          sql`${aiDrafts.draft}->>'findingId' = ${finding.id}`,
+        ),
+      )
+      .limit(1),
+  );
 
   return (
     <section className="space-y-6">

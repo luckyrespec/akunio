@@ -842,3 +842,33 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
     });
   }
 );
+
+describe.skipIf(process.env.SKIP_DB_TESTS === "1")("withOrg read scoping halaman", () => {
+  let orgA = "";
+  let orgB = "";
+  const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+
+  beforeAll(async () => {
+    await truncateAll();
+    orgA = (await makeOrg("Org Baca A")).orgId;
+    orgB = (await makeOrg("Org Baca B")).orgId;
+    const { createContactRepo } = await import("@/server/db/repos/contacts.repo");
+    const { db } = await import("@/server/db");
+    await createContactRepo(db as never, orgA, { type: "CUSTOMER", name: "Kontak A" });
+    await createContactRepo(db as never, orgB, { type: "CUSTOMER", name: "Kontak B" });
+  });
+  afterAll(async () => {
+    await admin.end();
+    await truncateAll();
+  });
+
+  it("read antar-org terisolasi predikat dua arah", async () => {
+    const { withOrg } = await import("@/server/db/repos/with-org");
+    const { listContactsRepo } = await import("@/server/db/repos/contacts.repo");
+    const a = await withOrg(orgA, (tx) => listContactsRepo(tx as never, orgA));
+    const b = await withOrg(orgB, (tx) => listContactsRepo(tx as never, orgB));
+    expect(a.map((c) => c.name)).toEqual(["Kontak A"]);
+    expect(b.map((c) => c.name)).toEqual(["Kontak B"]);
+  });
+});
+

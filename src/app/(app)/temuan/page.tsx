@@ -1,5 +1,5 @@
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listFindings } from "@/server/db/repos/findings.repo";
 import { countEntries } from "@/server/db/repos/journals.repo";
 import { PageHeader } from "@/components/page-header";
@@ -9,10 +9,12 @@ import { cn } from "@/lib/utils";
 
 export default async function TemuanPage() {
   const ctx = await requireContext();
-  const [allFindings, totalJournals] = await Promise.all([
-    listFindings(db, ctx.orgId),
-    countEntries(db, ctx.orgId),
-  ]);
+  const [allFindings, totalJournals] = await withOrg(ctx.orgId, (tx) =>
+    Promise.all([
+      listFindings(tx, ctx.orgId),
+      countEntries(tx, ctx.orgId),
+    ]),
+  );
 
   const openFindings = allFindings.filter((f) => f.status === "open");
   const resolvedCount = allFindings.filter((f) => f.status === "resolved").length;

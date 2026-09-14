@@ -1,5 +1,5 @@
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getInvoiceByIdRepo } from "@/server/db/repos/invoices.repo";
 import { organizations } from "@/server/db/schema/org";
 import { InvoicePrintView } from "@/components/invoicing/invoice-print-view";
@@ -31,10 +31,12 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
 
   const ctx = await requireContext();
 
-  const [inv, [org]] = await Promise.all([
-    getInvoiceByIdRepo(db, ctx.orgId, id),
-    db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.orgId)),
-  ]);
+  const [inv, [org]] = await withOrg(ctx.orgId, (tx) =>
+    Promise.all([
+      getInvoiceByIdRepo(tx, ctx.orgId, id),
+      tx.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.orgId)),
+    ]),
+  );
 
   if (!inv) {
     notFound();

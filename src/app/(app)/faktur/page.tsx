@@ -1,5 +1,5 @@
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listInvoicesRepo, getAgingReportRepo } from "@/server/db/repos/invoices.repo";
 import { listContactsRepo } from "@/server/db/repos/contacts.repo";
 import { accounts } from "@/server/db/schema/org";
@@ -15,15 +15,17 @@ export default async function FakturPage({
   const sp = await searchParams;
   const tab = sp.tab === "utang" ? "UTANG" : sp.tab === "aging" ? "AGING" : "PIUTANG";
 
-  const [invoices, contacts, cashAccounts, aging] = await Promise.all([
-    listInvoicesRepo(db, ctx.orgId),
-    listContactsRepo(db, ctx.orgId),
-    db
-      .select({ id: accounts.id, code: accounts.code, name: accounts.name })
-      .from(accounts)
-      .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.isCash, true))),
-    getAgingReportRepo(db, ctx.orgId, "INVOICE"),
-  ]);
+  const [invoices, contacts, cashAccounts, aging] = await withOrg(ctx.orgId, (tx) =>
+    Promise.all([
+      listInvoicesRepo(tx, ctx.orgId),
+      listContactsRepo(tx, ctx.orgId),
+      tx
+        .select({ id: accounts.id, code: accounts.code, name: accounts.name })
+        .from(accounts)
+        .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.isCash, true))),
+      getAgingReportRepo(tx, ctx.orgId, "INVOICE"),
+    ]),
+  );
 
   return (
     <div className="space-y-6">

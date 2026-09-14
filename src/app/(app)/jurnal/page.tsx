@@ -2,7 +2,7 @@ import { Fragment, Suspense } from "react";
 import { ChevronLeft, ChevronRight, BookOpen, FileSpreadsheet, Clock } from "lucide-react";
 import Link from "next/link";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   countEntries,
   countSearchEntries,
@@ -80,41 +80,54 @@ export default async function JurnalPage({
   const draftPage = Math.max(1, Number(sp.draftPage) || 1);
   const draftOffset = (draftPage - 1) * draftLimit;
 
-  // Lightweight status counts & total posted count
-  const [draftCounts, totalEntriesCount] = await Promise.all([
-    countDraftsByStatus(db, ctx.orgId),
-    tab === "posted" && q ? countSearchEntries(db, ctx.orgId, q) : countEntries(db, ctx.orgId),
-  ]);
+  // Semua baca dalam satu konteks org (RLS) — tanpa ubah logika agregasi.
+  const {
+    draftCounts,
+    totalEntriesCount: totalCount,
+    entries: fetchedEntries,
+    rawDrafts: fetchedDrafts,
+    filteredDraftCount: fetchedDraftCount,
+  } = await withOrg(ctx.orgId, async (tx) => {
+    // Lightweight status counts & total posted count
+    const [draftCounts, totalEntriesCount] = await Promise.all([
+      countDraftsByStatus(tx, ctx.orgId),
+      tab === "posted" && q ? countSearchEntries(tx, ctx.orgId, q) : countEntries(tx, ctx.orgId),
+    ]);
+
+    let entries: EntryView[] = [];
+    let rawDrafts: Array<Awaited<ReturnType<typeof listPaginatedDrafts>>[number]> = [];
+    let filteredDraftCount = 0;
+
+    if (tab === "draf") {
+      const [fetchedDrafts, count] = await Promise.all([
+        listPaginatedDrafts(tx, ctx.orgId, {
+          status: draftStatus,
+          query: draftQ,
+          limit: draftLimit,
+          offset: draftOffset,
+        }),
+        countFilteredDrafts(tx, ctx.orgId, {
+          status: draftStatus,
+          query: draftQ,
+        }),
+      ]);
+      rawDrafts = fetchedDrafts;
+      filteredDraftCount = count;
+    } else {
+      entries =
+        q
+          ? await searchEntriesWithLines(tx, ctx.orgId, q, limit, offset)
+          : await listEntriesWithLines(tx, ctx.orgId, limit, offset);
+    }
+    return { draftCounts, totalEntriesCount, entries, rawDrafts, filteredDraftCount };
+  });
 
   const pendingDraftsCount = draftCounts.pending;
 
-  let entries: EntryView[] = [];
-  let total = totalEntriesCount;
-  let rawDrafts: Array<Awaited<ReturnType<typeof listPaginatedDrafts>>[number]> = [];
-  let filteredDraftCount = 0;
-
-  if (tab === "draf") {
-    const [fetchedDrafts, count] = await Promise.all([
-      listPaginatedDrafts(db, ctx.orgId, {
-        status: draftStatus,
-        query: draftQ,
-        limit: draftLimit,
-        offset: draftOffset,
-      }),
-      countFilteredDrafts(db, ctx.orgId, {
-        status: draftStatus,
-        query: draftQ,
-      }),
-    ]);
-    rawDrafts = fetchedDrafts;
-    filteredDraftCount = count;
-  } else {
-    entries = await db.transaction((tx) =>
-      q
-        ? searchEntriesWithLines(tx, ctx.orgId, q, limit, offset)
-        : listEntriesWithLines(tx, ctx.orgId, limit, offset),
-    );
-  }
+  let entries: EntryView[] = fetchedEntries;
+  let total = totalCount;
+  let rawDrafts = fetchedDrafts;
+  let filteredDraftCount = fetchedDraftCount;
 
   const serializedDrafts: SerializedDraft[] = rawDrafts.map((d) => ({
     id: d.id,

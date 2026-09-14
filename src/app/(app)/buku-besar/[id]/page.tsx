@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getLedger } from "@/server/db/repos/ledger.repo";
 import { getControlForAccount } from "@/server/db/repos/subsidiary.repo";
 import { SUBLEDGER_LIST_ROUTE } from "@/core/subledger/cards";
@@ -41,13 +41,13 @@ export default async function AccountLedgerDetailPage({
 
   let ledgerData;
   try {
-    ledgerData = await db.transaction((tx) => getLedger(tx, ctx.orgId, id));
+    ledgerData = await withOrg(ctx.orgId, (tx) => getLedger(tx, ctx.orgId, id));
   } catch {
     notFound();
   }
 
   const { account, rows } = ledgerData;
-  const controlKind = await getControlForAccount(db, ctx.orgId, id);
+  const controlKind = await withOrg(ctx.orgId, (tx) => getControlForAccount(tx, ctx.orgId, id));
   const isDebitNormal = account.normal === "D";
   const Icon = TYPE_ICONS[account.type] || FileText;
 

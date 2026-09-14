@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listAccountsWithBalances } from "@/server/db/repos/ledger.repo";
 import { PageHeader } from "@/components/page-header";
 import { LedgerClient, type AccountBalanceItem } from "@/components/ledger/ledger-client";
@@ -10,7 +10,7 @@ import { BookOpen, Plus } from "lucide-react";
 export default async function BukuBesarPage() {
   const ctx = await requireContext();
 
-  const accounts = await db.transaction((tx) =>
+  const accounts = await withOrg(ctx.orgId, (tx) =>
     listAccountsWithBalances(tx, ctx.orgId),
   );
 

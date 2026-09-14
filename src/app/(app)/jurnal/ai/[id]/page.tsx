@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { accounts as accountsTable } from "@/server/db/schema/org";
 import { eq } from "drizzle-orm";
 import { getDraft, effectiveStatus } from "@/server/db/repos/drafts.repo";
@@ -15,7 +15,7 @@ export default async function ReviewPage({
   const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
   const { id } = await params;
 
-  const data = await db.transaction(async (tx) => {
+  const data = await withOrg(ctx.orgId, async (tx) => {
     const draft = await getDraft(tx, ctx.orgId, id);
     const accRows = await tx.select().from(accountsTable).where(eq(accountsTable.orgId, ctx.orgId));
     return { draft, accRows };
@@ -42,7 +42,7 @@ export default async function ReviewPage({
 
   const leaves = data.accRows.filter((a) => !data.accRows.some((c) => c.parentCode === a.code));
   const doc = data.draft.documentId
-    ? await getDocumentRow(db, ctx.orgId, data.draft.documentId)
+    ? await withOrg(ctx.orgId, (tx) => getDocumentRow(tx, ctx.orgId, data.draft.documentId!))
     : null;
   // Merge account mapping (stored separately) into each line for the review UI.
   const raw = data.draft.draft as {

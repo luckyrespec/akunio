@@ -2,7 +2,6 @@
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "@/server/actions/redirect-guard";
-import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import { resolveFinding, dismissFinding, createProposal } from "@/server/db/repos/findings.repo";
 import { resolveRelatedRefs } from "@/app/(app)/temuan/finding-meta";
@@ -13,7 +12,7 @@ import { appendAudit } from "@/server/db/repos/audit.repo";
 export async function resolveFindingAction(id: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       await resolveFinding(tx, ctx.orgId, id);
       await appendAudit(tx, { orgId: ctx.orgId, actor: ctx.userEmail, action: "FINDING_RESOLVED", subjectType: "ai_finding", subjectId: id, data: {} });
     });
@@ -28,7 +27,7 @@ export async function resolveFindingAction(id: string) {
 export async function dismissFindingAction(id: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       await dismissFinding(tx, ctx.orgId, id);
       await appendAudit(tx, { orgId: ctx.orgId, actor: ctx.userEmail, action: "FINDING_DISMISSED", subjectType: "ai_finding", subjectId: id, data: {} });
     });
@@ -45,7 +44,7 @@ export async function triggerDoctorScanAction() {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const { runDoctorAuditScan } = await import("@/core/doctor/scan");
     const { listFindings } = await import("@/server/db/repos/findings.repo");
-    const result = await db.transaction(async (tx) => {
+    const result = await withOrg(ctx.orgId, async (tx) => {
       const res = await runDoctorAuditScan(tx, ctx.orgId);
       const allFindings = await listFindings(tx, ctx.orgId);
       await appendAudit(tx, {
