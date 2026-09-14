@@ -8,7 +8,13 @@ vi.mock("@/server/auth/guard", () => ({
   requireContext: async () => ({ orgId: "org-c5-test" }),
 }));
 
-vi.mock("@/server/db", () => ({ db: {} }));
+vi.mock("@/server/db", () => ({
+  // withOrg butuh db.transaction + tx.execute(set_config): passthrough anti-DB.
+  db: {
+    transaction: async (fn: (tx: unknown) => unknown) =>
+      fn({ execute: async () => ({ rows: [] }) }),
+  },
+}));
 
 vi.mock("@/server/actions/pos.actions", () => ({
   getPosCashAccountsAction: async () => ({ ok: true as const, data: [] }),
