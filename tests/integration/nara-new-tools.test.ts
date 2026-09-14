@@ -45,7 +45,17 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("nara new tools (kontak, pemb
     }
     lossAccountId = lossRow.id;
     gainAccountId = gainRow.id;
-    [assetAccA, assetAccB, assetAccC] = [others[1].id, others[2].id, others[3].id];
+    // Akun posting aset Plan C wajib DAUN (childless) — guard GROUP_ACCOUNT
+    // menolak akun induk (others[1..3] lama bisa berupa induk seperti 1100).
+    // Predikat leaves == isPostableAccount (tanpa anak).
+    const assetLeaves = leaves.filter((r) => r.code.startsWith("1"));
+    const assetA = assetLeaves[0];
+    const assetB = assetLeaves.find((r) => r.id !== assetA?.id);
+    const depExpense = expenses[1] ?? expenses[0];
+    if (!assetA || !assetB || !depExpense) {
+      throw new Error("COA seed tidak lengkap untuk test tools (akun daun aset)");
+    }
+    [assetAccA, assetAccB, assetAccC] = [assetA.id, assetB.id, depExpense.id];
   });
   afterAll(async () => {
     await admin.end();
@@ -244,9 +254,13 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("nara new tools (kontak, pemb
       assetAccountId: assetAccA,
       accumulatedDepAccountId: assetAccB,
       depreciationExpenseAccountId: assetAccC,
+      // Kontrak Plan C (fae8df4): postAcquisition default true mewajibkan
+      // counterAccountId (jurnal perolehan atomik Dr aset / Cr kas).
+      counterAccountId: cashAccountId,
     });
     expect(registered.success).toBe(true);
     expect((registered.data as { code: string }).code).toMatch(/^AST-/);
+    expect((registered.data as { journalEntryId: string }).journalEntryId).toBeTruthy();
 
     const after = await assetsAndClosingHandlers.list_fixed_assets(orgId, actor, {
       query: "laptop tools",
