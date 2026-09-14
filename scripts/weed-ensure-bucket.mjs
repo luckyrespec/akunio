@@ -17,5 +17,14 @@ for (let i = 0; i < 10; i++) {
     await new Promise((r) => setTimeout(r, 1500)); // s3 gateway warming up
   }
 }
-await s3.send(new CreateBucketCommand({ Bucket: bucket }));
-console.log(`bucket ${bucket} created at ${endpoint}`);
+try {
+  await s3.send(new CreateBucketCommand({ Bucket: bucket }));
+  console.log(`bucket ${bucket} created at ${endpoint}`);
+} catch (e) {
+  // HeadBucket 404 lalu CreateBucket balap dengan proses lain / bucket sudah ada.
+  if (String(e).includes("BucketAlreadyOwnedByYou") || String(e).includes("BucketAlreadyExists")) {
+    console.log(`bucket ${bucket} exists`);
+    process.exit(0);
+  }
+  throw e;
+}

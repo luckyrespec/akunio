@@ -33,7 +33,7 @@ describe.skipIf(!reachable || process.env.SKIP_STORAGE_TESTS === "1")("seaweedfs
   it("rejects unsupported mime", async () => {
     const { putDocument } = await import("@/server/storage/storage");
     await expect(putDocument(crypto.randomUUID(), {
-      buffer: Buffer.from("x"), mime: "text/plain",
+      buffer: Buffer.from("x"), mime: "application/zip",
     })).rejects.toThrow("MIME_TIDAK_DIDUKUNG");
   });
 });
