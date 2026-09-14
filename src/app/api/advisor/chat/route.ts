@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { createThread, getThread, listMessages } from "@/server/db/repos/chat.repo";
 import { askNara } from "@/server/ai/nara";
 
@@ -10,9 +10,13 @@ export async function GET(req: NextRequest) {
   const ctx = await requireContext();
   const threadId = new URL(req.url).searchParams.get("threadId");
   if (!threadId) return NextResponse.json({ error: "threadId required" }, { status: 400 });
-  const t = await getThread(db, ctx.orgId, threadId);
+  const { t, msgs } = await withOrg(ctx.orgId, async (tx) => {
+    const t = await getThread(tx, ctx.orgId, threadId);
+    if (!t) return { t: null, msgs: [] };
+    const msgs = await listMessages(tx, threadId);
+    return { t, msgs };
+  });
   if (!t) return NextResponse.json({ error: "Thread tidak ditemukan." }, { status: 404 });
-  const msgs = await listMessages(db, threadId);
   return NextResponse.json(msgs);
 }
 
@@ -28,10 +32,10 @@ export async function POST(req: NextRequest) {
     let threadId = incomingThreadId;
     if (!threadId) {
       const title = message.split(/\s+/).slice(0, 5).join(" ") || "Percakapan baru";
-      const t = await db.transaction((tx) => createThread(tx, ctx.orgId, title));
+      const t = await withOrg(ctx.orgId, (tx) => createThread(tx, ctx.orgId, title));
       threadId = t.id;
     } else {
-      const t = await getThread(db, ctx.orgId, threadId);
+      const t = await withOrg(ctx.orgId, (tx) => getThread(tx, ctx.orgId, threadId));
       if (!t) return NextResponse.json({ error: "Thread tidak ditemukan." }, { status: 404 });
     }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getDocumentRow } from "@/server/db/repos/documents.repo";
 import { getDocument } from "@/server/storage/storage";
 
@@ -11,7 +11,7 @@ export async function GET(
   try {
     const ctx = await requireContext();
     const { id } = await params;
-    const row = await getDocumentRow(db, ctx.orgId, id);
+    const row = await withOrg(ctx.orgId, (tx) => getDocumentRow(tx, ctx.orgId, id));
     if (!row) return NextResponse.json({ error: "Dokumen tidak ditemukan." }, { status: 404 });
 
     const buf = await getDocument(row.storageKey);

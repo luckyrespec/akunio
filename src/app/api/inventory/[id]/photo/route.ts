@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getInventoryItem } from "@/server/db/repos/inventory.repo";
 import { getDocument, MAX_INVENTORY_IMAGE_BYTES } from "@/server/storage/storage";
 import { removeItemImage, saveItemImage } from "@/server/storage/inventory-image";
@@ -8,7 +8,7 @@ import { removeItemImage, saveItemImage } from "@/server/storage/inventory-image
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ctx = await requireContext();
-  const item = await getInventoryItem(db, ctx.orgId, id);
+  const item = await withOrg(ctx.orgId, (tx) => getInventoryItem(tx, ctx.orgId, id));
   if (!item?.imageStorageKey) {
     return NextResponse.json({ error: "Foto tidak ada." }, { status: 404 });
   }

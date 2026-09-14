@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { loadPeriodOrDefault } from "@/server/reports/build";
 import { aggregateCalkFinancialData, generateCalkNarrative } from "@/server/reports/calk-ai";
 import { buildCalkDocx } from "@/server/reports/calk-docx";
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const periodParam = searchParams.get("period") ?? undefined;
 
-    const { docxBuffer, periodEndsOn, entityName } = await db.transaction(async (tx) => {
+    const { docxBuffer, periodEndsOn, entityName } = await withOrg(ctx.orgId, async (tx) => {
       const period = await loadPeriodOrDefault(tx, ctx.orgId, periodParam);
       const finData = await aggregateCalkFinancialData(tx, ctx.orgId, period.endsOn);
       const narrative = await generateCalkNarrative(tx, ctx.orgId, period.endsOn);

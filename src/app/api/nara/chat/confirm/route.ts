@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { executeNaraTool } from "@/server/ai/nara-tools";
 import { friendlyToolLabel } from "@/components/ai-elements/tool-labels";
 import { addMessage, getThread } from "@/server/db/repos/chat.repo";
@@ -29,14 +29,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "threadId dan toolName wajib diisi." }, { status: 400 });
     }
 
-    const thread = await getThread(db, ctx.orgId, threadId);
+    const thread = await withOrg(ctx.orgId, (tx) => getThread(tx, ctx.orgId, threadId));
     if (!thread) {
       return NextResponse.json({ error: "Percakapan tidak ditemukan." }, { status: 404 });
     }
 
     if (!approved) {
       // User rejected the action
-      await db.transaction((tx) =>
+      await withOrg(ctx.orgId, (tx) =>
         addMessage(tx, threadId, "assistant", `Baik, ${friendlyToolLabel(toolName)} dibatalkan atas permintaan Anda. Tidak ada perubahan di pembukuan — silakan beri tahu jika ada hal lain yang perlu dibantu.`, {
           toolInvocations: [{ callId, toolName, status: "rejected", args }],
         }),
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     // User approved the action
     const execution = await executeNaraTool(ctx.orgId, ctx.userEmail, toolName, args);
     if (!execution.success) {
-      await db.transaction((tx) =>
+      await withOrg(ctx.orgId, (tx) =>
         addMessage(tx, threadId, "assistant", `Maaf, ${friendlyToolLabel(toolName)} gagal: ${execution.error}`, {
           toolInvocations: [{ callId, toolName, status: "failed", args, error: execution.error }],
         }),
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
       confirmationText += " Ketuk salah satu saran di bawah untuk langkah berikutnya.";
     }
 
-    const savedMsg = await db.transaction((tx) =>
+    const savedMsg = await withOrg(ctx.orgId, (tx) =>
       addMessage(tx, threadId, "assistant", confirmationText, {
         toolInvocations: [
           {
