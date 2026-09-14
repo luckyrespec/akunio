@@ -584,6 +584,53 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
       expect(BigInt(rows[1].unit_cost_minor)).toBe(10_000n);
     });
 
+    it("I2 baris diskon ikut teratribusi per baris (biaya struktural, bukan posisional)", async () => {
+      const { db } = await import("@/server/db");
+      const {
+        checkoutPosSale,
+      } = await import("@/server/db/repos/pos.repo");
+      const { getEntryWithLines } = await import(
+        "@/server/db/repos/journals.repo"
+      );
+      const out = await db.transaction((tx) =>
+        checkoutPosSale(tx as never, orgId, "kasir@toko.id", {
+          soldDate,
+          paymentMethod: "TUNAI",
+          cashAccountId: kas,
+          lines: [
+            { itemId: barang, qty: 1, unitPriceMinor: 50_000n, discountMinor: 5_000n },
+            { itemId: barang, qty: 2, unitPriceMinor: 50_000n },
+          ],
+          cashReceivedMinor: 145_000n,
+          idempotencyKey: "b5-diskon",
+        })
+      );
+      // Bruto 150rb - diskon 5rb = 145rb.
+      expect(out.totalMinor).toBe(145_000n);
+      const entry = await db.transaction((tx) =>
+        getEntryWithLines(tx as never, orgId, out.journalEntryId)
+      );
+      const hpp = entry!.lines.find((l) => l.memo?.startsWith("HPP "));
+      expect(hpp?.debitMinor).toBe(30_000n);
+      const rows = (
+        await admin.query<{
+          qty: string;
+          unit_cost_minor: string;
+          line_total_minor: string;
+        }>(
+          `SELECT qty, unit_cost_minor, line_total_minor FROM pos_sale_items
+           WHERE sale_id=$1 ORDER BY qty::float`,
+          [out.saleId]
+        )
+      ).rows;
+      expect(rows).toHaveLength(2);
+      // Biaya per unit tetap 10rb di kedua baris walau baris pertama berdiskon.
+      expect(BigInt(rows[0].unit_cost_minor)).toBe(10_000n);
+      expect(BigInt(rows[1].unit_cost_minor)).toBe(10_000n);
+      expect(BigInt(rows[0].line_total_minor)).toBe(45_000n);
+      expect(BigInt(rows[1].line_total_minor)).toBe(100_000n);
+    });
+
     it("akun kontrol ditolak sebagai akun selisih", async () => {
       await expect(closeShiftWithVarianceAccount(piutangCtl)).rejects.toThrow(
         /KONTROL/

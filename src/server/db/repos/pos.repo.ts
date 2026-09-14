@@ -160,7 +160,7 @@ export async function checkoutPosSale(
     .where(and(eq(inventoryItems.orgId, orgId), inArray(inventoryItems.id, ids)));
   const masterById = new Map(masters.map((m) => [m.id, m]));
 
-  type Prepared = { master: (typeof masters)[number]; qty: number; unitPriceMinor: bigint; discountMinor: bigint; netMinor: bigint };
+  type Prepared = { master: (typeof masters)[number]; qty: number; unitPriceMinor: bigint; discountMinor: bigint; netMinor: bigint; hppCostMinor: bigint };
   const prepared: Prepared[] = [];
   let subtotal = 0n;
   let itemDiscounts = 0n;
@@ -175,7 +175,7 @@ export async function checkoutPosSale(
     const net = gross - disc;
     subtotal += gross;
     itemDiscounts += disc;
-    prepared.push({ master, qty: l.qty, unitPriceMinor: l.unitPriceMinor, discountMinor: disc, netMinor: net });
+    prepared.push({ master, qty: l.qty, unitPriceMinor: l.unitPriceMinor, discountMinor: disc, netMinor: net, hppCostMinor: 0n });
   }
 
   const discountTotal = itemDiscounts + headerDiscount;
@@ -221,6 +221,9 @@ export async function checkoutPosSale(
         `Jual ${number} (${fresh.code})`,
       );
       hppTotal += cost;
+      // Tempel biaya ke barisnya sendiri saat konstruksi (I2): atribusi
+      // unit-cost tak lagi bergantung pada urutan array hppLinks.
+      p.hppCostMinor = cost;
       hppLinks.push({ kind: "PERSEDIAAN", refId: fresh.id, amountMinor: cost, qty: p.qty });
     }
   }
@@ -288,13 +291,16 @@ export async function checkoutPosSale(
     idempotencyKey: input.idempotencyKey ?? null,
   });
 
-  // hppLinks sejajar prepared menurut urutan loop stok di atas (by-index):
-  // dua baris item yang sama punya biaya sendiri-sendiri, `find` refId
-  // akan menempelkan biaya baris pertama ke semua baris.
+  // Biaya HPP ditempel langsung pada tiap baris `prepared` saat loop stok di
+  // atas (I2): dua baris item yang sama tetap punya biaya sendiri-sendiri
+  // (tak seperti `find` refId), dan tak ada lagi asumsi urutan array hppLinks
+  // sejajar prepared — order kini struktural per objek. hppLinks di atas hanya
+  // dipakai sebagai subledger links jurnal. JASA tak bisa menyelinap: guard
+  // KASIR_HANYA_BARANG melempar sebelum prepared terisi.
   for (let i = 0; i < prepared.length; i++) {
     const p = prepared[i];
     const unitCost = p.qty > 0 && recording === "PERPETUAL"
-      ? (hppLinks[i]?.amountMinor ?? 0n)
+      ? p.hppCostMinor
       : 0n;
     await q.insert(posSaleItems).values({
       orgId,
