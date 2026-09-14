@@ -69,4 +69,24 @@ describe("prepaid dimuka", () => {
       postMonthlyAmortization(tx, { orgId, periodName: "2026-01", postedBy: "owner@x.id" }),
     )).rejects.toThrow();
   });
+  it("penomoran DM-YYYY sekuensial + tahan race konkuren", async () => {
+    const { orgId } = await makeOrg("org-prepaid-numbering");
+    const acc = await seedAccounts(orgId);
+    const mk = () => newContract(orgId, acc);
+    // Berurutan (kontrak brief): 0001 lalu 0002.
+    const r1 = await withOrg(orgId, (tx) => createPrepaidContract(tx, mk()));
+    const r2 = await withOrg(orgId, (tx) => createPrepaidContract(tx, mk()));
+    expect(r1.contract.code).toBe("DM-2026-0001");
+    expect(r2.contract.code).toBe("DM-2026-0002");
+    // Konkuren: advisory-xact-lock menyerikan read-modify-write kode —
+    // tanpa lock, keduanya membaca 0002 dan tabrakan pada 0003 (uq).
+    const [r3, r4] = await Promise.all([
+      withOrg(orgId, (tx) => createPrepaidContract(tx, mk())),
+      withOrg(orgId, (tx) => createPrepaidContract(tx, mk())),
+    ]);
+    expect([r3.contract.code, r4.contract.code].sort()).toEqual([
+      "DM-2026-0003",
+      "DM-2026-0004",
+    ]);
+  });
 });
