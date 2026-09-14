@@ -9,7 +9,26 @@ import { inventoryToolDefs, inventoryHandlers } from "./tools/inventory.tools";
 import { contactsToolDefs, contactsHandlers } from "./tools/contacts.tools";
 import { subsidiaryToolDefs, subsidiaryHandlers } from "./tools/subsidiary.tools";
 import { cashBankToolDefs, cashBankHandlers } from "./tools/cash-bank.tools";
-import type { ToolHandler } from "./tools/types";
+import type { ToolDefinition, ToolHandler } from "./tools/types";
+
+export interface NaraToolEntry {
+  def: ToolDefinition;
+  handler: ToolHandler;
+}
+
+/** Gabungkan pasangan defs+handlers satu modul menjadi entri registry. Gagal keras bila handler hilang. */
+function toEntries(
+  defs: ToolDefinition[],
+  handlers: Record<string, ToolHandler>,
+): Array<[string, NaraToolEntry]> {
+  return defs.map((def): [string, NaraToolEntry] => {
+    const handler = handlers[def.name];
+    if (!handler) {
+      throw new Error(`Handler hilang untuk tool: ${def.name}`);
+    }
+    return [def.name, { def, handler }];
+  });
+}
 
 export const SAFE_TOOLS = new Set<string>([
   "get_server_time",
@@ -66,34 +85,36 @@ export const MUTATING_TOOLS = new Set<string>([
   "register_fixed_asset",
 ]);
 
-export const ALL_NARA_TOOLS = [
-  ...coaToolDefs,
-  ...datetimeToolDefs,
-  ...journalToolDefs,
-  ...reportsToolDefs,
-  ...invoicingToolDefs,
-  ...reconciliationToolDefs,
-  ...assetsAndClosingToolDefs,
-  ...inventoryToolDefs,
-  ...contactsToolDefs,
-  ...subsidiaryToolDefs,
-  ...cashBankToolDefs,
-] as never[];
+export const TOOL_REGISTRY: Record<string, NaraToolEntry> = (() => {
+  const pairs: Array<[string, NaraToolEntry]> = [
+    ...toEntries(coaToolDefs, coaHandlers),
+    ...toEntries(datetimeToolDefs, datetimeHandlers),
+    ...toEntries(journalToolDefs, journalHandlers),
+    ...toEntries(reportsToolDefs, reportsHandlers),
+    ...toEntries(invoicingToolDefs, invoicingHandlers),
+    ...toEntries(reconciliationToolDefs, reconciliationHandlers),
+    ...toEntries(assetsAndClosingToolDefs, assetsAndClosingHandlers),
+    ...toEntries(inventoryToolDefs, inventoryHandlers),
+    ...toEntries(contactsToolDefs, contactsHandlers),
+    ...toEntries(subsidiaryToolDefs, subsidiaryHandlers),
+    ...toEntries(cashBankToolDefs, cashBankHandlers),
+  ];
+  const seen = new Set<string>();
+  for (const [name] of pairs) {
+    if (seen.has(name)) {
+      throw new Error(`Nama tool duplikat: ${name}`);
+    }
+    seen.add(name);
+  }
+  return Object.fromEntries(pairs);
+})();
+
+export const ALL_NARA_TOOLS = Object.values(TOOL_REGISTRY).map((e) => e.def) as never[];
 
 /** Diekspor untuk test registry: setiap nama di SAFE/MUTATING wajib punya handler. */
-export const naraToolHandlers: Record<string, ToolHandler> = {
-  ...coaHandlers,
-  ...datetimeHandlers,
-  ...journalHandlers,
-  ...reportsHandlers,
-  ...invoicingHandlers,
-  ...reconciliationHandlers,
-  ...assetsAndClosingHandlers,
-  ...inventoryHandlers,
-  ...contactsHandlers,
-  ...subsidiaryHandlers,
-  ...cashBankHandlers,
-};
+export const naraToolHandlers: Record<string, ToolHandler> = Object.fromEntries(
+  Object.entries(TOOL_REGISTRY).map(([name, entry]): [string, ToolHandler] => [name, entry.handler]),
+);
 
 export async function executeNaraTool(
   orgId: string,
@@ -102,11 +123,11 @@ export async function executeNaraTool(
   args: Record<string, unknown>,
 ): Promise<{ success: boolean; data?: unknown; error?: string }> {
   try {
-    const handler = naraToolHandlers[toolName];
-    if (!handler) {
+    const entry = TOOL_REGISTRY[toolName];
+    if (!entry) {
       return { success: false, error: `Tool ${toolName} tidak dikenali.` };
     }
-    const out = await handler(orgId, actorEmail, args);
+    const out = await entry.handler(orgId, actorEmail, args);
     // Hasil tool mengalir ke SSE (JSON.stringify), kolom jsonb, dan prompt
     // sintesis — BigInt mentah meledak di ketiganya. Netralkan sekali di sini.
     return { ...out, data: deBigInt(out.data) };
