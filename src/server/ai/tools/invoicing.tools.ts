@@ -1,5 +1,5 @@
 import { db } from "@/server/db";
-import { Money } from "@/core/money/money";
+import { Money, parseDecimalToMinor } from "@/core/money/money";
 import type { ToolDefinition, ToolHandler } from "./types";
 
 export const invoicingToolDefs: ToolDefinition[] = [
@@ -137,17 +137,13 @@ export const invoicingToolDefs: ToolDefinition[] = [
   },
 ];
 
-/** Nominal desimal Rupiah (number|string, mis. 100.5) → minor eksak; null bila format tak valid.
- *  Tanpa Number()*100 agar sen tak terpotong (I1: Number("1.005")*100 = 100.49999… → 100n SALAH).
- *  Cerminan parseDecimalToMinor dialog pelunasan: digit bulat + maks 2 digit sen, tanpa tanda minus. */
-function parseAmountToMinor(raw: unknown): bigint | null {
-  const text =
-    typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw : "";
-  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(text.trim());
-  if (!m) return null;
-  const whole = BigInt(m[1]);
-  const frac = m[2] ? BigInt(m[2].padEnd(2, "0")) : 0n;
-  return whole * 100n + frac;
+/** Nilai opsional non-negatif untuk item faktur: kosong/nol eksplisit → 0n
+ *  (item gratis/diskon-nol sah); selain itu wajib desimal valid via helper
+ *  bersama, null = tolak. Kuantitas/tarif tetap Number (bukan uang). */
+function parseItemMinor(raw: unknown): bigint | null {
+  if (raw === undefined || raw === null || raw === "") return 0n;
+  if (raw === 0 || raw === "0") return 0n;
+  return parseDecimalToMinor(raw);
 }
 
 export const invoicingHandlers: Record<string, ToolHandler> = {
@@ -165,20 +161,35 @@ export const invoicingHandlers: Record<string, ToolHandler> = {
     }
 
     const itemsRaw = Array.isArray(args.items) ? args.items : [];
-    const items = itemsRaw.map((it: Record<string, unknown>) => {
+    const items: Array<{
+      description: string;
+      quantity: string;
+      unitPriceMinor: bigint;
+      discountMinor: bigint;
+      taxRatePercent: string;
+      catalogItemId: string | null;
+    }> = [];
+    for (const raw of itemsRaw) {
+      const it = raw as Record<string, unknown>;
       const qty = Number(it.quantity || 1);
-      const price = Number(it.unitPrice || 0);
-      const disc = Number(it.discount || 0);
       const tax = Number(it.taxRate || 0);
-      return {
+      const priceMinor = parseItemMinor(it.unitPrice ?? 0);
+      if (priceMinor === null) {
+        return { success: false, error: "HARGA_ITEM_TIDAK_VALID: harga per unit wajib desimal Rupiah maksimal 2 digit sen (contoh: 100.5)." };
+      }
+      const discountMinor = parseItemMinor(it.discount ?? 0);
+      if (discountMinor === null) {
+        return { success: false, error: "DISKON_TIDAK_VALID: diskon wajib desimal Rupiah maksimal 2 digit sen." };
+      }
+      items.push({
         description: String(it.description || "Item"),
         quantity: String(qty),
-        unitPriceMinor: BigInt(Math.round(price * 100)),
-        discountMinor: BigInt(Math.round(disc * 100)),
+        unitPriceMinor: priceMinor,
+        discountMinor,
         taxRatePercent: String(tax),
         catalogItemId: typeof it.catalogItemId === "string" && it.catalogItemId ? it.catalogItemId : null,
-      };
-    });
+      });
+    }
 
     const todayISO = new Date().toISOString().slice(0, 10);
     const dueDate = String(args.dueDate || todayISO);
@@ -251,13 +262,22 @@ export const invoicingHandlers: Record<string, ToolHandler> = {
       return { success: false, error: `Akun kas/bank tidak ditemukan.` };
     }
 
-    const amountMinor = parseAmountToMinor(args.amount);
+    const amountMinor = parseDecimalToMinor(args.amount);
     if (amountMinor === null) {
-      return { success: false, error: "NOMINAL_DESIMAL_TIDAK_VALID: nominal pembayaran wajib desimal Rupiah maksimal 2 digit sen (contoh: 100.5)." };
+      const rawAmount = args.amount;
+      const zeroLike =
+        rawAmount === 0 ||
+        rawAmount === "0" ||
+        (typeof rawAmount === "string" && /^0+(\.0{1,2})?$/.test(rawAmount.trim()));
+      return {
+        success: false,
+        error: zeroLike
+          ? "NOMINAL_HARUS_POSITIF: jumlah pelunasan harus lebih dari Rp 0."
+          : "NOMINAL_DESIMAL_TIDAK_VALID: nominal pembayaran wajib desimal Rupiah maksimal 2 digit sen (contoh: 100.5).",
+      };
     }
-    if (amountMinor <= 0n) {
-      return { success: false, error: "NOMINAL_HARUS_POSITIF: jumlah pelunasan harus lebih dari Rp 0." };
-    }
+    // parseDecimalToMinor menjamin >0 bila non-null; pesan HARUS_POSITIF
+    // dipertahankan untuk input nol via cabang zeroLike di atas.
     const paymentDate = String(args.paymentDate || new Date().toISOString().slice(0, 10));
 
     // Samakan default auto-post UI (recordInvoicePaymentAction): pelunasan
@@ -405,13 +425,25 @@ export const invoicingHandlers: Record<string, ToolHandler> = {
       }
       if (typeof args.notes === "string") patch.notes = args.notes;
       if (Array.isArray(args.items)) {
-        patch.items = (args.items as Array<Record<string, unknown>>).map((it) => ({
-          description: String(it.description || "Item"),
-          quantity: Number(it.quantity || 1),
-          unitPriceMinor: BigInt(Math.round(Number(it.unitPrice || 0) * 100)),
-          discountMinor: BigInt(Math.round(Number(it.discount || 0) * 100)),
-          taxRatePercent: Number(it.taxRate || 0),
-        }));
+        const nextItems: NonNullable<typeof patch.items> = [];
+        for (const raw of args.items as Array<Record<string, unknown>>) {
+          const priceMinor = parseItemMinor(raw.unitPrice ?? 0);
+          if (priceMinor === null) {
+            return { success: false, error: "HARGA_ITEM_TIDAK_VALID: harga per unit wajib desimal Rupiah maksimal 2 digit sen (contoh: 100.5)." };
+          }
+          const discountMinor = parseItemMinor(raw.discount ?? 0);
+          if (discountMinor === null) {
+            return { success: false, error: "DISKON_TIDAK_VALID: diskon wajib desimal Rupiah maksimal 2 digit sen." };
+          }
+          nextItems.push({
+            description: String(raw.description || "Item"),
+            quantity: Number(raw.quantity || 1),
+            unitPriceMinor: priceMinor,
+            discountMinor,
+            taxRatePercent: Number(raw.taxRate || 0),
+          });
+        }
+        patch.items = nextItems;
       }
       if (patch.dueDate === undefined && patch.notes === undefined && patch.items === undefined) {
         return { success: false, error: "Tidak ada perubahan (isi dueDate, notes, atau items)." };

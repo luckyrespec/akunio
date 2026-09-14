@@ -54,3 +54,18 @@ export class Money {
     return `${neg ? "-" : ""}Rp${body}`;
   }
 }
+
+// Nominal desimal Rupiah (number|string, mis. 100.5 atau "100.5") → minor
+// eksak; null bila format tak valid. Tanpa Number()*100 agar sen tak
+// terpotong (Number("1.005")*100 = 100.49999… → 100n SALAH). Aturan: digit
+// bulat + maks 2 digit sen, tanpa tanda minus, dan NOL ditolak (domain
+// pemakaian: amount positif; kuantitas/diskon-nol JANGAN lewat sini).
+export function parseDecimalToMinor(raw: unknown): bigint | null {
+  const s = typeof raw === "number" ? String(raw) : raw;
+  if (typeof s !== "string") return null;
+  const t = s.trim().replace(",", ".");
+  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(t);
+  if (!m) return null;
+  const minor = BigInt(m[1]) * SCALE + BigInt((m[2] ?? "0").padEnd(2, "0"));
+  return minor > 0n ? minor : null;
+}
