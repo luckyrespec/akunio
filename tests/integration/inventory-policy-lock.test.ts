@@ -74,7 +74,7 @@ describe("kunci kebijakan metode per tahun", () => {
   });
 
   it("tutup tahun membuka kunci lagi", async () => {
-    const { orgId, barang, customer } = await setupPolicy("buka");
+    const { orgId, byCode, barang, customer } = await setupPolicy("buka");
     const inv = await createInvoiceRepo(db, orgId,
       { type: "INVOICE", contactId: customer.id, issueDate: `${year}-09-08`, dueDate: `${year}-09-22` },
       [{ description: "Kopi", quantity: 1, unitPriceMinor: 35_000n, catalogItemId: barang.id }]);
@@ -83,7 +83,7 @@ describe("kunci kebijakan metode per tahun", () => {
     expect(s?.isLocked).toBe(true);
 
     const res = await withOrg(orgId, (tx) =>
-      closePeriod(tx, { orgId, periodName: `${year}-12`, actorEmail: "t@t.id" }));
+      closePeriod(tx, { orgId, periodName: `${year}-12`, actorEmail: "t@t.id", retainedEarningsAccountId: byCode("3200").id }));
     expect(res.period.status).toBe("CLOSED");
     s = await withOrg(orgId, (tx) => getInventorySettings(tx, orgId));
     expect(s?.isLocked).toBe(false);

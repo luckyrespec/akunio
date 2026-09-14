@@ -104,4 +104,30 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("Period Closing & Locking Gua
 
     expect(caughtError).toBeInstanceOf(PostingError);
   });
+
+  it("I3 tutup tahun tanpa akun laba ditahan ditolak (LABA_DITAHAN_WAJIB), periode tetap OPEN", async () => {
+    const { orgId: oid } = await makeOrg("PT Tanpa RE");
+    await db.insert(fiscalPeriods).values([
+      {
+        orgId: oid,
+        name: "2026-12",
+        startsOn: "2026-12-01",
+        endsOn: "2026-12-31",
+        status: "OPEN",
+      },
+    ]);
+    await expect(
+      closePeriod(db, {
+        orgId: oid,
+        periodName: "2026-12",
+        actorEmail: "test@example.com",
+      })
+    ).rejects.toThrow("LABA_DITAHAN_WAJIB");
+    const [p] = await db
+      .select()
+      .from(fiscalPeriods)
+      .where(eq(fiscalPeriods.orgId, oid))
+      .limit(1);
+    expect(p.status).toBe("OPEN");
+  });
 });

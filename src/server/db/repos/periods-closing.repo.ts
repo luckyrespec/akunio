@@ -160,6 +160,12 @@ export async function closePeriod(
 
   let closingJournalId: string | null = null;
 
+  // Tutup tahun tanpa akun Laba Ditahan = jurnal penutup tak terbentuk dan
+  // nominal tak di-nol-kan: tolak eksplisit, bukan tutup diam-diam (I3).
+  if (isYearEnd && !retainedEarningsAccountId) {
+    throw new Error("LABA_DITAHAN_WAJIB: tutup tahun wajib menyertakan akun Laba Ditahan.");
+  }
+
   // If year-end, generate and post closing entries to Retained Earnings
   if (isYearEnd && retainedEarningsAccountId) {
     // Agregat seluruh akun nominal setahun via periode fiskal tahun itu
