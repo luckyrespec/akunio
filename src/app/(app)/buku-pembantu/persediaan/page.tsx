@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ArrowLeft, ChevronRight, FileText } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listItemCards } from "@/server/db/repos/subsidiary.repo";
 import { stockStatus, formatQty } from "@/core/subledger/cards";
 import { PageHeader } from "@/components/page-header";
@@ -25,7 +25,7 @@ export default async function PersediaanListPage({
   searchParams?: Promise<{ q?: string; st?: string }>;
 }) {
   const ctx = await requireContext();
-  const items = await listItemCards(db, ctx.orgId);
+  const items = await withOrg(ctx.orgId, (tx) => listItemCards(tx, ctx.orgId));
   const q = ((await searchParams)?.q ?? "").trim();
   const st = ((await searchParams)?.st ?? "SEMUA").toUpperCase();
   const activeSt = (STATUS_OPTIONS as readonly string[]).includes(st) ? st : "SEMUA";

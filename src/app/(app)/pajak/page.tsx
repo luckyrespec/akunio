@@ -1,5 +1,5 @@
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getTaxSettings, getTaxSummariesByYear } from "@/server/db/repos/tax.repo";
 import { listAccounts } from "@/server/db/repos/accounts.repo";
 import { TaxDashboard } from "@/components/tax/tax-dashboard";
@@ -15,7 +15,7 @@ export default async function PajakPage({ searchParams }: PageProps) {
   const currentYear = new Date().getFullYear();
   const selectedYear = params.year ? parseInt(params.year, 10) || currentYear : currentYear;
 
-  const { settings, summaries, bankAccounts } = await db.transaction(async (tx) => {
+  const { settings, summaries, bankAccounts } = await withOrg(ctx.orgId, async (tx) => {
     const settings = await getTaxSettings(tx, ctx.orgId);
     const summaries = await getTaxSummariesByYear(tx, ctx.orgId, selectedYear);
     const allAccounts = await listAccounts(tx, ctx.orgId);

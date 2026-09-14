@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   getTaxSettings,
   upsertMonthlyTaxSummary,
@@ -24,12 +24,12 @@ export default async function TaxDraftReviewPage({ params }: PageProps) {
   }
 
   // 1. Pastikan omzet & kalkulasi pajak bulanan mutakhir
-  await db.transaction(async (tx) => {
+  await withOrg(ctx.orgId, async (tx) => {
     await upsertMonthlyTaxSummary(tx, ctx.orgId, period);
   });
 
   // 2. Ambil ringkasan pajak masa tersebut
-  let summary = await db.transaction(async (tx) => {
+  let summary = await withOrg(ctx.orgId, async (tx) => {
     return getTaxSummaryByMonth(tx, ctx.orgId, period);
   });
 
@@ -39,7 +39,7 @@ export default async function TaxDraftReviewPage({ params }: PageProps) {
   if (!summary.accrualDraftId && summary.taxDueMinor > 0n && summary.status !== "PAID") {
     const genRes = await generateTaxAccrualDraftAction({ periodMonth: period });
     if (genRes.ok && genRes.draftId) {
-      summary = await db.transaction(async (tx) => {
+      summary = await withOrg(ctx.orgId, async (tx) => {
         return getTaxSummaryByMonth(tx, ctx.orgId, period);
       });
     }
@@ -48,7 +48,7 @@ export default async function TaxDraftReviewPage({ params }: PageProps) {
   // 4. Ambil draf jurnal jika ada
   let draftData = null;
   if (summary?.accrualDraftId) {
-    const rawDraft = await db.transaction(async (tx) => {
+    const rawDraft = await withOrg(ctx.orgId, async (tx) => {
       return getDraft(tx, ctx.orgId, summary!.accrualDraftId!);
     });
     if (rawDraft) {
@@ -71,7 +71,7 @@ export default async function TaxDraftReviewPage({ params }: PageProps) {
   }
 
   // 5. Ambil data pendukung (Pengaturan pajak & Akun Kas/Bank untuk opsi pelunasan langsung)
-  const { settings, bankAccounts } = await db.transaction(async (tx) => {
+  const { settings, bankAccounts } = await withOrg(ctx.orgId, async (tx) => {
     const settings = await getTaxSettings(tx, ctx.orgId);
     const allAccounts = await listAccounts(tx, ctx.orgId);
     const bankAccounts = allAccounts

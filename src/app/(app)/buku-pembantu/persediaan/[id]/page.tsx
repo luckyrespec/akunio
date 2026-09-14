@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Package } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getItemCard } from "@/server/db/repos/subsidiary.repo";
 import { stockStatus, formatQty, avgCost } from "@/core/subledger/cards";
 import { PageHeader } from "@/components/page-header";
@@ -21,7 +21,7 @@ export default async function ItemCardPage({ params }: ItemCardPageProps) {
   const { id } = await params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) notFound();
   const ctx = await requireContext();
-  const card = await getItemCard(db, ctx.orgId, id);
+  const card = await withOrg(ctx.orgId, (tx) => getItemCard(tx, ctx.orgId, id));
   if (!card) notFound();
 
   const { item, rows } = card;

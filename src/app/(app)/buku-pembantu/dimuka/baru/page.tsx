@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listAccounts } from "@/server/db/repos/accounts.repo";
 import { PageHeader } from "@/components/page-header";
 import { DimukaForm } from "./dimuka-form";
 
 export default async function DimukaBaruPage() {
   const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-  const rows = await db.transaction((tx) => listAccounts(tx, ctx.orgId));
+  const rows = await withOrg(ctx.orgId, (tx) => listAccounts(tx, ctx.orgId));
   const active = rows.filter((a) => !a.archivedAt);
   const leaves = active.filter((a) => !active.some((c) => c.parentCode === a.code));
   const control = leaves.find((a) => a.code === "1600");

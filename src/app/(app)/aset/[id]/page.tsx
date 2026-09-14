@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getFixedAssetDetail } from "@/server/db/repos/assets.repo";
 import { accounts } from "@/server/db/schema/org";
 import { eq, and } from "drizzle-orm";
@@ -14,18 +14,20 @@ export default async function AssetDetailPage({
   const { id } = await params;
   const ctx = await requireContext();
 
-  const [detail, allAccounts] = await Promise.all([
-    getFixedAssetDetail(db, ctx.orgId, id),
-    db
-      .select({
-        id: accounts.id,
-        code: accounts.code,
-        name: accounts.name,
-        type: accounts.type,
-      })
-      .from(accounts)
-      .where(eq(accounts.orgId, ctx.orgId)),
-  ]);
+  const [detail, allAccounts] = await withOrg(ctx.orgId, (tx) =>
+    Promise.all([
+      getFixedAssetDetail(tx, ctx.orgId, id),
+      tx
+        .select({
+          id: accounts.id,
+          code: accounts.code,
+          name: accounts.name,
+          type: accounts.type,
+        })
+        .from(accounts)
+        .where(eq(accounts.orgId, ctx.orgId)),
+    ]),
+  );
 
   if (!detail) {
     notFound();

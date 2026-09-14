@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getStockOpnameWithItems } from "@/server/db/repos/inventory.repo";
 import { getEntryWithLines, listEntryDocuments } from "@/server/db/repos/journals.repo";
 import { Money } from "@/core/money/money";
@@ -29,16 +29,17 @@ interface Props {
 export default async function StockOpnameDetailPage({ params }: Props) {
   const { id } = await params;
   const ctx = await requireContext();
-  const opname = await getStockOpnameWithItems(db, ctx.orgId, id);
+  const { opname, journal, journalDocs } = await withOrg(ctx.orgId, async (tx) => {
+    const opname = await getStockOpnameWithItems(tx, ctx.orgId, id);
+    if (!opname || !opname.journalEntryId) return { opname, journal: null, journalDocs: [] };
+    const [journal, journalDocs] = await Promise.all([
+      getEntryWithLines(tx, ctx.orgId, opname.journalEntryId),
+      listEntryDocuments(tx, ctx.orgId, opname.journalEntryId),
+    ]);
+    return { opname, journal, journalDocs };
+  });
 
   if (!opname) notFound();
-
-  const [journal, journalDocs] = opname.journalEntryId
-    ? await Promise.all([
-        getEntryWithLines(db, ctx.orgId, opname.journalEntryId),
-        listEntryDocuments(db, ctx.orgId, opname.journalEntryId),
-      ])
-    : [null, []];
 
   const totalDiffMinor = opname.totalDifferenceValueMinor;
   const isDeficit = totalDiffMinor < 0n;

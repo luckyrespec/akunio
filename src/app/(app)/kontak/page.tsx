@@ -1,12 +1,12 @@
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listContactsRepo } from "@/server/db/repos/contacts.repo";
 import { ContactDirectory } from "@/components/contacts/contact-directory";
 import { KontakImportCard } from "./kontak-import-card";
 
 export default async function KontakPage() {
   const ctx = await requireContext();
-  const contactsList = await listContactsRepo(db, ctx.orgId);
+  const contactsList = await withOrg(ctx.orgId, (tx) => listContactsRepo(tx, ctx.orgId));
 
   return (
     <div className="space-y-6">

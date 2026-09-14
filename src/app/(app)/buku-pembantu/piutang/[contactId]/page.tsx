@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Users } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getContactCard } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
 import { AnimatedNumber } from "@/components/motion";
@@ -18,7 +18,7 @@ export default async function PiutangCardPage({ params }: PiutangCardPageProps) 
   const { contactId } = await params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contactId)) notFound();
   const ctx = await requireContext();
-  const card = await getContactCard(db, ctx.orgId, contactId, "INVOICE");
+  const card = await withOrg(ctx.orgId, (tx) => getContactCard(tx, ctx.orgId, contactId, "INVOICE"));
   if (!card) notFound();
 
   const total = card.entries.reduce((a, e) => a + e.debitMinor, 0n);

@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   countStockOpnames,
   getStockOpnameStats,
@@ -56,11 +56,13 @@ export default async function StockOpnameListPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const offset = (page - 1) * limit;
 
-  const [stats, total, rows] = await Promise.all([
-    getStockOpnameStats(db, ctx.orgId),
-    countStockOpnames(db, ctx.orgId, { search: q, status }),
-    listStockOpnamesPaginated(db, ctx.orgId, { search: q, status, limit, offset }),
-  ]);
+  const [stats, total, rows] = await withOrg(ctx.orgId, (tx) =>
+    Promise.all([
+      getStockOpnameStats(tx, ctx.orgId),
+      countStockOpnames(tx, ctx.orgId, { search: q, status }),
+      listStockOpnamesPaginated(tx, ctx.orgId, { search: q, status, limit, offset }),
+    ]),
+  );
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const safePage = Math.min(page, totalPages);

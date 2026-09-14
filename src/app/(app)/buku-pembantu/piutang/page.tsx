@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listContactCards } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
 import { AnimatedNumber } from "@/components/motion";
@@ -21,7 +21,7 @@ export default async function PiutangListPage({
   searchParams?: Promise<{ q?: string; st?: string }>;
 }) {
   const ctx = await requireContext();
-  const rows = await listContactCards(db, ctx.orgId, "INVOICE");
+  const rows = await withOrg(ctx.orgId, (tx) => listContactCards(tx, ctx.orgId, "INVOICE"));
   const q = ((await searchParams)?.q ?? "").trim();
   const st = ((await searchParams)?.st ?? "SEMUA").toUpperCase();
   const activeSt = (BALANCE_OPTIONS as readonly string[]).includes(st) ? st : "SEMUA";

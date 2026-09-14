@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getPrepaidCard } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import { PostAmortButton } from "../post-button";
 export default async function DimukaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireContext();
   const { id } = await params;
-  const card = await getPrepaidCard(db, ctx.orgId, id);
+  const card = await withOrg(ctx.orgId, (tx) => getPrepaidCard(tx, ctx.orgId, id));
   if (!card) notFound();
   const { contract: c, lines } = card;
   const nextLine = lines.find((l) => l.status === "SCHEDULED");

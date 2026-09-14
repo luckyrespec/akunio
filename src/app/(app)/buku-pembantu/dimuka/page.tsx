@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ArrowLeft, FileText, Plus } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listPrepaidCards } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +36,7 @@ export default async function DimukaListPage({
   searchParams?: Promise<{ q?: string; st?: string }>;
 }) {
   const ctx = await requireContext();
-  const rows = await listPrepaidCards(db, ctx.orgId);
+  const rows = await withOrg(ctx.orgId, (tx) => listPrepaidCards(tx, ctx.orgId));
   const q = ((await searchParams)?.q ?? "").trim();
   const st = ((await searchParams)?.st ?? "SEMUA").toUpperCase();
   const activeSt = (STATUS_OPTIONS as readonly string[]).includes(st) ? st : "SEMUA";

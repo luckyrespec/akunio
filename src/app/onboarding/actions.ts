@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { requireVerifiedSession } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   getOnboardingView,
   finalizeOnboarding,
@@ -15,7 +15,7 @@ async function orgId(): Promise<string> {
 
 export async function loadOnboardingView() {
   const id = await orgId();
-  return getOnboardingView(db, id);
+  return withOrg(id, (tx) => getOnboardingView(tx, id));
 }
 
 export async function finishOnboarding(key?: string) {

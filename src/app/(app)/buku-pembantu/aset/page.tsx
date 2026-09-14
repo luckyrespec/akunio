@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ArrowLeft, FileText, Plus } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listAssetCards } from "@/server/db/repos/subsidiary.repo";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,7 @@ const STATUS_TEXT: Record<string, string> = {
 
 export default async function AsetPembantuPage() {
   const ctx = await requireContext();
-  const rows = await listAssetCards(db, ctx.orgId);
+  const rows = await withOrg(ctx.orgId, (tx) => listAssetCards(tx, ctx.orgId));
   const totalCost = rows.reduce((a, r) => a + r.acquisitionCostMinor, 0n);
   const totalAccum = rows.reduce((a, r) => a + r.accumulatedMinor, 0n);
   const totalBook = rows.reduce((a, r) => a + r.bookValueMinor, 0n);

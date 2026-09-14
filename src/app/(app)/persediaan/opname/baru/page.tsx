@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { listInventoryItems } from "@/server/db/repos/inventory.repo";
 import { PageHeader } from "@/components/page-header";
 import { OpnameFormClient } from "./opname-form-client";
@@ -13,7 +13,7 @@ export const metadata = {
 
 export default async function NewStockOpnamePage() {
   const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-  const allItems = await listInventoryItems(db, ctx.orgId);
+  const allItems = await withOrg(ctx.orgId, (tx) => listInventoryItems(tx, ctx.orgId));
   const items = allItems.filter((i) => i.itemType !== "JASA");
 
   return (
