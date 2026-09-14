@@ -1,5 +1,5 @@
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   getReconciliationByIdRepo,
   getUnmatchedLedgerLinesRepo,
@@ -17,17 +17,20 @@ export default async function ReconciliationDetailPage({
   const { id } = await params;
   const ctx = await requireContext();
 
-  const session = await getReconciliationByIdRepo(db, ctx.orgId, id);
-  if (!session || !session.bankAccount) {
+  const { session, unmatchedLedgerLines } = await withOrg(ctx.orgId, async (tx) => {
+    const session = await getReconciliationByIdRepo(tx, ctx.orgId, id);
+    if (!session || !session.bankAccount) return { session: null, unmatchedLedgerLines: [] };
+    const unmatchedLedgerLines = await getUnmatchedLedgerLinesRepo(
+      tx,
+      ctx.orgId,
+      session.bankAccountId,
+      session.statementDate
+    );
+    return { session, unmatchedLedgerLines };
+  });
+  if (!session) {
     notFound();
   }
-
-  const unmatchedLedgerLines = await getUnmatchedLedgerLinesRepo(
-    db,
-    ctx.orgId,
-    session.bankAccountId,
-    session.statementDate
-  );
 
   const formattedSession = {
     id: session.id,

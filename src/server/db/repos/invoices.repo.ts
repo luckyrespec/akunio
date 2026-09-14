@@ -131,25 +131,25 @@ export async function createInvoiceRepo(
   });
 }
 
-export async function getInvoiceByIdRepo(db: Db, orgId: string, id: string) {
-  const [inv] = await db
+export async function getInvoiceByIdRepo(q: Queryable, orgId: string, id: string) {
+  const [inv] = await q
     .select()
     .from(invoices)
     .where(and(eq(invoices.id, id), eq(invoices.orgId, orgId)));
 
   if (!inv) return null;
 
-  const [contact] = await db
+  const [contact] = await q
     .select()
     .from(contacts)
     .where(and(eq(contacts.id, inv.contactId), eq(contacts.orgId, orgId)));
 
-  const items = await db
+  const items = await q
     .select()
     .from(invoiceItems)
     .where(eq(invoiceItems.invoiceId, inv.id));
 
-  const payments = await db
+  const payments = await q
     .select()
     .from(invoicePayments)
     .where(eq(invoicePayments.invoiceId, inv.id))
@@ -164,7 +164,7 @@ export async function getInvoiceByIdRepo(db: Db, orgId: string, id: string) {
 }
 
 export async function listInvoicesRepo(
-  db: Db,
+  q: Queryable,
   orgId: string,
   filter?: {
     type?: InvoiceType;
@@ -184,7 +184,7 @@ export async function listInvoicesRepo(
     conditions.push(eq(invoices.contactId, filter.contactId));
   }
 
-  const rows = await db
+  const rows = await q
     .select({
       invoice: invoices,
       contact: contacts,
@@ -339,12 +339,12 @@ export interface AgingReportBucket {
 }
 
 export async function getAgingReportRepo(
-  db: Db,
+  q: Queryable,
   orgId: string,
   type: InvoiceType = "INVOICE",
   asOfDate: Date = new Date()
 ) {
-  const activeInvoices = await db
+  const activeInvoices = await q
     .select({
       invoice: invoices,
       contact: contacts,

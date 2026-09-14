@@ -1,4 +1,4 @@
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   getCashSummaryRepo,
   listCashEntriesRepo,
@@ -29,21 +29,23 @@ export function currentMonthRange(d = new Date()): {
 
 export async function loadCashPageData(orgId: string, kind: CashKind) {
   const range = currentMonthRange();
-  const [entries, allAccounts, contacts, summary] = await Promise.all([
-    listCashEntriesRepo(db, orgId, kind),
-    db
-      .select({
-        id: accounts.id,
-        code: accounts.code,
-        name: accounts.name,
-        parentCode: accounts.parentCode,
-        isCash: accounts.isCash,
-      })
-      .from(accounts)
-      .where(eq(accounts.orgId, orgId)),
-    listContactsRepo(db, orgId),
-    getCashSummaryRepo(db, orgId, kind, range.dari, range.sampai),
-  ]);
+  const [entries, allAccounts, contacts, summary] = await withOrg(orgId, (tx) =>
+    Promise.all([
+      listCashEntriesRepo(tx, orgId, kind),
+      tx
+        .select({
+          id: accounts.id,
+          code: accounts.code,
+          name: accounts.name,
+          parentCode: accounts.parentCode,
+          isCash: accounts.isCash,
+        })
+        .from(accounts)
+        .where(eq(accounts.orgId, orgId)),
+      listContactsRepo(tx, orgId),
+      getCashSummaryRepo(tx, orgId, kind, range.dari, range.sampai),
+    ]),
+  );
   const parentCodes = new Set(
     allAccounts.map((a) => a.parentCode).filter((c): c is string => !!c)
   );

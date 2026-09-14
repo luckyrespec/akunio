@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
 import { todayISO } from "@/lib/date";
-import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import { accounts, organizations } from "@/server/db/schema/org";
 import { findPeriodByDate } from "@/server/db/repos/periods.repo";
@@ -73,25 +72,79 @@ export default async function DasborPage() {
 
   const ytd = incomeStatement(aggregateFromLines(data.ytdLines, metas));
 
-  // Laba bersih 6 bulan terakhir (bulan berjalan + 5 sebelumnya), semua dari jurnal POSTED.
+  // Laba bersih 6 bulan terakhir (bulan berjalan + 5 sebelumnya).
   const months = Array.from({ length: 6 }, (_, k) => {
     const d = new Date(year, now.getMonth() - (5 - k), 1);
     return { y: d.getFullYear(), m: d.getMonth(), label: MONTH_FMT.format(d) };
   });
-  const monthlyNet: bigint[] = await Promise.all(
-    months.map(async ({ y, m }) => {
-      const { start, end } = monthWindow(y, m);
-      const lines = await postedLinesBetween(db, ctx.orgId, start, end);
-      return incomeStatement(aggregateFromLines(lines, metas)).netIncomeMinor;
-    }),
-  );
+  const curMonth = months[5];
 
-  const [drafts, recent, agingAR, agingAP] = await Promise.all([
-    listDrafts(db, ctx.orgId),
-    getDasborRecentActivity(db, ctx.orgId, 5),
-    getAgingReportRepo(db, ctx.orgId, "INVOICE"),
-    getAgingReportRepo(db, ctx.orgId, "BILL"),
-  ]);
+  // Semua baca di bawah dalam satu konteks org (RLS) — tanpa ubah logika agregasi.
+  const {
+    monthlyNet,
+    drafts,
+    recent,
+    agingAR,
+    agingAP,
+    yearEnd,
+    curMonthLines,
+  } = await withOrg(ctx.orgId, async (tx) => {
+    // Laba bersih 6 bulan terakhir (bulan berjalan + 5 sebelumnya), semua dari jurnal POSTED.
+    const monthlyNet: bigint[] = await Promise.all(
+      months.map(async ({ y, m }) => {
+        const { start, end } = monthWindow(y, m);
+        const lines = await postedLinesBetween(tx, ctx.orgId, start, end);
+        return incomeStatement(aggregateFromLines(lines, metas)).netIncomeMinor;
+      }),
+    );
+
+    const [drafts, recent, agingAR, agingAP] = await Promise.all([
+      listDrafts(tx, ctx.orgId),
+      getDasborRecentActivity(tx, ctx.orgId, 5),
+      getAgingReportRepo(tx, ctx.orgId, "INVOICE"),
+      getAgingReportRepo(tx, ctx.orgId, "BILL"),
+    ]);
+
+    // Pengingat tutup tahun: hanya dihitung saat Desember kalender.
+    let yearEnd: {
+      year: number;
+      periodName: string;
+      showBanner: boolean;
+      showModal: boolean;
+      isReady: boolean;
+      blockers: string[];
+    } | null = null;
+    if (now.getMonth() === 11) {
+      const decPeriod = await findPeriodByDate(tx, ctx.orgId, `${year}-12-15`);
+      const [orgRow] = await tx
+        .select({ settings: organizations.settings })
+        .from(organizations)
+        .where(eq(organizations.id, ctx.orgId))
+        .limit(1);
+      const dismissed = ((orgRow?.settings ?? {}) as Record<string, unknown>).dismissedYearEnd;
+      const st = getYearEndPromptState({
+        todayISO: today,
+        decPeriodStatus: (decPeriod?.status as "OPEN" | "CLOSED" | "LOCKED" | undefined) ?? null,
+        dismissedPeriod: typeof dismissed === "string" ? dismissed : null,
+      });
+      if (st.showBanner || st.showModal) {
+        const readiness = await evaluatePeriodReadiness(tx, ctx.orgId, st.periodName);
+        yearEnd = {
+          year: st.year,
+          periodName: st.periodName,
+          showBanner: st.showBanner,
+          showModal: st.showModal,
+          isReady: readiness.isReady,
+          blockers: Object.values(readiness.items)
+            .filter((i) => !i.passed)
+            .map((i) => i.title),
+        };
+      }
+    }
+    const { start: curStart, end: curEnd } = monthWindow(curMonth.y, curMonth.m);
+    const curMonthLines = await postedLinesBetween(tx, ctx.orgId, curStart, curEnd);
+    return { monthlyNet, drafts, recent, agingAR, agingAP, yearEnd, curMonthLines };
+  });
 
   const pendingDrafts = drafts.filter((d) => d.status === "PENDING");
   const overdueAR = agingAR.itemized.filter((i) => i.daysOverdue > 0);
@@ -99,46 +152,7 @@ export default async function DasborPage() {
   const overdueARMinor = overdueAR.reduce((s, i) => s + i.outstandingMinor, 0n);
   const overdueAPMinor = overdueAP.reduce((s, i) => s + i.outstandingMinor, 0n);
 
-  // Pengingat tutup tahun: hanya dihitung saat Desember kalender.
-  let yearEnd: {
-    year: number;
-    periodName: string;
-    showBanner: boolean;
-    showModal: boolean;
-    isReady: boolean;
-    blockers: string[];
-  } | null = null;
-  if (now.getMonth() === 11) {
-    const decPeriod = await findPeriodByDate(db, ctx.orgId, `${year}-12-15`);
-    const [orgRow] = await db
-      .select({ settings: organizations.settings })
-      .from(organizations)
-      .where(eq(organizations.id, ctx.orgId))
-      .limit(1);
-    const dismissed = ((orgRow?.settings ?? {}) as Record<string, unknown>).dismissedYearEnd;
-    const st = getYearEndPromptState({
-      todayISO: today,
-      decPeriodStatus: (decPeriod?.status as "OPEN" | "CLOSED" | "LOCKED" | undefined) ?? null,
-      dismissedPeriod: typeof dismissed === "string" ? dismissed : null,
-    });
-    if (st.showBanner || st.showModal) {
-      const readiness = await evaluatePeriodReadiness(db, ctx.orgId, st.periodName);
-      yearEnd = {
-        year: st.year,
-        periodName: st.periodName,
-        showBanner: st.showBanner,
-        showModal: st.showModal,
-        isReady: readiness.isReady,
-        blockers: Object.values(readiness.items)
-          .filter((i) => !i.passed)
-          .map((i) => i.title),
-      };
-    }
-  }
   // --- Lapisan keputusan (semua dari repo/tool yang sudah ada, tanpa RAG) ---
-  const curMonth = months[5];
-  const { start: curStart, end: curEnd } = monthWindow(curMonth.y, curMonth.m);
-  const curMonthLines = await postedLinesBetween(db, ctx.orgId, curStart, curEnd);
   const curAggs = aggregateFromLines(curMonthLines, metas);
   const topBeban = topExpenses(curAggs, 3);
   const avgDaily = avgDailyExpense(curAggs, now.getDate());

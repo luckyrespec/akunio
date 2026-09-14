@@ -1,4 +1,5 @@
 import { Db } from "../index";
+import type { Queryable } from "./queryable";
 import { contacts, type ContactType } from "../schema/invoicing";
 import { eq, and, desc, sql, ilike } from "drizzle-orm";
 
@@ -81,7 +82,7 @@ export async function findContactByNameRepo(db: Db, orgId: string, name: string)
 }
 
 export async function listContactsRepo(
-  db: Db,
+  q: Queryable,
   orgId: string,
   filter?: { type?: ContactType | "ALL"; search?: string }
 ) {
@@ -95,7 +96,7 @@ export async function listContactsRepo(
     conditions.push(ilike(contacts.name, `%${filter.search}%`));
   }
 
-  return db
+  return q
     .select()
     .from(contacts)
     .where(and(...conditions))

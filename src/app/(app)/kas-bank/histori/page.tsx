@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getCashHistoryRepo } from "@/server/db/repos/cash-bank.repo";
 import { accounts } from "@/server/db/schema/org";
 import { PageHeader } from "@/components/page-header";
@@ -57,19 +57,25 @@ export default async function HistoriPage({
 }) {
   const ctx = await requireContext();
   const sp = await searchParams;
-  const cashAccounts = await db
-    .select({ id: accounts.id, code: accounts.code, name: accounts.name })
-    .from(accounts)
-    .where(
-      and(
-        eq(accounts.orgId, ctx.orgId),
-        or(eq(accounts.isBank, true), eq(accounts.isCash, true))
-      )
-    );
-  const def = currentMonthRange();
-  const akun = sp.akun ?? cashAccounts[0]?.id ?? "";
-  const dari = sp.dari ?? def.dari;
-  const sampai = sp.sampai ?? def.sampai;
+  const { cashAccounts, dari, sampai, akun, history } = await withOrg(ctx.orgId, async (tx) => {
+    const cashAccounts = await tx
+      .select({ id: accounts.id, code: accounts.code, name: accounts.name })
+      .from(accounts)
+      .where(
+        and(
+          eq(accounts.orgId, ctx.orgId),
+          or(eq(accounts.isBank, true), eq(accounts.isCash, true))
+        )
+      );
+    const def = currentMonthRange();
+    const akun = sp.akun ?? cashAccounts[0]?.id ?? "";
+    const dari = sp.dari ?? def.dari;
+    const sampai = sp.sampai ?? def.sampai;
+    const history = akun
+      ? await getCashHistoryRepo(tx, ctx.orgId, akun, dari, sampai)
+      : null;
+    return { cashAccounts, dari, sampai, akun, history };
+  });
   const q = (sp.q ?? "").trim().slice(0, 100);
   const arah: Arah = (ARAH_OPTIONS as readonly string[]).includes(sp.arah ?? "")
     ? (sp.arah as Arah)
@@ -79,9 +85,6 @@ export default async function HistoriPage({
     : DEFAULT_LIMIT;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const history = akun
-    ? await getCashHistoryRepo(db, ctx.orgId, akun, dari, sampai)
-    : null;
   const periodLabel = `${formatIdDate(dari)} – ${formatIdDate(sampai)}`;
 
   const allRows = history?.rows ?? [];

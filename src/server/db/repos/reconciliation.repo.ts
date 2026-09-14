@@ -1,4 +1,5 @@
 import { Db } from "../index";
+import type { Queryable } from "./queryable";
 import {
   bankReconciliations,
   bankStatementLines,
@@ -113,23 +114,23 @@ export async function saveStatementLinesRepo(
 }
 
 export async function getReconciliationByIdRepo(
-  db: Db,
+  q: Queryable,
   orgId: string,
   id: string
 ) {
-  const [rec] = await db
+  const [rec] = await q
     .select()
     .from(bankReconciliations)
     .where(and(eq(bankReconciliations.id, id), eq(bankReconciliations.orgId, orgId)));
 
   if (!rec) return null;
 
-  const [bankAccount] = await db
+  const [bankAccount] = await q
     .select()
     .from(accounts)
     .where(and(eq(accounts.id, rec.bankAccountId), eq(accounts.orgId, orgId)));
 
-  const lines = await db
+  const lines = await q
     .select()
     .from(bankStatementLines)
     .where(eq(bankStatementLines.reconciliationId, rec.id))
@@ -142,8 +143,8 @@ export async function getReconciliationByIdRepo(
   };
 }
 
-export async function listReconciliationsRepo(db: Db, orgId: string) {
-  const rows = await db
+export async function listReconciliationsRepo(q: Queryable, orgId: string) {
+  const rows = await q
     .select({
       reconciliation: bankReconciliations,
       bankAccount: accounts,
@@ -236,7 +237,7 @@ export async function finalizeReconciliationRepo(
 }
 
 export async function getUnmatchedLedgerLinesRepo(
-  db: Db,
+  q: Queryable,
   orgId: string,
   bankAccountId: string,
   cutOffDate?: string
@@ -252,7 +253,7 @@ export async function getUnmatchedLedgerLinesRepo(
     conditions.push(lte(journalEntries.entryDate, cutOffDate));
   }
 
-  const rows = await db
+  const rows = await q
     .select({
       id: journalLines.id,
       entryId: journalLines.entryId,
