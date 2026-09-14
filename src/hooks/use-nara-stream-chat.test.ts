@@ -18,12 +18,15 @@ describe("findPendingInMessages (persetujuan terikat thread)", () => {
     expect(found?.args).toEqual({ memo: "x" });
   });
 
-  it("mengabaikan persetujuan yang sudah diputuskan di pesan berikutnya", () => {
+  it("mengembalikan arsip read-only untuk persetujuan yang sudah diputuskan di pesan berikutnya", () => {
     const found = findPendingInMessages([
       { toolInvocations: [{ callId: "c1", toolName: "post_journal", status: "pending_approval", args: {} }] },
       { toolInvocations: [{ callId: "c1", toolName: "post_journal", status: "approved", args: {} }] },
     ]);
-    expect(found).toBeNull();
+    // Perilaku arsip (50c79c2): kartu putusan tetap tampil read-only,
+    // tombol disabled — bukan null.
+    expect(found?.callId).toBe("c1");
+    expect(found?.decided).toBe("approved");
   });
 
   it("memilih persetujuan terbaru bila ada beberapa", () => {

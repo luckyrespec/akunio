@@ -219,27 +219,8 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("inventory opname -> adjustme
     );
     expect(res.journalEntryId).toBeNull();
   });
-
-  it("RLS: app_user org lain tidak melihat opname", async () => {
-    const other = (await makeOrg("PT Lain")).orgId;
-    const appUrl = process.env.APP_DATABASE_URL!;
-    const { Pool: AppPool } = await import("pg");
-    const pool = new AppPool({ connectionString: appUrl });
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      // Org sendiri (ada opname dari test sebelumnya) terlihat
-      await client.query(`SELECT set_config('app.current_org', $1, false)`, [orgId]);
-      const seenOwn = await client.query(`SELECT count(*)::int AS n FROM stock_opnames`);
-      expect(seenOwn.rows[0].n).toBeGreaterThan(0);
-      // Org lain tidak melihat apa pun
-      await client.query(`SELECT set_config('app.current_org', $1, false)`, [other]);
-      const seenOther = await client.query(`SELECT count(*)::int AS n FROM stock_opnames`);
-      expect(seenOther.rows[0].n).toBe(0);
-      await client.query("ROLLBACK");
-    } finally {
-      client.release();
-      await pool.end();
-    }
-  });
 });
+
+// Catatan: asersi isolasi RLS stock_opnames PINDAH ke
+// tests/integration/rls-isolation.test.ts (kasus 5, peran NOBYPASSRLS
+// + kontrol positif dua org).

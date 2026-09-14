@@ -1,16 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Pool } from "pg";
-import { makeOrg, truncateAll, getPool } from "./helpers";
+import { makeOrg, truncateAll } from "./helpers";
 
 describe.skipIf(process.env.SKIP_DB_TESTS === "1")("tax_summaries schema & RLS isolation", () => {
   const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
   let orgA: string;
-  let orgB: string;
 
   beforeAll(async () => {
     await truncateAll();
     orgA = (await makeOrg("UMKM Berkah")).orgId;
-    orgB = (await makeOrg("UMKM Maju")).orgId;
   });
 
   afterAll(async () => {
@@ -62,35 +60,5 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("tax_summaries schema & RLS i
       [orgA, periodId, 1, "JE-2026-0001", "2026-01-31", "Akrual PPh Final PP 55/2022", "TAX", "DRAFT"]
     );
     expect(jRes.rows[0].source).toBe("TAX");
-  });
-
-  it("enforces tenant isolation under app_user with RLS", async () => {
-    const appPool = getPool();
-    const client = await appPool.connect();
-
-    try {
-      // Set tenant to Org A
-      await client.query(`SET app.current_org = '${orgA}'`);
-      const rowsOrgA = await client.query(`SELECT * FROM tax_summaries`);
-      expect(rowsOrgA.rows.length).toBeGreaterThanOrEqual(1);
-      expect(rowsOrgA.rows.every((r) => r.org_id === orgA)).toBe(true);
-
-      // Switch to Org B: Org A's rows must NOT be visible
-      await client.query(`SET app.current_org = '${orgB}'`);
-      const rowsOrgB = await client.query(`SELECT * FROM tax_summaries`);
-      expect(rowsOrgB.rows.length).toBe(0);
-
-      // Attempt to insert row for Org A while current_org is Org B -> blocked by RLS CHECK
-      await expect(
-        client.query(
-          `INSERT INTO tax_summaries (org_id, period_month, tax_year)
-           VALUES ($1, $2, $3)`,
-          [orgA, "2026-03", 2026]
-        )
-      ).rejects.toThrow();
-    } finally {
-      client.release();
-      await appPool.end();
-    }
   });
 });

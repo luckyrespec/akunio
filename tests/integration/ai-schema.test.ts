@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Pool } from "pg";
-import { getPool, makeOrg, truncateAll } from "./helpers";
+import { makeOrg, truncateAll } from "./helpers";
 
 describe.skipIf(process.env.SKIP_DB_TESTS === "1")("ai tables + rls", () => {
   const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
@@ -31,24 +31,7 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("ai tables + rls", () => {
     )).rejects.toThrow();
   });
 
-  it("rls isolates ai tables per org", async () => {
-    const scoped = async (o: string, sql: string, params?: unknown[]) => {
-      const c = await getPool().connect();
-      try {
-        await c.query("BEGIN");
-        await c.query("SELECT set_config('app.current_org', $1, true)", [o]);
-        const out = await c.query(sql, params as never);
-        await c.query("COMMIT");
-        return out;
-      } finally { c.release(); }
-    };
-
-    const otherOrg = (await makeOrg("PT AI Lain")).orgId;
-    await admin.query(
-      `INSERT INTO documents (org_id, storage_key, mime, size_bytes)
-       VALUES ($1,'orgs/other/x.pdf','application/pdf',1)`, [otherOrg]);
-
-    const seen = await scoped(orgId, "SELECT count(*)::int AS n FROM documents");
-    expect(seen.rows[0].n).toBe(1); // hanya dokumen orgId, bukan milik org lain
-  });
+  // Catatan: asersi isolasi RLS documents PINDAH ke
+  // tests/integration/rls-isolation.test.ts (kasus 6, peran NOBYPASSRLS
+  // + kontrol positif dua org).
 });
