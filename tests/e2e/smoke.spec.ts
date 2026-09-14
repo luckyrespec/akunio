@@ -19,10 +19,10 @@ test("statements render after direct visit", async ({ page }) => {
   await walkOnboardingToDashboard(page, { businessName: "Koperasi E2E Dua" });
 
   await page.goto("/laporan/neraca");
-  await expect(page.getByRole("heading", { name: "Neraca" })).toBeVisible();
-  await expect(page.getByText("Laba Tahun Berjalan", { exact: true })).toBeVisible();
-  await expect(page.getByText("Total Aset")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Laporan Posisi Keuangan" }).first()).toBeVisible();
+  await expect(page.getByText("Laba (Rugi) Periode Berjalan", { exact: true })).toBeVisible();
+  await expect(page.getByText("JUMLAH ASET", { exact: true })).toBeVisible();
 
   await page.goto("/laporan/laba-rugi");
-  await expect(page.getByText("Laba Bersih")).toBeVisible();
+  await expect(page.getByText("LABA (RUGI) BERSIH")).toBeVisible();
 });
