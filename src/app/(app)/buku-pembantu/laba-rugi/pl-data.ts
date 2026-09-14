@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { accounts } from "@/server/db/schema/org";
 import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { listPeriods } from "@/server/db/repos/periods.repo";
@@ -42,7 +42,7 @@ export async function loadPlCards(
   periodParam?: string,
   cumulative = false,
 ): Promise<PlCardsData> {
-  const data = await db.transaction(async (tx) => {
+  const data = await withOrg(orgId, async (tx) => {
     const accRows = await tx.select().from(accounts).where(eq(accounts.orgId, orgId));
     const period = await loadPeriodOrDefault(tx, orgId, periodParam);
     const options = await listPeriods(tx, orgId);

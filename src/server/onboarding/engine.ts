@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { accounts, fiscalPeriods, organizations } from "@/server/db/schema/org";
 import { subledgerControls } from "@/server/db/schema/subledger";
 import { journalEntries } from "@/server/db/schema/journal";
@@ -558,7 +559,7 @@ export async function submitOnboardingMessage(
 }
 
 export async function finalizeOnboarding(orgId: string, key: string): Promise<FinalizeResult> {
-  return db.transaction(async (tx) => {
+  return withOrg(orgId, async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${orgId}))`);
 
     const profile = await getProfile(tx, orgId);

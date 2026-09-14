@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { ArrowLeft, BookOpen, FileText, Scale, TrendingDown, TrendingUp } from "lucide-react";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getLedger } from "@/server/db/repos/ledger.repo";
 import { listPeriods } from "@/server/db/repos/periods.repo";
 import { loadPeriodOrDefault } from "@/server/reports/build";
@@ -30,8 +30,7 @@ export default async function KartuAkunPage({
   const sp = await searchParams;
   const cumulative = sp.mode === "ytd";
 
-  const data = await db
-    .transaction(async (tx) => {
+  const data = await withOrg(ctx.orgId, async (tx) => {
       const period = await loadPeriodOrDefault(tx, ctx.orgId, sp.period);
       const options = await listPeriods(tx, ctx.orgId);
       const fromISO = cumulative ? `${period.endsOn.slice(0, 4)}-01-01` : period.startsOn;

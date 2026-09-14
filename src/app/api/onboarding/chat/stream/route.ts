@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireVerifiedSession } from "@/server/auth/guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { buildPolishPrompt, submitOnboardingMessage } from "@/server/onboarding/engine";
 
 // SSE ala /api/nara/chat/stream: {type:"text",delta} mengalir per token,
@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        const result = await submitOnboardingMessage(db, orgId, message, {
+        const result = await withOrg(orgId, (tx) =>
+          submitOnboardingMessage(tx, orgId, message, {
           streamPolish: async (template) => {
             // Mock / tanpa kunci: satu chunk instan (perilaku lama, tetap jujur).
             if (process.env.AI_MOCK === "1" || !process.env.GEMINI_API_KEY) {
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
             if (!out.trim()) send({ type: "text", delta: template });
             return final;
           },
-        });
+        }));
         send({
           type: "done",
           reply: result.reply,
