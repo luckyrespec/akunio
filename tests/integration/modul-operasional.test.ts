@@ -263,6 +263,106 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")(
           );
       expect(row.rows[0].journal_entry_id).not.toBeNull();
     });
+
+    it("I1 nominal desimal eksak: 100.5 → 10050 minor (tanpa float)", async () => {
+      const { executeNaraTool } = await import("@/server/ai/nara-tools");
+      const { db } = await import("@/server/db");
+      const { contacts, invoices } = await import(
+        "@/server/db/schema/invoicing"
+      );
+      const { eq } = await import("drizzle-orm");
+      const [c] = await db
+        .select()
+        .from(contacts)
+        .where(eq(contacts.orgId, orgId))
+        .limit(1);
+      const num = `INV-${year}-0904`;
+      await db.insert(invoices).values({
+        orgId,
+        type: "INVOICE",
+        invoiceNumber: num,
+        contactId: c.id,
+        issueDate: `${year}-06-01`,
+        dueDate: `${year}-06-30`,
+        subtotalMinor: 1_000_000n,
+        totalMinor: 1_000_000n,
+        status: "ISSUED",
+      });
+      const out = await executeNaraTool(orgId, "t@t.id", "record_invoice_payment", {
+        invoiceNumber: num,
+        amount: 100.5,
+        accountCode: "1110",
+        paymentDate: `${year}-06-11`,
+      });
+      expect(out.success).toBe(true);
+      const pay = await admin.query<{ amount_minor: string }>(
+        `SELECT amount_minor FROM invoice_payments WHERE invoice_id=(SELECT id FROM invoices WHERE org_id=$1 AND invoice_number=$2) ORDER BY created_at DESC LIMIT 1`,
+        [orgId, num]
+      );
+      // "100.5" rupiah = Rp100,50 = 10_050 sen — eksak, bukan hasil float.
+      expect(BigInt(pay.rows[0].amount_minor)).toBe(10_050n);
+    });
+
+    it("I1 nominal >2 desimal ditolak (1.005 tak boleh dibulatkan diam-diam)", async () => {
+      const { executeNaraTool } = await import("@/server/ai/nara-tools");
+      const { db } = await import("@/server/db");
+      const { contacts, invoices } = await import(
+        "@/server/db/schema/invoicing"
+      );
+      const { eq } = await import("drizzle-orm");
+      const [c] = await db
+        .select()
+        .from(contacts)
+        .where(eq(contacts.orgId, orgId))
+        .limit(1);
+      const num = `INV-${year}-0905`;
+      await db.insert(invoices).values({
+        orgId,
+        type: "INVOICE",
+        invoiceNumber: num,
+        contactId: c.id,
+        issueDate: `${year}-06-01`,
+        dueDate: `${year}-06-30`,
+        subtotalMinor: 1_000_000n,
+        totalMinor: 1_000_000n,
+        status: "ISSUED",
+      });
+      // Bukti float pre-fix: Number("1.005")*100 = 100.49999999999999 →
+      // Math.round = 100n (Rp1,00) — salah dan diam-diam. Pasca-fix: tolak.
+      const out = await executeNaraTool(orgId, "t@t.id", "record_invoice_payment", {
+        invoiceNumber: num,
+        amount: 1.005,
+        accountCode: "1110",
+        paymentDate: `${year}-06-11`,
+      });
+      expect(out.success).toBe(false);
+      expect(out.error ?? "").toMatch(/DESIMAL/i);
+      const pay = await admin.query<{ n: string }>(
+        `SELECT count(*)::text n FROM invoice_payments WHERE invoice_id=(SELECT id FROM invoices WHERE org_id=$1 AND invoice_number=$2)`,
+        [orgId, num]
+      );
+      expect(pay.rows[0].n).toBe("0");
+    });
+
+    it("I1 nominal nol/negatif ditolak", async () => {
+      const { executeNaraTool } = await import("@/server/ai/nara-tools");
+      const zero = await executeNaraTool(orgId, "t@t.id", "record_invoice_payment", {
+        invoiceNumber: invNumber,
+        amount: 0,
+        accountCode: "1110",
+        paymentDate: `${year}-06-11`,
+      });
+      expect(zero.success).toBe(false);
+      expect(zero.error ?? "").toMatch(/NOMINAL|positif|Rp 0/i);
+      const neg = await executeNaraTool(orgId, "t@t.id", "record_invoice_payment", {
+        invoiceNumber: invNumber,
+        amount: -100,
+        accountCode: "1110",
+        paymentDate: `${year}-06-11`,
+      });
+      expect(neg.success).toBe(false);
+      expect(neg.error ?? "").toMatch(/NOMINAL|positif|Rp 0|DESIMAL/i);
+    });
   }
 );
 

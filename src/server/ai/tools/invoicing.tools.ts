@@ -137,6 +137,19 @@ export const invoicingToolDefs: ToolDefinition[] = [
   },
 ];
 
+/** Nominal desimal Rupiah (number|string, mis. 100.5) → minor eksak; null bila format tak valid.
+ *  Tanpa Number()*100 agar sen tak terpotong (I1: Number("1.005")*100 = 100.49999… → 100n SALAH).
+ *  Cerminan parseDecimalToMinor dialog pelunasan: digit bulat + maks 2 digit sen, tanpa tanda minus. */
+function parseAmountToMinor(raw: unknown): bigint | null {
+  const text =
+    typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw : "";
+  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(text.trim());
+  if (!m) return null;
+  const whole = BigInt(m[1]);
+  const frac = m[2] ? BigInt(m[2].padEnd(2, "0")) : 0n;
+  return whole * 100n + frac;
+}
+
 export const invoicingHandlers: Record<string, ToolHandler> = {
   create_invoice: async (orgId, _actorEmail, args) => {
     const { createInvoiceRepo } = await import("@/server/db/repos/invoices.repo");
@@ -238,8 +251,13 @@ export const invoicingHandlers: Record<string, ToolHandler> = {
       return { success: false, error: `Akun kas/bank tidak ditemukan.` };
     }
 
-    const amtNumber = Number(args.amount || 0);
-    const amountMinor = BigInt(Math.round(amtNumber * 100));
+    const amountMinor = parseAmountToMinor(args.amount);
+    if (amountMinor === null) {
+      return { success: false, error: "NOMINAL_DESIMAL_TIDAK_VALID: nominal pembayaran wajib desimal Rupiah maksimal 2 digit sen (contoh: 100.5)." };
+    }
+    if (amountMinor <= 0n) {
+      return { success: false, error: "NOMINAL_HARUS_POSITIF: jumlah pelunasan harus lebih dari Rp 0." };
+    }
     const paymentDate = String(args.paymentDate || new Date().toISOString().slice(0, 10));
 
     // Samakan default auto-post UI (recordInvoicePaymentAction): pelunasan
