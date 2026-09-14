@@ -31,14 +31,16 @@ import { removeItemImage, saveItemImage } from "@/server/storage/inventory-image
 
 export async function getInventoryOverviewAction() {
   const ctx = await requireContext();
-  const [allActive, archivedItems, jasaItems, archivedJasaItems, settings, opnames] = await Promise.all([
-    listInventoryItems(db, ctx.orgId),
-    listArchivedInventoryItems(db, ctx.orgId),
-    listServiceItems(db, ctx.orgId),
-    listArchivedServiceItems(db, ctx.orgId),
-    getInventorySettings(db, ctx.orgId),
-    listStockOpnames(db, ctx.orgId),
-  ]);
+  const [allActive, archivedItems, jasaItems, archivedJasaItems, settings, opnames] = await withOrg(ctx.orgId, (tx) =>
+    Promise.all([
+      listInventoryItems(tx, ctx.orgId),
+      listArchivedInventoryItems(tx, ctx.orgId),
+      listServiceItems(tx, ctx.orgId),
+      listArchivedServiceItems(tx, ctx.orgId),
+      getInventorySettings(tx, ctx.orgId),
+      listStockOpnames(tx, ctx.orgId),
+    ]),
+  );
 
   // Jasa punya daftarnya sendiri — pisahkan agar tidak dobel di tabel gabungan.
   const items = allActive.filter((item) => item.itemType === "BARANG");
@@ -111,8 +113,7 @@ export async function suggestSkuAction() {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const { nextSkuCodes } = await import("@/server/db/repos/inventory-sku");
-    const { db } = await import("@/server/db");
-    const s = await db.transaction((tx) => nextSkuCodes(tx as never, ctx.orgId));
+    const s = await withOrg(ctx.orgId, (tx) => nextSkuCodes(tx as never, ctx.orgId));
     return { ok: true as const, ...s };
   } catch (err: unknown) {
     return { ok: false as const, error: err instanceof Error ? err.message : "Gagal generate kode" };
@@ -121,7 +122,7 @@ export async function suggestSkuAction() {
 
 export async function getServiceOverviewAction() {
   const ctx = await requireContext();
-  const items = await listServiceItems(db, ctx.orgId);
+  const items = await withOrg(ctx.orgId, (tx) => listServiceItems(tx, ctx.orgId));
   return { items, totalJasa: items.length };
 }
 
@@ -169,8 +170,7 @@ export async function suggestJsaSkuAction() {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const { nextSkuCodes } = await import("@/server/db/repos/inventory-sku");
-    const { db } = await import("@/server/db");
-    const s = await db.transaction((tx) => nextSkuCodes(tx as never, ctx.orgId, "JASA"));
+    const s = await withOrg(ctx.orgId, (tx) => nextSkuCodes(tx as never, ctx.orgId, "JASA"));
     return { ok: true as const, ...s };
   } catch (err: unknown) {
     return { ok: false as const, error: err instanceof Error ? err.message : "Gagal generate kode" };
@@ -652,11 +652,13 @@ export async function getInventoryItemDetailAction(code: string) {
     const ctx = await requireContext();
     const clean = code.trim().toUpperCase();
     if (!clean) return { ok: false as const, error: "Kode barang kosong." };
-    const rows = await db
-      .select()
-      .from(inventoryItems)
-      .where(and(eq(inventoryItems.orgId, ctx.orgId), eq(inventoryItems.code, clean)))
-      .limit(1);
+    const rows = await withOrg(ctx.orgId, (tx) =>
+      tx
+        .select()
+        .from(inventoryItems)
+        .where(and(eq(inventoryItems.orgId, ctx.orgId), eq(inventoryItems.code, clean)))
+        .limit(1),
+    );
     const item = rows[0];
     if (!item) return { ok: false as const, error: `Barang ${clean} tidak ditemukan.` };
     return {

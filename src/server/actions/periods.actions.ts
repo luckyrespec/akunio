@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
 import { setPeriodStatus } from "@/server/db/repos/periods.repo";
@@ -15,7 +16,7 @@ export async function dismissYearEndPromptAction(periodName: string): Promise<Ac
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     if (!/^\d{4}-12$/.test(periodName)) throw new Error("PERIODE_TIDAK_VALID: format YYYY-12");
     const { organizations } = await import("@/server/db/schema/org");
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       const [org] = await tx
         .select({ settings: organizations.settings })
         .from(organizations)
@@ -41,7 +42,7 @@ export async function ensureYearPeriodsAction(
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const { ensureFiscalYearPeriods } = await import("@/server/db/repos/periods.repo");
-    const res = await db.transaction(async (tx) => {
+    const res = await withOrg(ctx.orgId, async (tx) => {
       const out = await ensureFiscalYearPeriods(tx, ctx.orgId, year);
       await appendAudit(tx, {
         orgId: ctx.orgId,
@@ -65,7 +66,7 @@ export async function ensureYearPeriodsAction(
 export async function closePeriodAction(periodId: string): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       const period = await setPeriodStatus(tx, ctx.orgId, periodId, "CLOSED");
       await appendAudit(tx, {
         orgId: ctx.orgId,
@@ -88,7 +89,7 @@ export async function closePeriodAction(periodId: string): Promise<ActionResult>
 export async function reopenPeriodAction(periodId: string): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER"]); // reopening is owner-only per spec
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       const { fiscalPeriods } = await import("@/server/db/schema/org");
       const [period] = await tx
         .select()
@@ -153,7 +154,7 @@ export async function createPeriodAction(payload: {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const { createPeriod } = await import("@/server/db/repos/periods.repo");
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       const period = await createPeriod(tx, ctx.orgId, {
         name: payload.name.trim(),
         startsOn: payload.startsOn,
@@ -185,7 +186,7 @@ export async function updatePeriodAction(
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     const { updatePeriod } = await import("@/server/db/repos/periods.repo");
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       const period = await updatePeriod(tx, ctx.orgId, periodId, payload);
       await appendAudit(tx, {
         orgId: ctx.orgId,
@@ -213,11 +214,13 @@ export async function deletePeriodAction(periodId: string): Promise<ActionResult
     const { eq } = await import("drizzle-orm");
 
     // Check if period has any journal entries (scoped ke org peminta).
-    const existingEntry = await db
-      .select({ id: journalEntries.id })
-      .from(journalEntries)
-      .where(and(eq(journalEntries.orgId, ctx.orgId), eq(journalEntries.periodId, periodId)))
-      .limit(1);
+    const existingEntry = await withOrg(ctx.orgId, (tx) =>
+      tx
+        .select({ id: journalEntries.id })
+        .from(journalEntries)
+        .where(and(eq(journalEntries.orgId, ctx.orgId), eq(journalEntries.periodId, periodId)))
+        .limit(1),
+    );
 
     if (existingEntry.length > 0) {
       return {
@@ -226,7 +229,7 @@ export async function deletePeriodAction(periodId: string): Promise<ActionResult
       };
     }
 
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       const period = await deletePeriod(tx, ctx.orgId, periodId);
       await appendAudit(tx, {
         orgId: ctx.orgId,
@@ -252,7 +255,7 @@ export async function evaluatePeriodReadinessAction(periodName: string) {
     const { evaluatePeriodReadiness } = await import(
       "@/server/db/repos/periods-closing.repo"
     );
-    const result = await evaluatePeriodReadiness(db, ctx.orgId, periodName);
+    const result = await withOrg(ctx.orgId, (tx) => evaluatePeriodReadiness(tx, ctx.orgId, periodName));
     return { ok: true, data: result };
   } catch (e) {
     if (isRedirectError(e)) throw e;
@@ -274,7 +277,7 @@ export async function executePeriodCloseAction(payload: {
       "@/server/db/repos/periods-closing.repo"
     );
 
-    const result = await db.transaction(async (tx) => {
+    const result = await withOrg(ctx.orgId, async (tx) => {
       const res = await closePeriod(tx, {
         orgId: ctx.orgId,
         periodName: payload.periodName,

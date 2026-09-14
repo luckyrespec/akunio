@@ -1,4 +1,5 @@
 import { Db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { type Queryable } from "@/server/db/repos/queryable";
 import { bankStatementLines, bankReconciliations } from "@/server/db/schema/reconciliation";
 import { accounts } from "@/server/db/schema/org";
@@ -45,7 +46,7 @@ async function getAccountByCode(
 }
 
 export async function createBankFeeJournal(
-  db: Db,
+  db: Db, // kompatibilitas; konteks org dipasang sendiri via withOrg di bawah
   orgId: string,
   statementLineId: string,
   actorEmail: string
@@ -73,7 +74,7 @@ export async function createBankFeeJournal(
     throw new Error(`Sesi rekonsiliasi tidak ditemukan.`);
   }
 
-  return db.transaction(async (tx) => {
+  return withOrg(orgId, async (tx) => {
     const feeAccount = await getAccountByCode(tx, orgId, "6200", "5900", "BEBAN");
     const bankAccount = await tx
       .select()
@@ -138,7 +139,7 @@ export async function createBankFeeJournal(
 }
 
 export async function createBankInterestJournal(
-  db: Db,
+  db: Db, // kompatibilitas; konteks org dipasang sendiri via withOrg di bawah
   orgId: string,
   statementLineId: string,
   actorEmail: string
@@ -166,7 +167,7 @@ export async function createBankInterestJournal(
     throw new Error(`Sesi rekonsiliasi tidak ditemukan.`);
   }
 
-  return db.transaction(async (tx) => {
+  return withOrg(orgId, async (tx) => {
     const revAccount = await getAccountByCode(tx, orgId, "4200", "4200", "PENDAPATAN");
     const bankAccount = await tx
       .select()

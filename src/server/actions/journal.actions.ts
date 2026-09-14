@@ -2,7 +2,6 @@
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
-import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import {
@@ -179,7 +178,7 @@ export async function getJournalDetailAction(number: string): Promise<JournalDet
     const clean = number.trim().toUpperCase();
     if (!clean) return fail(new Error("Nomor jurnal kosong."));
     const { searchEntriesWithLines } = await import("@/server/db/repos/journals.repo");
-    const hits = await searchEntriesWithLines(db, ctx.orgId, clean, 5);
+    const hits = await withOrg(ctx.orgId, (tx) => searchEntriesWithLines(tx, ctx.orgId, clean, 5));
     const entry = hits.find((e) => e.number.toUpperCase() === clean) ?? hits[0];
     if (!entry) return fail(new Error(`Jurnal ${clean} tidak ditemukan.`));
     return {

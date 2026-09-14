@@ -186,7 +186,7 @@ export async function createAssetWithAcquisitionAction(payload: {
 
 export async function listFixedAssetsAction(): Promise<AssetActionResult> {  try {
     const ctx = await requireContext();
-    const assets = await listFixedAssets(db, ctx.orgId);
+    const assets = await withOrg(ctx.orgId, (tx) => listFixedAssets(tx, ctx.orgId));
     return { ok: true, data: assets };
   } catch (err) {
     return fail(err);
@@ -196,7 +196,7 @@ export async function listFixedAssetsAction(): Promise<AssetActionResult> {  try
 export async function getFixedAssetDetailAction(id: string): Promise<AssetActionResult> {
   try {
     const ctx = await requireContext();
-    const detail = await getFixedAssetDetail(db, ctx.orgId, id);
+    const detail = await withOrg(ctx.orgId, (tx) => getFixedAssetDetail(tx, ctx.orgId, id));
     if (!detail) return { ok: false, error: "Aset tidak ditemukan." };
     return { ok: true, data: detail };
   } catch (err) {
@@ -304,14 +304,19 @@ export async function getFixedAssetSheetAction(code: string) {
     const ctx = await requireContext();
     const clean = code.trim().toUpperCase();
     if (!clean) return fail("Kode aset kosong.");
-    const rows = await db
-      .select()
-      .from(fixedAssets)
-      .where(and(eq(fixedAssets.orgId, ctx.orgId), eq(fixedAssets.code, clean)))
-      .limit(1);
+    const { rows, detail } = await withOrg(ctx.orgId, async (tx) => {
+      const rows = await tx
+        .select()
+        .from(fixedAssets)
+        .where(and(eq(fixedAssets.orgId, ctx.orgId), eq(fixedAssets.code, clean)))
+        .limit(1);
+      const asset = rows[0];
+      if (!asset) return { rows, detail: null };
+      const detail = await getFixedAssetDetail(tx, ctx.orgId, asset.id);
+      return { rows, detail };
+    });
     const asset = rows[0];
     if (!asset) return fail(`Aset ${clean} tidak ditemukan.`);
-    const detail = await getFixedAssetDetail(db, ctx.orgId, asset.id);
     const postedLines = (detail?.schedule ?? []).filter((l) => l.status === "POSTED");
     const accumulatedMinor = postedLines.reduce((a, l) => a + l.depreciationAmountMinor, 0n);
     return {

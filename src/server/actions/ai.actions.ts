@@ -82,7 +82,7 @@ export async function createDraftAction(
       const bytes = await getDocument(row.storageKey);
       document = { dataBase64: bytes.toString("base64"), mime: row.mime };
       if (!promptText) promptText = "Buat jurnal dari dokumen terlampir.";
-      await db.transaction((tx) => setDocumentStatus(tx, ctx.orgId, row.id, "EXTRACTED"));
+      await withOrg(ctx.orgId, (tx) => setDocumentStatus(tx, ctx.orgId, row.id, "EXTRACTED"));
     }
     if (!promptText) return { ok: false, error: "Deskripsi tidak boleh kosong." };
 
@@ -124,7 +124,7 @@ export async function createDraftAction(
     const draftWithMapping = { ...draft, mapping };
     const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
-    const row = await db.transaction(async (tx) => {
+    const row = await withOrg(ctx.orgId, async (tx) => {
       const d = await createDraft(tx, {
         orgId: ctx.orgId, kind, documentId, inputText: promptText,
         draft: draftWithMapping, model,
@@ -145,7 +145,7 @@ export async function createDraftAction(
 export async function rejectDraftAction(draftId: string): Promise<ActionResult> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       await setDraftStatus(tx, ctx.orgId, draftId, "REJECTED");
       await appendAudit(tx, {
         orgId: ctx.orgId, actor: ctx.userEmail, action: "AI_DRAFT_REJECT",
@@ -163,7 +163,7 @@ export async function bulkRejectDraftsAction(draftIds: string[]): Promise<Action
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
     if (!draftIds.length) return { ok: true };
 
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       for (const id of draftIds) {
         await setDraftStatus(tx, ctx.orgId, id, "REJECTED");
       }

@@ -25,8 +25,8 @@ export interface UpdateContactInput {
   notes?: string | null;
 }
 
-export async function createContactRepo(db: Db, orgId: string, input: CreateContactInput) {
-  const [created] = await db
+export async function createContactRepo(q: Queryable, orgId: string, input: CreateContactInput) {
+  const [created] = await q
     .insert(contacts)
     .values({
       orgId,
@@ -45,12 +45,12 @@ export async function createContactRepo(db: Db, orgId: string, input: CreateCont
 }
 
 export async function updateContactRepo(
-  db: Db,
+  q: Queryable,
   orgId: string,
   id: string,
   input: UpdateContactInput
 ) {
-  const [updated] = await db
+  const [updated] = await q
     .update(contacts)
     .set({
       ...input,
@@ -62,8 +62,8 @@ export async function updateContactRepo(
   return updated ?? null;
 }
 
-export async function getContactByIdRepo(db: Db, orgId: string, id: string) {
-  const [row] = await db
+export async function getContactByIdRepo(q: Queryable, orgId: string, id: string) {
+  const [row] = await q
     .select()
     .from(contacts)
     .where(and(eq(contacts.id, id), eq(contacts.orgId, orgId)));
@@ -71,8 +71,8 @@ export async function getContactByIdRepo(db: Db, orgId: string, id: string) {
   return row ?? null;
 }
 
-export async function findContactByNameRepo(db: Db, orgId: string, name: string) {
-  const [row] = await db
+export async function findContactByNameRepo(q: Queryable, orgId: string, name: string) {
+  const [row] = await q
     .select()
     .from(contacts)
     .where(and(eq(contacts.orgId, orgId), ilike(contacts.name, `%${name}%`)))

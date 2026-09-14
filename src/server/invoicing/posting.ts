@@ -1,4 +1,5 @@
 import { Db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { type Queryable } from "@/server/db/repos/queryable";
 import { invoices, invoicePayments } from "@/server/db/schema/invoicing";
 import { accounts } from "@/server/db/schema/org";
@@ -232,7 +233,7 @@ export async function postInvoiceToLedger(
     return inv.journalEntryId;
   }
 
-  return db.transaction(async (tx) => {
+  return withOrg(orgId, async (tx) => {
     const lines: JournalLineInput[] = [];
 
     // Katalog ter-link (barang vs jasa) + kebijakan persediaan — dipakai cabang jual maupun beli.
@@ -536,7 +537,7 @@ export async function voidInvoiceWithReversal(
     return null;
   }
 
-  return db.transaction(async (tx) => {
+  return withOrg(orgId, async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`inv-void:${invoiceId}`}))`);
     const [fresh] = await tx
       .select()
@@ -683,7 +684,7 @@ export async function postInvoicePaymentToLedger(
     throw new Error(`Faktur terkait tidak ditemukan.`);
   }
 
-  return db.transaction(async (tx) => {
+  return withOrg(orgId, async (tx) => {
     const lines: JournalLineInput[] = [];
     let counterAccountId: string;
 

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { accounts } from "@/server/db/schema/org";
 import { appendAudit } from "@/server/db/repos/audit.repo";
 import {
@@ -24,7 +24,7 @@ export async function editAccountNameAction(accountId: string, newName: string) 
       return { ok: false as const, error: "Nama akun tidak boleh kosong." };
     }
 
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       const existing = await getAccountById(tx, ctx.orgId, accountId);
       if (!existing) throw new Error("AKUN_TIDAK_DITEMUKAN");
 
@@ -51,7 +51,7 @@ export async function deleteAccountAction(accountId: string) {
   try {
     const ctx = await requireContext(["OWNER"]);
 
-    const result = await db.transaction(async (tx) => {
+    const result = await withOrg(ctx.orgId, async (tx) => {
       const existing = await getAccountById(tx, ctx.orgId, accountId);
       if (!existing) throw new Error("AKUN_TIDAK_DITEMUKAN");
 
@@ -115,7 +115,7 @@ export async function deleteAccountAction(accountId: string) {
 export async function archiveAccountAction(accountId: string, archive: boolean) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    await db.transaction(async (tx) => {
+    await withOrg(ctx.orgId, async (tx) => {
       const existing = await getAccountById(tx, ctx.orgId, accountId);
       if (!existing) throw new Error("AKUN_TIDAK_DITEMUKAN");
       const row = await setAccountArchived(tx, ctx.orgId, accountId, archive ? new Date() : null);
@@ -167,7 +167,7 @@ export async function createAccountAction(input: CreateAccountInput) {
       return { ok: false as const, error: "Saldo normal akun harus Debit (D) atau Kredit (K)." };
     }
 
-    const row = await db.transaction(async (tx) => {
+    const row = await withOrg(ctx.orgId, async (tx) => {
       // Check for code uniqueness within the organization
       const [existing] = await tx
         .select({ id: accounts.id })
@@ -238,11 +238,13 @@ export async function getAccountDetailAction(code: string) {
     const ctx = await requireContext();
     const clean = code.trim();
     if (!clean) return { ok: false as const, error: "Kode akun kosong." };
-    const rows = await db
-      .select()
-      .from(accounts)
-      .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.code, clean)))
-      .limit(1);
+    const rows = await withOrg(ctx.orgId, (tx) =>
+      tx
+        .select()
+        .from(accounts)
+        .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.code, clean)))
+        .limit(1),
+    );
     const acc = rows[0];
     if (!acc) return { ok: false as const, error: `Akun ${clean} tidak ditemukan.` };
     return {

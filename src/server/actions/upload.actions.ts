@@ -1,5 +1,5 @@
 "use server";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { requireContext } from "@/server/auth/guard";
 import {
   putDocument, MAX_DOCUMENT_BYTES, ALLOWED_MIMES,
@@ -27,7 +27,7 @@ export async function uploadDocumentAction(formData: FormData): Promise<UploadRe
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     const { storageKey } = await putDocument(ctx.orgId, { buffer, mime: file.type });
-    const row = await db.transaction(async (tx) => {
+    const row = await withOrg(ctx.orgId, async (tx) => {
       const r = await createDocumentRow(tx, {
         orgId: ctx.orgId, storageKey, mime: file.type, sizeBytes: file.size,
       });

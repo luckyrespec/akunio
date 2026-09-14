@@ -1,5 +1,4 @@
 "use server";
-import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
@@ -54,7 +53,7 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
       }
       const buffer = Buffer.from(await file.arrayBuffer());
       const { storageKey } = await putDocument(ctx.orgId, { buffer, mime: file.type });
-      const row = await db.transaction((tx) =>
+      const row = await withOrg(ctx.orgId, (tx) =>
         createDocumentRow(tx, { orgId: ctx.orgId, storageKey, mime: file.type, sizeBytes: file.size }),
       );
       documentId = row.id;
@@ -117,7 +116,7 @@ export async function journalAiChatAction(formData: FormData): Promise<JournalCh
       const draftWithMapping = { ...(result.draft as object), mapping };
       const model = getGeminiModel();
 
-      const row = await db.transaction(async (tx) => {
+      const row = await withOrg(ctx.orgId, async (tx) => {
         const d = await createDraft(tx, {
           orgId: ctx.orgId,
           kind: document ? "DOCUMENT" : "TEXT",

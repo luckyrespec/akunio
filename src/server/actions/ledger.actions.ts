@@ -2,7 +2,7 @@
 
 import { requireContext } from "@/server/auth/guard";
 import { isRedirectError } from "./redirect-guard";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { getLedger } from "@/server/db/repos/ledger.repo";
 
 export interface LedgerDetailItem {
@@ -31,7 +31,7 @@ export interface LedgerDetailResponse {
 export async function getAccountLedgerAction(accountId: string): Promise<LedgerDetailResponse> {
   try {
     const ctx = await requireContext();
-    const result = await db.transaction((tx) => getLedger(tx, ctx.orgId, accountId));
+    const result = await withOrg(ctx.orgId, (tx) => getLedger(tx, ctx.orgId, accountId));
 
     const rows: LedgerDetailItem[] = result.rows.map((r) => ({
       number: r.number,

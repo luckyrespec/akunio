@@ -1,5 +1,5 @@
 "use server";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { requireContext } from "@/server/auth/guard";
 import { searchAccounts } from "@/server/db/repos/search.repo";
 import { searchEntriesByAmount, searchEntriesWithLines } from "@/server/db/repos/journals.repo";
@@ -41,7 +41,7 @@ export async function searchGlobalAction(term: string): Promise<GlobalSearchResu
   const pages = PAGES.filter((p) => p.label.toLowerCase().includes(q) || p.href.includes(q)).slice(0, 3);
   const amountMinor = parseNominalMinor(term.trim());
 
-  const [journalHits, accounts, assets] = await db.transaction(async (tx) => {
+  const [journalHits, accounts, assets, invoicesRaw] = await withOrg(ctx.orgId, async (tx) => {
     // Teks: nomor + keterangan + nama/kode akun; nominal: total entri.
     const byText = await searchEntriesWithLines(tx, ctx.orgId, term.trim(), 4, 0);
     const byAmount = amountMinor !== null
@@ -51,7 +51,8 @@ export async function searchGlobalAction(term: string): Promise<GlobalSearchResu
     const journals = [...byText, ...byAmount.filter((e) => !seen.has(e.id))].slice(0, 4);
     const a = await searchAccounts(tx, ctx.orgId, term, 4);
     const ast = await searchAssets(tx, ctx.orgId, term.trim(), amountMinor, 4);
-    return [journals, a, ast] as const;
+    const invoices = await listInvoicesRepo(tx, ctx.orgId);
+    return [journals, a, ast, invoices] as const;
   });
 
   const journals = journalHits.map((j) => ({
@@ -62,7 +63,7 @@ export async function searchGlobalAction(term: string): Promise<GlobalSearchResu
     totalText: Money.fromMinor(j.lines.reduce((s, l) => s + l.debitMinor, 0n)).formatIdr(),
   }));
 
-  const invoices = (await listInvoicesRepo(db, ctx.orgId))
+  const invoices = invoicesRaw
     .filter((inv) => invoiceMatchesQuery(inv, q, amountMinor))
     .slice(0, 4)
     .map((inv) => ({

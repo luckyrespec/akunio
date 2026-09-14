@@ -32,7 +32,7 @@ export interface SaveStatementLineInput {
 }
 
 export async function createReconciliationRepo(
-  db: Db,
+  q: Queryable,
   orgId: string,
   input: CreateReconciliationInput
 ) {
@@ -40,7 +40,7 @@ export async function createReconciliationRepo(
 
   if (ledgerBalanceMinor === undefined) {
     // Compute current ledger balance for this bank account up to statement date
-    const lines = await db
+    const lines = await q
       .select({
         debit: journalLines.debit,
         credit: journalLines.credit,
@@ -68,7 +68,7 @@ export async function createReconciliationRepo(
 
   const differenceMinor = input.statementBalanceMinor - ledgerBalanceMinor;
 
-  const [created] = await db
+  const [created] = await q
     .insert(bankReconciliations)
     .values({
       orgId,
@@ -87,13 +87,13 @@ export async function createReconciliationRepo(
 }
 
 export async function saveStatementLinesRepo(
-  db: Db,
+  q: Queryable,
   reconciliationId: string,
   lines: SaveStatementLineInput[]
 ) {
   if (lines.length === 0) return [];
 
-  const inserted = await db
+  const inserted = await q
     .insert(bankStatementLines)
     .values(
       lines.map((l) => ({
@@ -162,13 +162,13 @@ export async function listReconciliationsRepo(q: Queryable, orgId: string) {
 }
 
 export async function linkMatchedLineRepo(
-  db: Db,
+  q: Queryable,
   statementLineId: string,
   journalLineId: string,
   confidenceScore?: number,
   aiNotes?: string
 ) {
-  const [updated] = await db
+  const [updated] = await q
     .update(bankStatementLines)
     .set({
       matchStatus: "MATCHED",
@@ -182,8 +182,8 @@ export async function linkMatchedLineRepo(
   return updated;
 }
 
-export async function unlinkMatchedLineRepo(db: Db, statementLineId: string) {
-  const [updated] = await db
+export async function unlinkMatchedLineRepo(q: Queryable, statementLineId: string) {
+  const [updated] = await q
     .update(bankStatementLines)
     .set({
       matchStatus: "UNMATCHED",
@@ -212,12 +212,12 @@ export async function updateStatementLineStatusRepo(
 }
 
 export async function finalizeReconciliationRepo(
-  db: Db,
+  q: Queryable,
   orgId: string,
   reconciliationId: string,
   actorEmail: string
 ) {
-  const [updated] = await db
+  const [updated] = await q
     .update(bankReconciliations)
     .set({
       status: "COMPLETED",

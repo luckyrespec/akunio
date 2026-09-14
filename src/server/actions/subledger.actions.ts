@@ -1,12 +1,11 @@
 "use server";
 import { requireContext } from "@/server/auth/guard";
-import { db } from "@/server/db";
 import { withOrg } from "@/server/db/repos/with-org";
 import { reconcileSubledger, reportSubledgerMismatch } from "@/server/db/repos/subledger.repo";
 
 export async function getSubledgerReconAction() {
   const ctx = await requireContext();
-  const rows = await reconcileSubledger(db, ctx.orgId);
+  const rows = await withOrg(ctx.orgId, (tx) => reconcileSubledger(tx, ctx.orgId));
   return rows.map((r) => ({
     kind: r.kind,
     controlAccountId: r.controlAccountId,

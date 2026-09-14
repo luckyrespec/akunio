@@ -43,7 +43,7 @@ function parseMinorText(raw: string, label: string): bigint {
 export async function getPosCashAccountsAction() {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const rows = await listAccounts(db, ctx.orgId);
+    const rows = await withOrg(ctx.orgId, (tx) => listAccounts(tx, ctx.orgId));
     return {
       ok: true as const,
       data: rows
@@ -58,7 +58,7 @@ export async function getPosCashAccountsAction() {
 export async function getPosCatalogAction() {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const rows = await listInventoryItems(db, ctx.orgId);
+    const rows = await withOrg(ctx.orgId, (tx) => listInventoryItems(tx, ctx.orgId));
     return {
       ok: true as const,
       data: rows
@@ -146,7 +146,7 @@ export async function checkoutPosSaleAction(input: {
 export async function getPosSaleAction(saleId: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const detail = await db.transaction((tx) => getPosSaleDetail(tx as never, ctx.orgId, saleId));
+    const detail = await withOrg(ctx.orgId, (tx) => getPosSaleDetail(tx as never, ctx.orgId, saleId));
     if (!detail) return { ok: false as const, error: "Penjualan tidak ditemukan." };
     return {
       ok: true as const,
@@ -177,7 +177,7 @@ export async function getPosSaleAction(saleId: string) {
 export async function getOpenShiftsAction() {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const rows = await db.transaction((tx) => listOpenShifts(tx as never, ctx.orgId));
+    const rows = await withOrg(ctx.orgId, (tx) => listOpenShifts(tx as never, ctx.orgId));
     return {
       ok: true as const,
       data: rows.map((r) => ({
@@ -217,7 +217,7 @@ export async function openShiftAction(input: { cashAccountId: string; openingCas
 export async function getShiftSummaryAction(shiftId: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const s = await db.transaction((tx) => getShiftSummary(tx as never, ctx.orgId, shiftId));
+    const s = await withOrg(ctx.orgId, (tx) => getShiftSummary(tx as never, ctx.orgId, shiftId));
     return {
       ok: true as const,
       data: {
@@ -286,8 +286,8 @@ export async function postShiftVarianceAction(shiftId: string) {
 export async function getVarianceAccountOptionsAction() {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const rows = await listAccounts(db, ctx.orgId);
-    const controls = await db.transaction((tx) =>
+    const rows = await withOrg(ctx.orgId, (tx) => listAccounts(tx, ctx.orgId));
+    const controls = await withOrg(ctx.orgId, (tx) =>
       getControlKindByAccount(tx as never, ctx.orgId));
     // Flag kontrol dari registry subledger_controls; picker hanya menawarkan
     // akun non-kas non-kontrol (laci = tunai saja, selisih = beban/pendapatan).
@@ -402,13 +402,15 @@ export async function importContactsCsvAction(csvText: string): Promise<CsvImpor
           ? "BOTH"
           : "CUSTOMER";
       try {
-        await createContactRepo(db, ctx.orgId, {
-          type,
-          name,
-          email: col(r, headers, "email") || null,
-          phone: col(r, headers, "telepon", "phone", "telp") || null,
-          address: col(r, headers, "alamat", "address") || null,
-        });
+        await withOrg(ctx.orgId, (tx) =>
+          createContactRepo(tx, ctx.orgId, {
+            type,
+            name,
+            email: col(r, headers, "email") || null,
+            phone: col(r, headers, "telepon", "phone", "telp") || null,
+            address: col(r, headers, "alamat", "address") || null,
+          }),
+        );
         count++;
       } catch (e) {
         errors.push({ index: i, message: e instanceof Error ? e.message : "Gagal menyimpan baris" });

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireContext } from "@/server/auth/guard";
 import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import {
   createReconciliationRepo,
   getReconciliationByIdRepo,
@@ -56,14 +57,14 @@ export async function startReconciliationSessionAction(formData: FormData) {
       closingBalanceMinor = toMinor(manualClosingBalanceStr);
     }
 
-    const session = await createReconciliationRepo(db, ctx.orgId, {
+    const session = await withOrg(ctx.orgId, (tx) => createReconciliationRepo(tx, ctx.orgId, {
       bankAccountId,
       statementDate,
       statementBalanceMinor: closingBalanceMinor,
-    });
+    }));
 
     if (linesToInsert.length > 0) {
-      await saveStatementLinesRepo(db, session.id, linesToInsert);
+      await withOrg(ctx.orgId, (tx) => saveStatementLinesRepo(tx, session.id, linesToInsert));
     }
 
     revalidatePath("/kas-bank/rekonsiliasi");
@@ -76,7 +77,7 @@ export async function startReconciliationSessionAction(formData: FormData) {
 export async function runAutoMatchAction(reconciliationId: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const session = await getReconciliationByIdRepo(db, ctx.orgId, reconciliationId);
+    const session = await withOrg(ctx.orgId, (tx) => getReconciliationByIdRepo(tx, ctx.orgId, reconciliationId));
     if (!session) {
       return { ok: false as const, error: "Sesi rekonsiliasi tidak ditemukan." };
     }
@@ -92,17 +93,21 @@ export async function runAutoMatchAction(reconciliationId: string) {
         referenceNumber: l.referenceNumber,
       }));
 
-    const unmatchedLedgerLines = await getUnmatchedLedgerLinesRepo(
-      db,
-      ctx.orgId,
-      session.bankAccountId,
-      session.statementDate
+    const unmatchedLedgerLines = await withOrg(ctx.orgId, (tx) =>
+      getUnmatchedLedgerLinesRepo(
+        tx,
+        ctx.orgId,
+        session.bankAccountId,
+        session.statementDate
+      ),
     );
 
-    const [contacts, invoices] = await Promise.all([
-      listContactsRepo(db, ctx.orgId),
-      listInvoicesRepo(db, ctx.orgId),
-    ]);
+    const [contacts, invoices] = await withOrg(ctx.orgId, (tx) =>
+      Promise.all([
+        listContactsRepo(tx, ctx.orgId),
+        listInvoicesRepo(tx, ctx.orgId),
+      ]),
+    );
 
     const result = matchBankTransactions(
       unmatchedStatementLines,
@@ -113,17 +118,19 @@ export async function runAutoMatchAction(reconciliationId: string) {
 
     // Apply exact matches directly
     for (const match of result.exactMatches) {
-      await linkMatchedLineRepo(db, match.statementLineId, match.journalLineId, 100);
+      await withOrg(ctx.orgId, (tx) => linkMatchedLineRepo(tx, match.statementLineId, match.journalLineId, 100));
     }
 
     // Save AI suggestions (with status UNMATCHED and aiNotes)
     for (const sugg of result.aiSuggestions) {
-      await linkMatchedLineRepo(
-        db,
-        sugg.statementLineId,
-        sugg.journalLineId,
-        sugg.confidenceScore,
-        sugg.aiNotes
+      await withOrg(ctx.orgId, (tx) =>
+        linkMatchedLineRepo(
+          tx,
+          sugg.statementLineId,
+          sugg.journalLineId,
+          sugg.confidenceScore,
+          sugg.aiNotes
+        ),
       );
     }
 
@@ -137,8 +144,8 @@ export async function runAutoMatchAction(reconciliationId: string) {
 
 export async function confirmMatchAction(statementLineId: string, journalLineId: string) {
   try {
-    await requireContext(["OWNER", "ACCOUNTANT"]);
-    await linkMatchedLineRepo(db, statementLineId, journalLineId, 100);
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    await withOrg(ctx.orgId, (tx) => linkMatchedLineRepo(tx, statementLineId, journalLineId, 100));
     revalidatePath("/kas-bank/rekonsiliasi");
     return { ok: true as const };
   } catch (e) {
@@ -148,8 +155,8 @@ export async function confirmMatchAction(statementLineId: string, journalLineId:
 
 export async function unlinkMatchAction(statementLineId: string) {
   try {
-    await requireContext(["OWNER", "ACCOUNTANT"]);
-    await unlinkMatchedLineRepo(db, statementLineId);
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    await withOrg(ctx.orgId, (tx) => unlinkMatchedLineRepo(tx, statementLineId));
     revalidatePath("/kas-bank/rekonsiliasi");
     return { ok: true as const };
   } catch (e) {
@@ -182,13 +189,13 @@ export async function createQuickAdjustmentAction(
 export async function finalizeReconciliationAction(reconciliationId: string) {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const session = await getReconciliationByIdRepo(db, ctx.orgId, reconciliationId);
+    const session = await withOrg(ctx.orgId, (tx) => getReconciliationByIdRepo(tx, ctx.orgId, reconciliationId));
     if (!session) {
       return { ok: false as const, error: "Sesi rekonsiliasi tidak ditemukan." };
     }
 
     // Check if difference is 0 or all lines matched
-    const completed = await finalizeReconciliationRepo(db, ctx.orgId, reconciliationId, ctx.userEmail);
+    const completed = await withOrg(ctx.orgId, (tx) => finalizeReconciliationRepo(tx, ctx.orgId, reconciliationId, ctx.userEmail));
     revalidatePath("/kas-bank/rekonsiliasi");
     revalidatePath(`/kas-bank/rekonsiliasi/${reconciliationId}`);
     return { ok: true as const, data: completed };

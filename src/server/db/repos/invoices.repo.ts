@@ -1,5 +1,6 @@
 import { Db } from "../index";
 import type { Queryable } from "./queryable";
+import { withOrg } from "./with-org";
 import {
   invoices,
   invoiceItems,
@@ -66,7 +67,7 @@ export async function getNextInvoiceNumberRepo(
 }
 
 export async function createInvoiceRepo(
-  db: Db,
+  db: Db, // dipertahankan demi kompatibilitas pemanggil; konteks org dipasang sendiri via withOrg di bawah
   orgId: string,
   invoiceData: CreateInvoiceInput,
   itemsData: CreateInvoiceItemInput[]
@@ -80,7 +81,7 @@ export async function createInvoiceRepo(
     }))
   );
 
-  return db.transaction(async (tx) => {
+  return withOrg(orgId, async (tx) => {
     // Penomoran di DALAM transaksi agar lock+counter anti-race berlaku.
     const issueYear =
       Number(invoiceData.issueDate.slice(0, 4)) || new Date().getFullYear();
@@ -224,11 +225,11 @@ function isPaymentIdemConflict(e: unknown): boolean {
 }
 
 export async function recordInvoicePaymentRepo(
-  db: Db,
+  db: Db, // dipertahankan demi kompatibilitas; konteks org dipasang sendiri via withOrg di bawah
   orgId: string,
   input: RecordPaymentInput
 ) {
-  return db.transaction(async (tx) => {
+  return withOrg(orgId, async (tx) => {
     const [inv] = await tx
       .select()
       .from(invoices)
@@ -440,15 +441,18 @@ export interface UpdateInvoiceInput {
  * koreksi lewat pembalik/kredit).
  */
 export async function updateInvoiceRepo(
-  db: Db,
+  db: Db, // dipertahankan demi kompatibilitas; konteks org dipasang sendiri via withOrg di bawah
   orgId: string,
   invoiceId: string,
   patch: UpdateInvoiceInput,
 ) {
-  const [inv] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, orgId)));
+  const { inv } = await withOrg(orgId, async (tx) => {
+    const [inv] = await tx
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, orgId)));
+    return { inv };
+  });
   if (!inv) throw new Error("FAKTUR_TIDAK_DITEMUKAN");
   const posted = Boolean(inv.journalEntryId);
 
@@ -458,7 +462,7 @@ export async function updateInvoiceRepo(
     );
   }
 
-  return db.transaction(async (tx) => {
+  return withOrg(orgId, async (tx) => {
     const values: Partial<typeof invoices.$inferInsert> = {};
     if (patch.dueDate !== undefined) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(patch.dueDate)) throw new Error("TANGGAL_TIDAK_VALID: gunakan YYYY-MM-DD.");

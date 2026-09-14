@@ -21,8 +21,9 @@ export default async function ReviewPage({
     return { draft, accRows };
   });
   if (!data.draft) notFound();
+  const draft = data.draft;
 
-  const status = effectiveStatus(data.draft, new Date());
+  const status = effectiveStatus(draft, new Date());
   if (status !== "PENDING") {
     return (
       <section className="max-w-2xl">
@@ -41,11 +42,11 @@ export default async function ReviewPage({
   }
 
   const leaves = data.accRows.filter((a) => !data.accRows.some((c) => c.parentCode === a.code));
-  const doc = data.draft.documentId
-    ? await withOrg(ctx.orgId, (tx) => getDocumentRow(tx, ctx.orgId, data.draft.documentId!))
+  const doc = draft.documentId
+    ? await withOrg(ctx.orgId, (tx) => getDocumentRow(tx, ctx.orgId, draft.documentId!))
     : null;
   // Merge account mapping (stored separately) into each line for the review UI.
-  const raw = data.draft.draft as {
+  const raw = draft.draft as {
     dateISO: string;
     memo: string;
     lines: Array<Record<string, unknown> & {
@@ -107,7 +108,7 @@ export default async function ReviewPage({
       </Link>
       <div className="mt-2">
         <ReviewClient
-          draftId={data.draft.id}
+          draftId={draft.id}
           draft={reviewDraft}
           accounts={leaves.map((a) => ({
             id: a.id,

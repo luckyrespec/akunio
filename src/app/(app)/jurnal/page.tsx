@@ -83,13 +83,13 @@ export default async function JurnalPage({
   // Semua baca dalam satu konteks org (RLS) — tanpa ubah logika agregasi.
   const {
     draftCounts,
-    totalEntriesCount: totalCount,
-    entries: fetchedEntries,
-    rawDrafts: fetchedDrafts,
-    filteredDraftCount: fetchedDraftCount,
+    totalEntriesCount,
+    entries,
+    rawDrafts,
+    filteredDraftCount,
   } = await withOrg(ctx.orgId, async (tx) => {
     // Lightweight status counts & total posted count
-    const [draftCounts, totalEntriesCount] = await Promise.all([
+    const [counts, total] = await Promise.all([
       countDraftsByStatus(tx, ctx.orgId),
       tab === "posted" && q ? countSearchEntries(tx, ctx.orgId, q) : countEntries(tx, ctx.orgId),
     ]);
@@ -119,15 +119,12 @@ export default async function JurnalPage({
           ? await searchEntriesWithLines(tx, ctx.orgId, q, limit, offset)
           : await listEntriesWithLines(tx, ctx.orgId, limit, offset);
     }
-    return { draftCounts, totalEntriesCount, entries, rawDrafts, filteredDraftCount };
+    return { draftCounts: counts, totalEntriesCount: total, entries, rawDrafts, filteredDraftCount };
   });
 
   const pendingDraftsCount = draftCounts.pending;
 
-  let entries: EntryView[] = fetchedEntries;
-  let total = totalCount;
-  let rawDrafts = fetchedDrafts;
-  let filteredDraftCount = fetchedDraftCount;
+  let total = totalEntriesCount;
 
   const serializedDrafts: SerializedDraft[] = rawDrafts.map((d) => ({
     id: d.id,

@@ -35,7 +35,8 @@ export async function POST(req: NextRequest) {
       const t = await withOrg(ctx.orgId, (tx) => createThread(tx, ctx.orgId, title));
       threadId = t.id;
     } else {
-      const t = await withOrg(ctx.orgId, (tx) => getThread(tx, ctx.orgId, threadId));
+      const tid: string = threadId;
+      const t = await withOrg(ctx.orgId, (tx) => getThread(tx, ctx.orgId, tid));
       if (!t) return NextResponse.json({ error: "Thread tidak ditemukan." }, { status: 404 });
     }
 

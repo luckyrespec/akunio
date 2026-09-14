@@ -1,5 +1,5 @@
 "use server";
-import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { requireContext } from "@/server/auth/guard";
 import { createDraft } from "@/server/db/repos/drafts.repo";
 import { appendAudit } from "@/server/db/repos/audit.repo";
@@ -11,7 +11,7 @@ export async function createCorrectionDraftAction(input: {
 }): Promise<{ ok: boolean; draftId?: string; error?: string }> {
   try {
     const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
-    const row = await db.transaction(async (tx) => {
+    const row = await withOrg(ctx.orgId, async (tx) => {
       const d = await createDraft(tx, {
         orgId: ctx.orgId,
         kind: "TEXT",

@@ -114,7 +114,7 @@ export async function listInvoicesAction(filter?: {
 }) {
   try {
     const ctx = await requireContext();
-    const data = await listInvoicesRepo(db, ctx.orgId, filter);
+    const data = await withOrg(ctx.orgId, (tx) => listInvoicesRepo(tx, ctx.orgId, filter));
     return { ok: true as const, data };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal memuat daftar faktur." };
@@ -124,7 +124,7 @@ export async function listInvoicesAction(filter?: {
 export async function getInvoiceAction(id: string) {
   try {
     const ctx = await requireContext();
-    const data = await getInvoiceByIdRepo(db, ctx.orgId, id);
+    const data = await withOrg(ctx.orgId, (tx) => getInvoiceByIdRepo(tx, ctx.orgId, id));
     return { ok: true as const, data };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal memuat faktur." };
@@ -134,7 +134,7 @@ export async function getInvoiceAction(id: string) {
 export async function getAgingReportAction(type: InvoiceType = "INVOICE") {
   try {
     const ctx = await requireContext();
-    const data = await getAgingReportRepo(db, ctx.orgId, type);
+    const data = await withOrg(ctx.orgId, (tx) => getAgingReportRepo(tx, ctx.orgId, type));
     return { ok: true as const, data };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Gagal memuat laporan umur piutang/utang." };
@@ -150,15 +150,19 @@ export async function getInvoiceDetailAction(number: string) {
     const ctx = await requireContext();
     const clean = number.trim().toUpperCase();
     if (!clean) return { ok: false as const, error: "Nomor faktur kosong." };
-    const { invoices } = await import("@/server/db/schema/invoicing");
-    const { eq, and } = await import("drizzle-orm");
-    const [head] = await db
-      .select()
-      .from(invoices)
-      .where(and(eq(invoices.orgId, ctx.orgId), eq(invoices.invoiceNumber, clean)))
-      .limit(1);
+    const { head, full } = await withOrg(ctx.orgId, async (tx) => {
+      const { invoices } = await import("@/server/db/schema/invoicing");
+      const { eq, and } = await import("drizzle-orm");
+      const [head] = await tx
+        .select()
+        .from(invoices)
+        .where(and(eq(invoices.orgId, ctx.orgId), eq(invoices.invoiceNumber, clean)))
+        .limit(1);
+      if (!head) return { head: null, full: null };
+      const full = await getInvoiceByIdRepo(tx, ctx.orgId, head.id);
+      return { head, full };
+    });
     if (!head) return { ok: false as const, error: `Faktur ${clean} tidak ditemukan.` };
-    const full = await getInvoiceByIdRepo(db, ctx.orgId, head.id);
     if (!full) return { ok: false as const, error: `Faktur ${clean} tidak ditemukan.` };
     return {
       ok: true as const,
