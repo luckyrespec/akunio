@@ -136,7 +136,14 @@ Console, karena:
   `RlsT3st!Local-Only-2026-vitEST` — kredensial test-branch, BUKAN rahasia
   prod. Jangan commit password asli ke repo.
 
-Menjalankan suite (DATABASE tetap `ledger_test`; hanya user yang diganti):
+Menjalankan suite (DATABASE tetap `ledger_test`): `bun run test:rls`.
+Suite mandiri sejak Plan E fix round 1 (R14): `beforeAll` memastikan peran
+`rls_test_user` ada (idempoten, logika sama dengan bagian 4 skrip setup) via
+Pool owner, lalu memakai Pool sendiri sebagai peran itu — sehingga hijau di
+bawah `bun run test` biasa maupun `bun run test:rls` tanpa env tambahan.
+
+Override manual lama tetap didukung (dipakai bila di-set — mis. untuk
+menjalankan sebagai peran lain):
 
 ```powershell
 $m = Select-String -Path .env -Pattern '^TEST_DATABASE_URL=(.*)$'

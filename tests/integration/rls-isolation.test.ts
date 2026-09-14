@@ -1,18 +1,112 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { Pool, type PoolClient } from "pg";
 import { db } from "@/server/db";
-import { getPool, makeOrg, truncateAll } from "./helpers";
+import { makeOrg, truncateAll } from "./helpers";
 import { accounts } from "@/server/db/schema/org";
 import { subledgerControls } from "@/server/db/schema/subledger";
 import { prepaidContracts } from "@/server/db/schema/prepaid";
 
 // Suite isolasi RLS peran NOBYPASSRLS (Plan E task E1b, cabang vitest).
-// Dijalankan via `bun run test:rls` dengan TEST_APP_DATABASE_URL peran
-// rls_test_user. helpers.ts TIDAK diubah: getPool() memakai APP_DATABASE_URL,
-// makeOrg/truncateAll memakai DATABASE_URL (owner).
-// 6 kasus dipindah dari laporan E1-round-1 (daftar asli dipertahankan).
+// Mandiri (R14): beforeAll memastikan peran rls_test_user ada (idempoten,
+// logika sama dengan scripts/test-db-setup.mjs bagian 4) via admin Pool
+// (DATABASE_URL owner), lalu memakai Pool sendiri sebagai peran itu —
+// sehingga hijau di BAWAH `bun run test` biasa MAUPUN `bun run test:rls`.
+// Override lama TEST_APP_DATABASE_URL tetap didukung (dipakai bila di-set).
+// helpers.ts TIDAK diubah: makeOrg/truncateAll memakai DATABASE_URL (owner).
+const RLS_TEST_ROLE = "rls_test_user";
+// Cerminkan scripts/test-db-setup.mjs: RLS_TEST_PASSWORD env, fallback
+// literal test-only cabang vitest (BUKAN rahasia prod).
+const RLS_TEST_PASSWORD =
+  process.env.RLS_TEST_PASSWORD ?? "RlsT3st!Local-Only-2026-vitEST";
+
+function rlsTestUrl(ownerUrl: string): string {
+  const u = new URL(ownerUrl);
+  u.username = RLS_TEST_ROLE;
+  u.password = RLS_TEST_PASSWORD;
+  return u.toString();
+}
+
+// Override lama hanya dihormati bila menunjuk ke peran test NOBYPASSRLS
+// itu sendiri (aliran manual runbook: swap userinfo ke rls_test_user).
+// `.env` me-set TEST_APP_DATABASE_URL = app_user (BYPASSRLS di Neon) —
+// bila dihormati buta-buta, RLS tak berlaku dan suite merah. Bila override
+// menunjuk peran lain, abaikan dan bangun Pool test sendiri.
+function overrideTestUrl(): string | null {
+  const v = process.env.TEST_APP_DATABASE_URL;
+  if (!v) return null;
+  try {
+    if (new URL(v).username === RLS_TEST_ROLE) return v;
+  } catch {
+    // URL malformed — abaikan, pakai URL bangun-sendiri di bawah.
+  }
+  return null;
+}
+
+async function ensureRlsTestRole(admin: Pool, ownerUrl: string): Promise<void> {
+  const escPwd = RLS_TEST_PASSWORD.replaceAll("'", "''");
+  await admin.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${RLS_TEST_ROLE}') THEN
+        CREATE ROLE ${RLS_TEST_ROLE} NOBYPASSRLS LOGIN PASSWORD '${escPwd}';
+      END IF;
+    END $$;
+  `);
+  // Sinkronkan peran pra-ada (password + no-bypass) — rerun tetap hijau.
+  await admin.query(
+    `ALTER ROLE ${RLS_TEST_ROLE} WITH NOBYPASSRLS LOGIN PASSWORD '${escPwd}'`,
+  );
+  const dbName = new URL(ownerUrl).pathname.replace(/^\//, "").split("?")[0];
+  await admin.query(`GRANT CONNECT ON DATABASE "${dbName}" TO ${RLS_TEST_ROLE}`);
+  await admin.query(`GRANT USAGE ON SCHEMA public TO ${RLS_TEST_ROLE}`);
+  // Daftar tabel tenant — verbatim dari scripts/test-db-setup.mjs.
+  await admin.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON
+    memberships, accounts, fiscal_periods,
+    journal_entries, journal_lines, journal_seq_counters, audit_log,
+    documents, ai_drafts, journal_documents,
+    tenant_chunks, chat_threads, onboarding_messages, org_profiles,
+    ai_findings, ai_proposals,
+    contacts, invoices, bank_reconciliations, kas_bank_entries,
+    kas_bank_seq_counters,
+    fixed_assets, asset_depreciation_lines, asset_disposals,
+    prepaid_contracts, prepaid_schedule_lines,
+    inventory_settings, inventory_items, inventory_layers,
+    inventory_transactions, stock_opnames, inventory_sku_counters,
+    pos_shifts, pos_sales, pos_sale_items, pos_sale_seq_counters,
+    invoice_seq_counters, ast_seq_counters,
+    subledger_controls, subledger_journal_links,
+    tax_summaries, assistant_memories
+  TO ${RLS_TEST_ROLE}`);
+  await admin.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON
+    invoice_items, invoice_payments,
+    bank_statement_lines,
+    chat_messages,
+    stock_opname_items,
+    organizations
+  TO ${RLS_TEST_ROLE}`);
+  await admin.query(
+    `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${RLS_TEST_ROLE}`,
+  );
+  await admin.query(
+    `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${RLS_TEST_ROLE}`,
+  );
+  await admin.query(
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${RLS_TEST_ROLE}`,
+  );
+  await admin.query(
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ${RLS_TEST_ROLE}`,
+  );
+  const chk = await admin.query<{ rolbypassrls: boolean }>(
+    `SELECT rolbypassrls FROM pg_roles WHERE rolname = '${RLS_TEST_ROLE}'`,
+  );
+  if (chk.rows[0]?.rolbypassrls !== false) {
+    throw new Error(
+      `SAFETY: role ${RLS_TEST_ROLE} has BYPASSRLS — refusing RLS suite`,
+    );
+  }
+}
 describe.skipIf(process.env.SKIP_DB_TESTS === "1")("rls isolation (NOBYPASSRLS)", () => {
-  let pool: ReturnType<typeof getPool>;
+  let pool: Pool;
   let admin: Pool;
   let orgA: string;
   let orgB: string;
@@ -53,8 +147,16 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("rls isolation (NOBYPASSRLS)"
   }
 
   beforeAll(async () => {
-    pool = getPool();
-    admin = new Pool({ connectionString: process.env.DATABASE_URL! });
+    const ownerUrl = process.env.DATABASE_URL!;
+    admin = new Pool({ connectionString: ownerUrl });
+    await ensureRlsTestRole(admin, ownerUrl);
+    // Env override lama (bun run test:rls manual) tetap didukung bila
+    // menunjuk peran test; bila tak di-set (atau menunjuk peran BYPASS
+    // seperti app_user dari .env), bangun URL peran test sendiri dari
+    // DATABASE_URL — JANGAN bergantung pada TEST_APP_DATABASE_URL.
+    pool = new Pool({
+      connectionString: overrideTestUrl() ?? rlsTestUrl(ownerUrl),
+    });
   });
   afterAll(async () => {
     await pool.end();
