@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/server/db";
+import { withOrg } from "@/server/db/repos/with-org";
 import { ragQueue, tenantChunks } from "@/server/db/schema/rag";
 import { journalEntries, journalLines } from "@/server/db/schema/journal";
 import { accounts } from "@/server/db/schema/org";
@@ -23,6 +24,7 @@ export async function enqueueRagJob(
   kind: "JOURNAL" | "ACCOUNT" | "PERIOD_SUMMARY" | "DOCUMENT",
   refId: string,
 ): Promise<void> {
+  if (!orgId) throw new Error("ORG_WAJIB: enqueue RAG wajib sertakan orgId.");
   // Use raw SQL to avoid needing Queryable typing complexity in call sites
   await (q as unknown as { execute: (s: unknown) => Promise<unknown> }).execute(
     sql`INSERT INTO rag_queue (org_id, kind, ref_id) VALUES (${orgId}, ${kind}, ${refId})`,
@@ -35,6 +37,7 @@ export async function enqueueRagJobDirect(
   kind: "JOURNAL" | "ACCOUNT" | "PERIOD_SUMMARY" | "DOCUMENT",
   refId: string,
 ): Promise<void> {
+  if (!orgId) throw new Error("ORG_WAJIB: enqueue RAG wajib sertakan orgId.");
   await db.execute(sql`INSERT INTO rag_queue (org_id, kind, ref_id) VALUES (${orgId}, ${kind}, ${refId})`);
 }
 
@@ -51,8 +54,14 @@ export async function processQueueBatch(limit = 20): Promise<number> {
   const rows = (jobs as unknown as { rows: Array<{ id: string; org_id: string; kind: string; ref_id: string; attempts: number }> }).rows ?? [];
   let processed = 0;
   for (const job of rows) {
+    // Job tanpa org tak bisa di-scope aman: lewati + hapus agar antrean tak macet.
+    if (!job.org_id) {
+      console.warn("rag worker melewati job tanpa org", job.id);
+      await db.execute(sql`DELETE FROM rag_queue WHERE id = ${job.id}`);
+      continue;
+    }
     try {
-      await db.transaction(async (tx) => {
+      await withOrg(job.org_id, async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${job.org_id}))`);
         // Re-check job still exists (another worker may have taken it)
         const still = await tx.execute(sql`SELECT id FROM rag_queue WHERE id = ${job.id} FOR UPDATE`);
