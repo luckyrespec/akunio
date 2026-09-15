@@ -13,8 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/motion";
 import {
   ArrowLeft,
+  CalendarRange,
   Coins,
   CreditCard,
+  MoveRight,
   Scale,
   TrendingUp,
   TrendingDown,
@@ -33,6 +35,16 @@ const PRESETS = [
   { value: "tahun-berjalan", label: "Tahun ini" },
   { value: "semua", label: "Semua" },
 ] as const;
+
+function formatIdDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(y, m - 1, d));
+}
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
   ASET: Coins,
@@ -122,9 +134,22 @@ export default async function AccountLedgerDetailPage({
       {/* Filter Periode */}
       <form
         method="get"
-        className="flex flex-wrap items-end gap-x-3 gap-y-3 rounded-2xl border border-rule bg-paper p-4 shadow-2xs"
+        className="rounded-2xl border border-rule bg-paper p-4 shadow-2xs space-y-3.5"
       >
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+            <CalendarRange className="size-3.5" aria-hidden />
+            Rentang Periode
+          </span>
+          <span className="tnum font-mono text-xs text-ink">
+            {isFiltered && range?.from
+              ? `${formatIdDate(range.from)} – ${range.to ? formatIdDate(range.to) : "…"}`
+              : "Seluruh riwayat"}
+            <span className="text-ink-soft"> · {rows.length} mutasi</span>
+          </span>
+        </div>
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
+        <div className="inline-flex items-center rounded-xl border border-rule bg-canvas p-1 gap-1">
           {PRESETS.map((p) => {
             const active =
               (sp.preset ?? "") === p.value || (p.value === "semua" && !sp.preset && !sp.dari && !sp.sampai);
@@ -132,10 +157,11 @@ export default async function AccountLedgerDetailPage({
               <Link
                 key={p.value}
                 href={filterHref(p.value === "semua" ? undefined : p.value)}
-                className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
+                aria-current={active ? "true" : undefined}
+                className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${
                   active
-                    ? "border-terra bg-terra font-semibold text-white"
-                    : "border-rule bg-paper text-ink hover:bg-canvas"
+                    ? "bg-terra font-semibold text-white shadow-2xs"
+                    : "text-ink-soft hover:bg-paper hover:text-ink"
                 }`}
               >
                 {p.label}
@@ -152,9 +178,10 @@ export default async function AccountLedgerDetailPage({
             name="dari"
             type="date"
             defaultValue={sp.dari ?? ""}
-            className="h-9 rounded-xl border border-rule bg-canvas px-2.5 text-sm text-ink"
+            className="h-9 rounded-xl border border-rule bg-canvas px-2.5 text-sm tnum text-ink"
           />
         </div>
+        <MoveRight className="size-4 shrink-0 text-ink-soft/60 mb-0.5 max-sm:hidden" aria-hidden />
         <div className="space-y-1.5">
           <label htmlFor="ledger-sampai" className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
             Sampai tanggal
@@ -164,15 +191,16 @@ export default async function AccountLedgerDetailPage({
             name="sampai"
             type="date"
             defaultValue={sp.sampai ?? ""}
-            className="h-9 rounded-xl border border-rule bg-canvas px-2.5 text-sm text-ink"
+            className="h-9 rounded-xl border border-rule bg-canvas px-2.5 text-sm tnum text-ink"
           />
         </div>
         <button
           type="submit"
-          className="h-9 rounded-xl bg-terra px-3.5 text-xs font-medium text-white shadow-none transition-all hover:bg-terra/90"
+          className="h-9 rounded-xl bg-terra px-4 text-xs font-semibold text-white shadow-none transition-all hover:bg-terra/90 active:translate-y-px"
         >
           Tampilkan
         </button>
+        </div>
       </form>
 
       {/* Overview Stat Cards */}
