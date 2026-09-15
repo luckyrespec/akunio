@@ -196,12 +196,6 @@ export function LedgerTableClient({
       </div>
 
       {/* Ringkasan kecil scope aktif */}
-      <p className="tnum font-mono text-xs text-ink">
-        {rangeFrom ? `Periode dari ${rangeFrom}` : "Seluruh riwayat"}
-        <span className="text-ink-soft">
-          {" "}· {filtered.length} dari {rows.length} mutasi · Saldo akhir {fmtMinor(closing)}
-        </span>
-      </p>
 
       {/* Mobile Card List (< sm) */}
       <div className="space-y-3 sm:hidden">
@@ -239,13 +233,13 @@ export function LedgerTableClient({
               <div className="flex items-center justify-between text-xs pt-1 font-mono">
                 <div className="flex items-center gap-2">
                   {BigInt(r.debitMinor) > 0n && (
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <span className="text-debit font-semibold">
                       D: {fmtMinor(r.debitMinor)}
                     </span>
                   )}
                   {BigInt(r.creditMinor) > 0n && (
-                    <span className="text-terra font-semibold">
-                      K: {fmtMinor(r.creditMinor)}
+                      <span className="text-credit font-semibold">
+                        K: {fmtMinor(r.creditMinor)}
                     </span>
                   )}
                 </div>
@@ -295,7 +289,10 @@ export function LedgerTableClient({
                   <td colSpan={6} className="px-4 py-16 text-center text-ink-soft">
                     <FileText className="size-8 mx-auto mb-2 text-ink-soft/40" />
                     <p className="font-display text-base font-medium text-ink">
-                      {filteredEmpty ? "Tidak ada mutasi cocok filter" : rows.length === 0 && rangeFrom ? "Tidak ada mutasi pada periode ini" : "Belum ada transaksi"}
+                      {filteredEmpty                           ? "Tidak ada mutasi cocok filter"
+                          : rows.length === 0 && rangeFrom
+                            ? "Tidak ada mutasi pada periode ini"
+                            : "Belum ada mutasi"}
                     </p>
                     <p className="mt-1 text-xs text-ink-soft">
                       {filteredEmpty || (rows.length === 0 && rangeFrom)
@@ -324,14 +321,14 @@ export function LedgerTableClient({
               )}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-rule bg-canvas/70 font-semibold">
+                  <tr className="rule-double bg-canvas/70 font-semibold">
                     <td colSpan={3} className="px-4 py-3.5 text-right uppercase text-[11px] tracking-wider text-ink-soft">
                       Total & Saldo Akhir
                     </td>
-                    <td className="px-4 py-3.5 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                    <td className="px-4 py-3.5 text-right font-mono text-debit">
                       {fmtMinor(totalDebit.toString())}
                     </td>
-                    <td className="px-4 py-3.5 text-right font-mono text-terra">
+                    <td className="px-4 py-3.5 text-right font-mono text-credit">
                       {fmtMinor(totalCredit.toString())}
                     </td>
                     <td className="px-4 py-3.5 text-right font-mono text-base font-bold text-ink">

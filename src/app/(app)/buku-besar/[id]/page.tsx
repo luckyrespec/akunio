@@ -10,7 +10,6 @@ import { Money } from "@/core/money/money";
 import { PageHeader } from "@/components/page-header";
 import { LedgerTableClient } from "./ledger-table-client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/motion";
 import {
   ArrowLeft,
@@ -63,22 +62,22 @@ export default async function AccountLedgerDetailPage({
 
   return (
     <section className="space-y-6">
+      <div className="mb-2">
+        <Link
+          href="/buku-besar"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft hover:text-terra transition-colors"
+        >
+          <ArrowLeft className="size-3.5" />
+          Kembali ke Daftar Akun
+        </Link>
+      </div>
+
       {/* Page Header with Back Action */}
       <PageHeader
         title={`${account.code} · ${account.name}`}
         eyebrow={`Buku besar mutasi akun kategori ${account.type} (${isDebitNormal ? "Normal Debit" : "Normal Kredit"})`}
         actions={
           <div className="flex items-center gap-2.5">
-            <Link href="/buku-besar">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-rule bg-paper hover:bg-canvas text-xs gap-1.5 shadow-2xs"
-              >
-                <ArrowLeft className="size-3.5" />
-                <span>Kembali ke Daftar Akun</span>
-              </Button>
-            </Link>
             <Link href="/jurnal">
               <Button
                 variant="outline"
@@ -128,7 +127,7 @@ export default async function AccountLedgerDetailPage({
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
               Total Mutasi Debit
             </span>
-            <p className="mt-1 font-mono text-base font-bold text-emerald-600 dark:text-emerald-400">
+            <p className="mt-1 font-mono text-base font-bold text-debit">
               {Money.fromMinor(totalDebit).formatIdr()}
             </p>
           </div>
@@ -137,7 +136,7 @@ export default async function AccountLedgerDetailPage({
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
               Total Mutasi Kredit
             </span>
-            <p className="mt-1 font-mono text-base font-bold text-terra">
+            <p className="mt-1 font-mono text-base font-bold text-credit">
               {Money.fromMinor(totalCredit).formatIdr()}
             </p>
           </div>
