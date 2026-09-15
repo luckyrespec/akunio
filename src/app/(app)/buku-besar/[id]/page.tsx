@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireContext } from "@/server/auth/guard";
 import { withOrg } from "@/server/db/repos/with-org";
+import { resolveLedgerRange } from "@/lib/ledger-range";
 import { getLedger } from "@/server/db/repos/ledger.repo";
 import { getControlForAccount } from "@/server/db/repos/subsidiary.repo";
 import { SUBLEDGER_LIST_ROUTE } from "@/core/subledger/cards";
@@ -23,7 +24,15 @@ import {
 
 interface AccountLedgerDetailPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ dari?: string; sampai?: string; preset?: string }>;
 }
+
+const PRESETS = [
+  { value: "bulan-ini", label: "Bulan ini" },
+  { value: "bulan-lalu", label: "Bulan lalu" },
+  { value: "tahun-berjalan", label: "Tahun ini" },
+  { value: "semua", label: "Semua" },
+] as const;
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
   ASET: Coins,
@@ -35,25 +44,37 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 
 export default async function AccountLedgerDetailPage({
   params,
+  searchParams,
 }: AccountLedgerDetailPageProps) {
   const { id } = await params;
   const ctx = await requireContext();
+  const sp = await searchParams;
+  const range = resolveLedgerRange({ dari: sp.dari, sampai: sp.sampai, preset: sp.preset });
+  const isFiltered = range !== undefined;
 
   let ledgerData;
   try {
-    ledgerData = await withOrg(ctx.orgId, (tx) => getLedger(tx, ctx.orgId, id));
+    ledgerData = await withOrg(ctx.orgId, (tx) => getLedger(tx, ctx.orgId, id, range));
   } catch {
     notFound();
   }
 
-  const { account, rows } = ledgerData;
+  const { account, rows, openingMinor } = ledgerData;
   const controlKind = await withOrg(ctx.orgId, (tx) => getControlForAccount(tx, ctx.orgId, id));
   const isDebitNormal = account.normal === "D";
   const Icon = TYPE_ICONS[account.type] || FileText;
 
   const totalDebit = rows.reduce((acc, r) => acc + r.debitMinor, 0n);
   const totalCredit = rows.reduce((acc, r) => acc + r.creditMinor, 0n);
-  const closingBalance = rows.at(-1)?.balanceMinor ?? 0n;
+  const closingBalance = rows.at(-1)?.balanceMinor ?? openingMinor;
+  const filterHref = (preset?: string, dari?: string, sampai?: string) => {
+    const p = new URLSearchParams();
+    if (preset) p.set("preset", preset);
+    if (dari) p.set("dari", dari);
+    if (sampai) p.set("sampai", sampai);
+    const s = p.toString();
+    return `/buku-besar/${id}${s ? `?${s}` : ""}`;
+  };
 
   return (
     <section className="space-y-6">
@@ -97,6 +118,62 @@ export default async function AccountLedgerDetailPage({
           </div>
         }
       />
+
+      {/* Filter Periode */}
+      <form
+        method="get"
+        className="flex flex-wrap items-end gap-x-3 gap-y-3 rounded-2xl border border-rule bg-paper p-4 shadow-2xs"
+      >
+        <div className="flex flex-wrap items-center gap-1.5">
+          {PRESETS.map((p) => {
+            const active =
+              (sp.preset ?? "") === p.value || (p.value === "semua" && !sp.preset && !sp.dari && !sp.sampai);
+            return (
+              <Link
+                key={p.value}
+                href={filterHref(p.value === "semua" ? undefined : p.value)}
+                className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
+                  active
+                    ? "border-terra bg-terra font-semibold text-white"
+                    : "border-rule bg-paper text-ink hover:bg-canvas"
+                }`}
+              >
+                {p.label}
+              </Link>
+            );
+          })}
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="ledger-dari" className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+            Dari tanggal
+          </label>
+          <input
+            id="ledger-dari"
+            name="dari"
+            type="date"
+            defaultValue={sp.dari ?? ""}
+            className="h-9 rounded-xl border border-rule bg-canvas px-2.5 text-sm text-ink"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="ledger-sampai" className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+            Sampai tanggal
+          </label>
+          <input
+            id="ledger-sampai"
+            name="sampai"
+            type="date"
+            defaultValue={sp.sampai ?? ""}
+            className="h-9 rounded-xl border border-rule bg-canvas px-2.5 text-sm text-ink"
+          />
+        </div>
+        <button
+          type="submit"
+          className="h-9 rounded-xl bg-terra px-3.5 text-xs font-medium text-white shadow-none transition-all hover:bg-terra/90"
+        >
+          Tampilkan
+        </button>
+      </form>
 
       {/* Overview Stat Cards */}
       <Reveal delay={0.05}>
@@ -152,12 +229,26 @@ export default async function AccountLedgerDetailPage({
         <div className="space-y-4">
           {/* Mobile Card List (< sm) */}
           <div className="space-y-3 sm:hidden">
+            {isFiltered && range?.from && (
+              <div className="rounded-2xl border border-rule bg-canvas/60 p-4 shadow-2xs flex items-center justify-between text-xs">
+                <span className="font-semibold text-ink">
+                  Saldo awal <span className="font-mono text-ink-soft">{range.from}</span>
+                </span>
+                <span className="font-mono font-bold text-ink">
+                  {Money.fromMinor(openingMinor).formatIdr()}
+                </span>
+              </div>
+            )}
             {rows.length === 0 ? (
               <div className="rounded-2xl border border-rule bg-paper p-8 text-center shadow-xs">
                 <FileText className="size-8 mx-auto mb-2 text-ink-soft/40" />
-                <p className="font-display text-base font-medium text-ink">Belum ada mutasi</p>
+                <p className="font-display text-base font-medium text-ink">
+                  {isFiltered ? "Tidak ada mutasi pada periode ini" : "Belum ada mutasi"}
+                </p>
                 <p className="mt-1 text-xs text-ink-soft">
-                  Belum ada jurnal berstatus POSTED yang menggunakan akun ini.
+                  {isFiltered
+                    ? "Coba rentang lain, atau lihat semua."
+                    : "Belum ada jurnal berstatus POSTED yang menggunakan akun ini."}
                 </p>
               </div>
             ) : (
@@ -211,15 +302,31 @@ export default async function AccountLedgerDetailPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-rule/60">
+                  {isFiltered && range?.from && (
+                    <tr className="bg-canvas/50">
+                      <td className="px-4 py-3 font-mono text-xs text-ink-soft">—</td>
+                      <td className="px-3.5 py-3 text-xs text-ink-soft">{range.from}</td>
+                      <td className="px-4 py-3 text-xs font-semibold text-ink">
+                        Saldo awal periode
+                      </td>
+                      <td className="px-4 py-3 text-right" />
+                      <td className="px-4 py-3 text-right" />
+                      <td className="px-4 py-3 text-right font-mono font-bold text-ink">
+                        {Money.fromMinor(openingMinor).formatIdr()}
+                      </td>
+                    </tr>
+                  )}
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-4 py-16 text-center text-ink-soft">
                         <FileText className="size-8 mx-auto mb-2 text-ink-soft/40" />
                         <p className="font-display text-base font-medium text-ink">
-                          Belum ada transaksi
+                          {isFiltered ? "Tidak ada mutasi pada periode ini" : "Belum ada transaksi"}
                         </p>
                         <p className="mt-1 text-xs text-ink-soft">
-                          Belum ada jurnal berstatus POSTED yang tercatat pada akun ini.
+                          {isFiltered
+                            ? "Coba rentang lain, atau lihat semua."
+                            : "Belum ada jurnal berstatus POSTED yang tercatat pada akun ini."}
                         </p>
                       </td>
                     </tr>
