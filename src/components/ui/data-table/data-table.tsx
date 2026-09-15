@@ -53,6 +53,15 @@ interface DataTableProps<TData extends RowData> {
   /** Caption aksesibilitas (sr-only bila perlu). */
   caption?: string;
   getRowId?: (row: TData, index: number) => string;
+  /** Baris <tr> ekstra yang disematkan di awal <tbody> (mis. saldo awal).
+   *  Opsional; pemanggil yang menyusun markup-nya. */
+  topRows?: React.ReactNode;
+  /** Isi <tfoot> (mis. total + rule-double). Opsional. */
+  footer?: React.ReactNode;
+  /** Render kartu mobile per baris. Bila diisi, kartu tampil di bawah `sm`
+   *  dan tabel sembunyi di bawah `sm`; keduanya membaca model baris yang
+   *  sama sehingga sort/filter/paginasi selalu konsisten. Opsional. */
+  renderMobileCard?: (row: TData, index: number) => React.ReactNode;
 }
 
 /**
@@ -73,6 +82,9 @@ interface DataTableProps<TData extends RowData> {
  *   search={{ key: "memo", placeholder: "Cari keterangan..." }}
  *   pagination={{ defaultPageSize: 20 }} />
  * ```
+ *
+ * Slot opsional (semua boleh absen): `topRows` (baris semat awal tbody),
+ * `footer` (isi tfoot), `renderMobileCard` (kartu di bawah sm).
  */
 export function DataTable<TData extends RowData>({
   columns,
@@ -85,6 +97,9 @@ export function DataTable<TData extends RowData>({
   emptyText = "Belum ada data.",
   caption,
   getRowId,
+  topRows,
+  footer,
+  renderMobileCard,
 }: DataTableProps<TData>) {
   const pageSize =
     typeof pagination === "object" ? (pagination.defaultPageSize ?? 10) : 10;
@@ -107,6 +122,8 @@ export function DataTable<TData extends RowData>({
   const isFiltered = table.state.columnFilters.length > 0;
   const pageSizeOptions =
     typeof pagination === "object" ? (pagination.pageSizeOptions ?? [10, 20, 50]) : [10, 20, 50];
+  const pageRows = table.getRowModel().rows;
+  const hasMobileCards = renderMobileCard !== undefined;
 
   return (
     <div className="space-y-3">
@@ -131,7 +148,39 @@ export function DataTable<TData extends RowData>({
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-xl border border-rule bg-paper shadow-2xs">
+      {hasMobileCards ? (
+        <div className="space-y-3 sm:hidden">
+          {pageRows.length ? (
+            pageRows.map((row, i) => (
+              <React.Fragment key={row.id}>{renderMobileCard?.(row.original, i)}</React.Fragment>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-rule bg-paper p-8 text-center shadow-xs">
+              <SearchX aria-hidden className="mx-auto mb-3 size-8 text-ink-soft/40" />
+              <p className="text-sm font-medium text-ink">{emptyText}</p>
+              {isFiltered ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => table.resetColumnFilters()}
+                >
+                  Atur ulang pencarian
+                </Button>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <div
+        className={
+          hasMobileCards
+            ? "hidden overflow-hidden rounded-2xl border border-rule bg-paper shadow-2xs sm:block"
+            : "overflow-hidden rounded-xl border border-rule bg-paper shadow-2xs"
+        }
+      >
         <Table>
           {caption ? <caption className="sr-only">{caption}</caption> : null}
           <TableHeader className="bg-canvas/50">
@@ -161,9 +210,10 @@ export function DataTable<TData extends RowData>({
             ))}
           </TableHeader>
           <TableBody>
+            {topRows}
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="hover:bg-canvas/30">
+                <TableRow key={row.id} className="hover:bg-canvas/40 transition-colors">
                   {row.getAllCells().map((cell) => (
                     <TableCell
                       key={cell.id}
@@ -197,6 +247,7 @@ export function DataTable<TData extends RowData>({
               </TableRow>
             )}
           </TableBody>
+          {footer ? <tfoot>{footer}</tfoot> : null}
         </Table>
       </div>
 
