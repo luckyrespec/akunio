@@ -11,6 +11,7 @@ import {
   IconReconciliation,
   IconContacts,
   IconJournal,
+  IconIntangible,
   IconLedger,
   IconAssets,
   IconReports,
@@ -98,6 +99,7 @@ const NAVIGATION_GROUPS: NavGroup[] = [
       { href: "/buku-besar", label: "Buku Besar", desc: "Mutasi dan saldo tiap akun", icon: IconLedger },
       { href: "/buku-pembantu", label: "Buku Pembantu", desc: "Rincian piutang, utang, dan persediaan vs kontrol", icon: IconLedger },
       { href: "/aset", label: "Aset Tetap", desc: "Daftar aset dan penyusutannya", icon: IconAssets },
+      { href: "/aset-takberwujud", label: "Aset Takberwujud", desc: "Lisensi, merek, dan amortisasinya", icon: IconIntangible },
     ],
   },
   {
