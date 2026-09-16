@@ -113,6 +113,59 @@ export async function listIntangibles(q: Queryable, orgId: string) {
     .orderBy(desc(intangibleAssets.createdAt));
 }
 
+export interface IntangibleCardRow {
+  id: string;
+  code: string;
+  name: string;
+  category: IntangibleCategory;
+  acquisitionDate: string;
+  acquisitionCostMinor: bigint;
+  accumulatedMinor: bigint;
+  bookValueMinor: bigint;
+  status: string;
+}
+
+/** Daftar kartu dengan akumulasi terposting + nilai buku per aset. */
+export async function listIntangibleCards(
+  q: Queryable,
+  orgId: string,
+): Promise<IntangibleCardRow[]> {
+  const assets = await listIntangibles(q, orgId);
+  if (assets.length === 0) return [];
+  const sums = await q
+    .select({
+      assetId: intangibleAmortizationLines.assetId,
+      total: sql<string>`COALESCE(SUM(amortization_amount_minor), 0)`,
+    })
+    .from(intangibleAmortizationLines)
+    .where(
+      and(
+        eq(intangibleAmortizationLines.orgId, orgId),
+        eq(intangibleAmortizationLines.status, "POSTED"),
+        inArray(
+          intangibleAmortizationLines.assetId,
+          assets.map((a) => a.id),
+        ),
+      ),
+    )
+    .groupBy(intangibleAmortizationLines.assetId);
+  const byAsset = new Map(sums.map((s) => [s.assetId, BigInt(s.total)]));
+  return assets.map((a) => {
+    const accumulatedMinor = byAsset.get(a.id) ?? 0n;
+    return {
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      category: a.category as IntangibleCategory,
+      acquisitionDate: a.acquisitionDate,
+      acquisitionCostMinor: a.acquisitionCostMinor,
+      accumulatedMinor,
+      bookValueMinor: a.acquisitionCostMinor - accumulatedMinor,
+      status: a.status,
+    };
+  });
+}
+
 export async function getIntangibleDetail(
   q: Queryable,
   orgId: string,

@@ -6,6 +6,7 @@ import { accounts, fiscalPeriods } from "@/server/db/schema/org";
 import {
   createIntangible,
   getIntangibleDetail,
+  listIntangibleCards,
   postMonthlyAmortization,
   disposeIntangible,
 } from "@/server/db/repos/intangible-assets.repo";
@@ -86,6 +87,15 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("Intangible lifecycle", () =>
     const detail = await withOrg(orgId, (tx) => getIntangibleDetail(tx, orgId, asset.id));
     expect(detail?.schedule).toHaveLength(12);
     expect(detail?.schedule[0].amortizationAmountMinor).toBe(1_000_000_00n);
+  });
+
+  it("kartu membawa akumulasi + nilai buku", async () => {
+    const asset = await makeIntangible("Lisensi Kartu");
+    await runAmor("2026-02");
+    const cards = await withOrg(orgId, (tx) => listIntangibleCards(tx, orgId));
+    const card = cards.find((c) => c.id === asset.id);
+    expect(card?.accumulatedMinor).toBe(1_000_000_00n);
+    expect(card?.bookValueMinor).toBe(11_000_000_00n);
   });
 
   it("posting konkuren ganda satu jurnal", async () => {
