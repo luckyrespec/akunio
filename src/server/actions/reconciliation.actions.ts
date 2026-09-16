@@ -102,12 +102,11 @@ export async function runAutoMatchAction(reconciliationId: string) {
       ),
     );
 
-    const [contacts, invoices] = await withOrg(ctx.orgId, (tx) =>
-      Promise.all([
-        listContactsRepo(tx, ctx.orgId),
-        listInvoicesRepo(tx, ctx.orgId),
-      ]),
-    );
+    // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+    const [contacts, invoices] = await Promise.all([
+      withOrg(ctx.orgId, (tx) => listContactsRepo(tx, ctx.orgId)),
+      withOrg(ctx.orgId, (tx) => listInvoicesRepo(tx, ctx.orgId)),
+    ]);
 
     const result = matchBankTransactions(
       unmatchedStatementLines,

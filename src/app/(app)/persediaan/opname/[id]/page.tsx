@@ -29,17 +29,17 @@ interface Props {
 export default async function StockOpnameDetailPage({ params }: Props) {
   const { id } = await params;
   const ctx = await requireContext();
-  const { opname, journal, journalDocs } = await withOrg(ctx.orgId, async (tx) => {
-    const opname = await getStockOpnameWithItems(tx, ctx.orgId, id);
-    if (!opname || !opname.journalEntryId) return { opname, journal: null, journalDocs: [] };
-    const [journal, journalDocs] = await Promise.all([
-      getEntryWithLines(tx, ctx.orgId, opname.journalEntryId),
-      listEntryDocuments(tx, ctx.orgId, opname.journalEntryId),
-    ]);
-    return { opname, journal, journalDocs };
-  });
+  const opname = await withOrg(ctx.orgId, (tx) => getStockOpnameWithItems(tx, ctx.orgId, id));
 
   if (!opname) notFound();
+
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [journal, journalDocs] = !opname.journalEntryId
+    ? [null, [] as Awaited<ReturnType<typeof listEntryDocuments>>]
+    : await Promise.all([
+        withOrg(ctx.orgId, (tx) => getEntryWithLines(tx, ctx.orgId, opname.journalEntryId!)),
+        withOrg(ctx.orgId, (tx) => listEntryDocuments(tx, ctx.orgId, opname.journalEntryId!)),
+      ]);
 
   const totalDiffMinor = opname.totalDifferenceValueMinor;
   const isDeficit = totalDiffMinor < 0n;

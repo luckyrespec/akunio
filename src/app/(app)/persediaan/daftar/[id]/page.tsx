@@ -21,17 +21,15 @@ export default async function ItemDetailPage({ params, searchParams }: Props) {
   const initialTab: ItemDetailTab =
     sp.tab && (TABS as string[]).includes(sp.tab) ? (sp.tab as ItemDetailTab) : "detail";
   const ctx = await requireContext();
-  const { item, transactions, costHistory } = await withOrg(ctx.orgId, async (tx) => {
-    const item = await getInventoryItem(tx, ctx.orgId, id);
-    if (!item) return { item: null, transactions: [], costHistory: [] };
-    const [transactions, costHistory] = await Promise.all([
-      listItemTransactions(tx, ctx.orgId, id),
-      listItemCostHistory(tx, ctx.orgId, id),
-    ]);
-    return { item, transactions, costHistory };
-  });
+  const item = await withOrg(ctx.orgId, (tx) => getInventoryItem(tx, ctx.orgId, id));
 
   if (!item) notFound();
+
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [transactions, costHistory] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => listItemTransactions(tx, ctx.orgId, id)),
+    withOrg(ctx.orgId, (tx) => listItemCostHistory(tx, ctx.orgId, id)),
+  ]);
 
   return (
     <ItemDetailClient

@@ -31,14 +31,15 @@ export default async function FakturBaruPage({
   const sp = await searchParams;
   const tipe: InvoiceType = sp.tipe === "bill" ? "BILL" : "INVOICE";
 
-  const [contactsList, [org], catalogItems, recordingMethod] = await withOrg(ctx.orgId, (tx) =>
-    Promise.all([
-      listContactsRepo(tx, ctx.orgId),
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [contactsList, [org], catalogItems, recordingMethod] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => listContactsRepo(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) =>
       tx.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.orgId)),
-      listInventoryItems(tx, ctx.orgId),
-      getRecordingMethodSafe(tx, ctx.orgId),
-    ]),
-  );
+    ),
+    withOrg(ctx.orgId, (tx) => listInventoryItems(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => getRecordingMethodSafe(tx, ctx.orgId)),
+  ]);
 
   return (
     <section className="w-full space-y-0">

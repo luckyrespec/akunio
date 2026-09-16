@@ -29,9 +29,10 @@ export function currentMonthRange(d = new Date()): {
 
 export async function loadCashPageData(orgId: string, kind: CashKind) {
   const range = currentMonthRange();
-  const [entries, allAccounts, contacts, summary] = await withOrg(orgId, (tx) =>
-    Promise.all([
-      listCashEntriesRepo(tx, orgId, kind),
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [entries, allAccounts, contacts, summary] = await Promise.all([
+    withOrg(orgId, (tx) => listCashEntriesRepo(tx, orgId, kind)),
+    withOrg(orgId, (tx) =>
       tx
         .select({
           id: accounts.id,
@@ -42,10 +43,10 @@ export async function loadCashPageData(orgId: string, kind: CashKind) {
         })
         .from(accounts)
         .where(eq(accounts.orgId, orgId)),
-      listContactsRepo(tx, orgId),
-      getCashSummaryRepo(tx, orgId, kind, range.dari, range.sampai),
-    ]),
-  );
+    ),
+    withOrg(orgId, (tx) => listContactsRepo(tx, orgId)),
+    withOrg(orgId, (tx) => getCashSummaryRepo(tx, orgId, kind, range.dari, range.sampai)),
+  ]);
   const parentCodes = new Set(
     allAccounts.map((a) => a.parentCode).filter((c): c is string => !!c)
   );

@@ -80,48 +80,45 @@ export default async function JurnalPage({
   const draftPage = Math.max(1, Number(sp.draftPage) || 1);
   const draftOffset = (draftPage - 1) * draftLimit;
 
-  // Semua baca dalam satu konteks org (RLS) — tanpa ubah logika agregasi.
-  const {
-    draftCounts,
-    totalEntriesCount,
-    entries,
-    rawDrafts,
-    filteredDraftCount,
-  } = await withOrg(ctx.orgId, async (tx) => {
-    // Lightweight status counts & total posted count
-    const [counts, total] = await Promise.all([
-      countDraftsByStatus(tx, ctx.orgId),
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  // Logika agregasi tidak berubah, hanya pemisahan koneksi.
+  const [draftCounts, totalEntriesCount] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => countDraftsByStatus(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) =>
       tab === "posted" && q ? countSearchEntries(tx, ctx.orgId, q) : countEntries(tx, ctx.orgId),
-    ]);
+    ),
+  ]);
 
-    let entries: EntryView[] = [];
-    let rawDrafts: Array<Awaited<ReturnType<typeof listPaginatedDrafts>>[number]> = [];
-    let filteredDraftCount = 0;
+  let entries: EntryView[] = [];
+  let rawDrafts: Array<Awaited<ReturnType<typeof listPaginatedDrafts>>[number]> = [];
+  let filteredDraftCount = 0;
 
-    if (tab === "draf") {
-      const [fetchedDrafts, count] = await Promise.all([
+  if (tab === "draf") {
+    const [fetchedDrafts, count] = await Promise.all([
+      withOrg(ctx.orgId, (tx) =>
         listPaginatedDrafts(tx, ctx.orgId, {
           status: draftStatus,
           query: draftQ,
           limit: draftLimit,
           offset: draftOffset,
         }),
+      ),
+      withOrg(ctx.orgId, (tx) =>
         countFilteredDrafts(tx, ctx.orgId, {
           status: draftStatus,
           query: draftQ,
         }),
-      ]);
-      rawDrafts = fetchedDrafts;
-      filteredDraftCount = count;
-    } else {
-      entries =
-        q
-          ? await searchEntriesWithLines(tx, ctx.orgId, q, limit, offset)
-          : await listEntriesWithLines(tx, ctx.orgId, limit, offset);
-    }
-    return { draftCounts: counts, totalEntriesCount: total, entries, rawDrafts, filteredDraftCount };
-  });
-
+      ),
+    ]);
+    rawDrafts = fetchedDrafts;
+    filteredDraftCount = count;
+  } else {
+    entries = await withOrg(ctx.orgId, (tx) =>
+      q
+        ? searchEntriesWithLines(tx, ctx.orgId, q, limit, offset)
+        : listEntriesWithLines(tx, ctx.orgId, limit, offset),
+    );
+  }
   const pendingDraftsCount = draftCounts.pending;
 
   let total = totalEntriesCount;

@@ -19,6 +19,7 @@ import {
   listEntryDocuments,
 } from "@/server/db/repos/journals.repo";
 import { Money } from "@/core/money/money";
+import { Reveal } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
 import { JournalAttachmentUploader } from "@/components/journal/journal-attachment-uploader";
 import { DetailActions } from "./detail-actions";
@@ -53,12 +54,11 @@ export default async function JurnalDetailPage({
   }
   if (!entry) notFound();
 
-  const [docs, reversals] = await withOrg(ctx.orgId, async (tx) =>
-    Promise.all([
-      listEntryDocuments(tx, ctx.orgId, entry.id),
-      findReversalEntries(tx, ctx.orgId, entry.id),
-    ]),
-  );
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [docs, reversals] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => listEntryDocuments(tx, ctx.orgId, entry.id)),
+    withOrg(ctx.orgId, (tx) => findReversalEntries(tx, ctx.orgId, entry.id)),
+  ]);
 
   let originalNumber: string | null = null;
   if (entry.reversalOfId) {
@@ -100,7 +100,7 @@ export default async function JurnalDetailPage({
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
-        <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+        <Reveal className="lg:col-span-7 xl:col-span-8 space-y-4">
           <div className="rounded-2xl border border-rule bg-paper p-4 sm:p-6 shadow-xs">
             <div className="flex items-center gap-2">
               <StickyNote className="size-4 text-ink-soft" />
@@ -228,9 +228,9 @@ export default async function JurnalDetailPage({
               </ul>
             </div>
           )}
-        </div>
+        </Reveal>
 
-        <div className="lg:col-span-5 xl:col-span-4">
+        <Reveal delay={0.08} className="lg:col-span-5 xl:col-span-4">
           <div className="rounded-2xl border border-rule bg-paper p-4 sm:p-5 shadow-xs space-y-3 lg:sticky lg:top-6">
             <div className="flex items-center gap-2">
               <Paperclip className="size-4 text-ink-soft" />
@@ -280,7 +280,7 @@ export default async function JurnalDetailPage({
             )}
             <JournalAttachmentUploader entryId={entry.id} />
           </div>
-        </div>
+        </Reveal>
       </div>
     </section>
   );

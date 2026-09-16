@@ -56,13 +56,12 @@ export default async function StockOpnameListPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const offset = (page - 1) * limit;
 
-  const [stats, total, rows] = await withOrg(ctx.orgId, (tx) =>
-    Promise.all([
-      getStockOpnameStats(tx, ctx.orgId),
-      countStockOpnames(tx, ctx.orgId, { search: q, status }),
-      listStockOpnamesPaginated(tx, ctx.orgId, { search: q, status, limit, offset }),
-    ]),
-  );
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [stats, total, rows] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => getStockOpnameStats(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => countStockOpnames(tx, ctx.orgId, { search: q, status })),
+    withOrg(ctx.orgId, (tx) => listStockOpnamesPaginated(tx, ctx.orgId, { search: q, status, limit, offset })),
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const safePage = Math.min(page, totalPages);

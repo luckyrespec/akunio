@@ -9,12 +9,11 @@ import { cn } from "@/lib/utils";
 
 export default async function TemuanPage() {
   const ctx = await requireContext();
-  const [allFindings, totalJournals] = await withOrg(ctx.orgId, (tx) =>
-    Promise.all([
-      listFindings(tx, ctx.orgId),
-      countEntries(tx, ctx.orgId),
-    ]),
-  );
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [allFindings, totalJournals] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => listFindings(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => countEntries(tx, ctx.orgId)),
+  ]);
 
   const openFindings = allFindings.filter((f) => f.status === "open");
   const resolvedCount = allFindings.filter((f) => f.status === "resolved").length;

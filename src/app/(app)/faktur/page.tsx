@@ -4,6 +4,7 @@ import { listInvoicesRepo, getAgingReportRepo } from "@/server/db/repos/invoices
 import { listContactsRepo } from "@/server/db/repos/contacts.repo";
 import { accounts } from "@/server/db/schema/org";
 import { InvoiceDashboard } from "@/components/invoicing/invoice-dashboard";
+import { Reveal } from "@/components/motion";
 import { eq, and } from "drizzle-orm";
 
 export default async function FakturPage({
@@ -15,20 +16,22 @@ export default async function FakturPage({
   const sp = await searchParams;
   const tab = sp.tab === "utang" ? "UTANG" : sp.tab === "aging" ? "AGING" : "PIUTANG";
 
-  const [invoices, contacts, cashAccounts, aging] = await withOrg(ctx.orgId, (tx) =>
-    Promise.all([
-      listInvoicesRepo(tx, ctx.orgId),
-      listContactsRepo(tx, ctx.orgId),
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [invoices, contacts, cashAccounts, aging] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => listInvoicesRepo(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => listContactsRepo(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) =>
       tx
         .select({ id: accounts.id, code: accounts.code, name: accounts.name })
         .from(accounts)
         .where(and(eq(accounts.orgId, ctx.orgId), eq(accounts.isCash, true))),
-      getAgingReportRepo(tx, ctx.orgId, "INVOICE"),
-    ]),
-  );
+    ),
+    withOrg(ctx.orgId, (tx) => getAgingReportRepo(tx, ctx.orgId, "INVOICE")),
+  ]);
 
   return (
     <div className="space-y-6">
+      <Reveal>
       <InvoiceDashboard
         initialTab={tab}
         invoices={invoices}
@@ -36,6 +39,7 @@ export default async function FakturPage({
         accounts={cashAccounts}
         aging={aging}
       />
+      </Reveal>
     </div>
   );
 }

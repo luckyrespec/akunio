@@ -31,10 +31,9 @@ export async function getLaporanIndexCards(
 ): Promise<LaporanIndexCards> {
   const yearEndISO = `${year}-12-31`;
   const accRows = await q.select().from(accounts).where(eq(accounts.orgId, orgId));
-  const [linesThrough, linesYtd] = await Promise.all([
-    postedLinesThrough(q, orgId, yearEndISO),
-    postedLinesBetween(q, orgId, `${year}-01-01`, yearEndISO),
-  ]);
+  // Sekuensial: q bisa satu transaksi (satu pg client tak boleh query konkuren).
+  const linesThrough = await postedLinesThrough(q, orgId, yearEndISO);
+  const linesYtd = await postedLinesBetween(q, orgId, `${year}-01-01`, yearEndISO);
 
   const metas = reportMetaMap(accRows);
   const aggsCum = aggregateFromLines(linesThrough, metas);

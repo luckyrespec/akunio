@@ -8,9 +8,10 @@ import { AsetClient } from "./aset-client";
 export default async function AsetPage() {
   const ctx = await requireContext();
 
-  const [assets, allAccounts, periods] = await withOrg(ctx.orgId, (tx) =>
-    Promise.all([
-      listFixedAssets(tx, ctx.orgId),
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [assets, allAccounts, periods] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => listFixedAssets(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) =>
       tx
         .select({
           id: accounts.id,
@@ -20,16 +21,18 @@ export default async function AsetPage() {
         })
         .from(accounts)
         .where(eq(accounts.orgId, ctx.orgId)),
-    tx
-      .select({
-        name: fiscalPeriods.name,
-        status: fiscalPeriods.status,
-      })
-      .from(fiscalPeriods)
-      .where(and(eq(fiscalPeriods.orgId, ctx.orgId), eq(fiscalPeriods.status, "OPEN")))
-      .orderBy(fiscalPeriods.name),
-    ]),
-  );
+    ),
+    withOrg(ctx.orgId, (tx) =>
+      tx
+        .select({
+          name: fiscalPeriods.name,
+          status: fiscalPeriods.status,
+        })
+        .from(fiscalPeriods)
+        .where(and(eq(fiscalPeriods.orgId, ctx.orgId), eq(fiscalPeriods.status, "OPEN")))
+        .orderBy(fiscalPeriods.name),
+    ),
+  ]);
 
   return (
     <AsetClient

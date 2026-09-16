@@ -31,12 +31,13 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
 
   const ctx = await requireContext();
 
-  const [inv, [org]] = await withOrg(ctx.orgId, (tx) =>
-    Promise.all([
-      getInvoiceByIdRepo(tx, ctx.orgId, id),
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [inv, [org]] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => getInvoiceByIdRepo(tx, ctx.orgId, id)),
+    withOrg(ctx.orgId, (tx) =>
       tx.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.orgId)),
-    ]),
-  );
+    ),
+  ]);
 
   if (!inv) {
     notFound();

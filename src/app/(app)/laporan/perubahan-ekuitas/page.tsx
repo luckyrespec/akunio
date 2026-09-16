@@ -38,10 +38,10 @@ export default async function PerubahanEkuitasPage({
     // Tanggal sebelum rentang mulai untuk menghitung saldo awal ekuitas
     const fromISO = cumulative ? `${period.endsOn.slice(0, 4)}-01-01` : period.startsOn;
     const prevDate = new Date(new Date(fromISO).getTime() - 86400000).toISOString().slice(0, 10);
-    const [priorLines, periodLines] = await Promise.all([
-      postedLinesThrough(tx, ctx.orgId, prevDate),
-      postedLinesBetween(tx, ctx.orgId, fromISO, period.endsOn),
-    ]);
+    // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+    // (Di sini tetap satu transaksi: dua baca ini wajib satu snapshot.)
+    const priorLines = await postedLinesThrough(tx, ctx.orgId, prevDate);
+    const periodLines = await postedLinesBetween(tx, ctx.orgId, fromISO, period.endsOn);
 
     return { org, profile, accRows, period, options, priorLines, periodLines };
   });

@@ -14,9 +14,10 @@ export default async function AssetDetailPage({
   const { id } = await params;
   const ctx = await requireContext();
 
-  const [detail, allAccounts] = await withOrg(ctx.orgId, (tx) =>
-    Promise.all([
-      getFixedAssetDetail(tx, ctx.orgId, id),
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [detail, allAccounts] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => getFixedAssetDetail(tx, ctx.orgId, id)),
+    withOrg(ctx.orgId, (tx) =>
       tx
         .select({
           id: accounts.id,
@@ -26,8 +27,8 @@ export default async function AssetDetailPage({
         })
         .from(accounts)
         .where(eq(accounts.orgId, ctx.orgId)),
-    ]),
-  );
+    ),
+  ]);
 
   if (!detail) {
     notFound();

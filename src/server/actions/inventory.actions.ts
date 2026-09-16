@@ -31,16 +31,15 @@ import { removeItemImage, saveItemImage } from "@/server/storage/inventory-image
 
 export async function getInventoryOverviewAction() {
   const ctx = await requireContext();
-  const [allActive, archivedItems, jasaItems, archivedJasaItems, settings, opnames] = await withOrg(ctx.orgId, (tx) =>
-    Promise.all([
-      listInventoryItems(tx, ctx.orgId),
-      listArchivedInventoryItems(tx, ctx.orgId),
-      listServiceItems(tx, ctx.orgId),
-      listArchivedServiceItems(tx, ctx.orgId),
-      getInventorySettings(tx, ctx.orgId),
-      listStockOpnames(tx, ctx.orgId),
-    ]),
-  );
+  // withOrg terpisah per query: satu pg client tak boleh query konkuren.
+  const [allActive, archivedItems, jasaItems, archivedJasaItems, settings, opnames] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => listInventoryItems(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => listArchivedInventoryItems(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => listServiceItems(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => listArchivedServiceItems(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => getInventorySettings(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => listStockOpnames(tx, ctx.orgId)),
+  ]);
 
   // Jasa punya daftarnya sendiri — pisahkan agar tidak dobel di tabel gabungan.
   const items = allActive.filter((item) => item.itemType === "BARANG");
