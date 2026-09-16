@@ -22,17 +22,23 @@ import { DecisionStrip } from "@/components/dasbor/decision-strip";
 import { OpsReminders } from "@/components/dasbor/ops-reminders";
 import { avgDailyExpense, decideCashSafety, dueWithinDays, momDelta, topExpenses } from "@/core/dasbor/decisions";
 import {
-  AlertCircle,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
   FileText,
+  HandCoins,
+  CalendarClock,
+  ShieldAlert,
   Inbox,
-  Receipt,
-  Wallet,
 } from "lucide-react";
 import { IconReview } from "@/components/icons";
+import { TrendChart } from "@/components/dasbor/trend-chart";
 import Link from "next/link";
+
+export const metadata = {
+  title: "Dashboard | Akunio",
+  description: "Ringkasan kas, laba, tagihan, dan aktivitas pembukuan tahun berjalan.",
+};
 
 const MONTH_FMT = new Intl.DateTimeFormat("id-ID", { month: "short" });
 
@@ -79,31 +85,26 @@ export default async function DasborPage() {
   });
   const curMonth = months[5];
 
-  // Semua baca di bawah dalam satu konteks org (RLS) — tanpa ubah logika agregasi.
-  const {
-    monthlyNet,
-    drafts,
-    recent,
-    agingAR,
-    agingAP,
-    yearEnd,
-    curMonthLines,
-  } = await withOrg(ctx.orgId, async (tx) => {
-    // Laba bersih 6 bulan terakhir (bulan berjalan + 5 sebelumnya), semua dari jurnal POSTED.
-    const monthlyNet: bigint[] = await Promise.all(
-      months.map(async ({ y, m }) => {
-        const { start, end } = monthWindow(y, m);
-        const lines = await postedLinesBetween(tx, ctx.orgId, start, end);
-        return incomeStatement(aggregateFromLines(lines, metas)).netIncomeMinor;
-      }),
-    );
+  // Tiap query jalan di transaksinya sendiri (withOrg paralel): satu pg client
+  // tidak boleh mengeksekusi query konkuren (warning pg → error di pg v9).
+  // Logika agregasi tidak berubah, hanya pemisahan koneksi.
+  // Laba bersih 6 bulan terakhir (bulan berjalan + 5 sebelumnya), semua dari jurnal POSTED.
+  const monthlyNet: bigint[] = await Promise.all(
+    months.map(async ({ y, m }) => {
+      const { start, end } = monthWindow(y, m);
+      const lines = await withOrg(ctx.orgId, (tx) => postedLinesBetween(tx, ctx.orgId, start, end));
+      return incomeStatement(aggregateFromLines(lines, metas)).netIncomeMinor;
+    }),
+  );
 
-    const [drafts, recent, agingAR, agingAP] = await Promise.all([
-      listDrafts(tx, ctx.orgId),
-      getDasborRecentActivity(tx, ctx.orgId, 5),
-      getAgingReportRepo(tx, ctx.orgId, "INVOICE"),
-      getAgingReportRepo(tx, ctx.orgId, "BILL"),
-    ]);
+  const [drafts, recent, agingAR, agingAP] = await Promise.all([
+    withOrg(ctx.orgId, (tx) => listDrafts(tx, ctx.orgId)),
+    withOrg(ctx.orgId, (tx) => getDasborRecentActivity(tx, ctx.orgId, 5)),
+    withOrg(ctx.orgId, (tx) => getAgingReportRepo(tx, ctx.orgId, "INVOICE")),
+    withOrg(ctx.orgId, (tx) => getAgingReportRepo(tx, ctx.orgId, "BILL")),
+  ]);
+
+  const { yearEnd, curMonthLines } = await withOrg(ctx.orgId, async (tx) => {
 
     // Pengingat tutup tahun: hanya dihitung saat Desember kalender.
     let yearEnd: {
@@ -143,7 +144,7 @@ export default async function DasborPage() {
     }
     const { start: curStart, end: curEnd } = monthWindow(curMonth.y, curMonth.m);
     const curMonthLines = await postedLinesBetween(tx, ctx.orgId, curStart, curEnd);
-    return { monthlyNet, drafts, recent, agingAR, agingAP, yearEnd, curMonthLines };
+    return { yearEnd, curMonthLines };
   });
 
   const pendingDrafts = drafts.filter((d) => d.status === "PENDING");
@@ -176,15 +177,15 @@ export default async function DasborPage() {
     : data.findings.length > 0
       ? `${data.findings.length} temuan pembukuan terbuka perlu ditindaklanjuti.`
       : overdueAR.length > 0
-        ? `${overdueAR.length} piutang jatuh tempo senilai ${Money.fromMinor(overdueARMinor).formatIdr()} — tagih ${topAR ? `${topAR.contactName} (${topAR.invoiceNumber})` : "sekarang"}.`
+          ? `${overdueAR.length} piutang jatuh tempo senilai ${Money.fromMinor(overdueARMinor).formatIdr()}. Tagih ${topAR ? `${topAR.contactName} (${topAR.invoiceNumber})` : "sekarang"}.`
         : overdueAP.length > 0
           ? `${overdueAP.length} utang jatuh tempo senilai ${Money.fromMinor(overdueAPMinor).formatIdr()}.`
-          : "Semua beres — tidak ada draf, temuan, atau tunggakan.";
+          : "Semua beres, tidak ada draf, temuan, atau tunggakan.";
 
   const briefingSentences = [
     apDue7.length > 0
-      ? `Kas & bank ${Money.fromMinor(cashMinor).formatIdr()} — ${safety.status === "AMAN" ? "aman" : safety.status === "WASPADA" ? "waspada" : "kritis"} untuk kewajiban 7 hari ${Money.fromMinor(apDue7Minor).formatIdr()}.`
-      : `Kas & bank ${Money.fromMinor(cashMinor).formatIdr()} — tanpa kewajiban 7 hari ke depan.`,
+      ? `Kas & bank ${Money.fromMinor(cashMinor).formatIdr()}, ${safety.status === "AMAN" ? "aman" : safety.status === "WASPADA" ? "waspada" : "kritis"} untuk kewajiban 7 hari ${Money.fromMinor(apDue7Minor).formatIdr()}.`
+      : `Kas & bank ${Money.fromMinor(cashMinor).formatIdr()}, tanpa kewajiban 7 hari ke depan.`,
     urgentSentence,
     `Laba ${curMonth.label} ${Money.fromMinor(curNet).formatIdr()}, ${mom.direction === "sama" ? `stabil vs ${prevLabel}` : `${mom.direction} ${mom.pct !== null ? `${mom.pct > 0 ? "+" : ""}${mom.pct}% ` : ""}vs ${prevLabel}`}.`,
   ];
@@ -218,7 +219,7 @@ export default async function DasborPage() {
       cta: "Tinjau",
     },
     data.findings.length > 0 && {
-      icon: AlertCircle,
+      icon: ShieldAlert,
       tint: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
       title: `${data.findings.length} temuan terbuka`,
       desc: "Anomali pembukuan perlu ditindaklanjuti.",
@@ -226,7 +227,7 @@ export default async function DasborPage() {
       cta: "Lihat",
     },
     overdueAR.length > 0 && {
-      icon: Receipt,
+      icon: HandCoins,
       tint: "bg-debit/10 text-debit",
       title: `Piutang jatuh tempo ${Money.fromMinor(overdueARMinor).formatIdr()}`,
       desc: `${overdueAR.length} faktur lewat jatuh tempo.`,
@@ -234,7 +235,7 @@ export default async function DasborPage() {
       cta: "Tagih",
     },
     overdueAP.length > 0 && {
-      icon: Wallet,
+      icon: CalendarClock,
       tint: "bg-credit/10 text-credit",
       title: `Utang jatuh tempo ${Money.fromMinor(overdueAPMinor).formatIdr()}`,
       desc: `${overdueAP.length} tagihan lewat jatuh tempo.`,
@@ -253,7 +254,7 @@ export default async function DasborPage() {
   return (
     <section className="space-y-8">
       <PageHeader
-        title="Dasbor"
+        title="Dashboard"
         eyebrow={`Ringkasan keuangan tahun berjalan (${year})`}
         actions={
           <div className="flex items-center gap-2">
@@ -377,7 +378,7 @@ export default async function DasborPage() {
               </p>
               <span className="text-[11px] text-ink-soft">dari jurnal POSTED</span>
             </div>
-            <div className="mt-3 flex h-40 items-stretch gap-2" role="img" aria-label={`Tren laba bersih enam bulan terakhir: ${months.map((m, i) => `${m.label} ${Money.fromMinor(monthlyNet[i]).formatIdr()}`).join(", ")}`}>
+            <div className="mt-3 h-40" role="img" aria-label={`Tren laba bersih enam bulan terakhir: ${months.map((m, i) => `${m.label} ${Money.fromMinor(monthlyNet[i]).formatIdr()}`).join(", ")}`}>
               <span className="sr-only">
                 {months.map((m, i) => (
                   <span key={`${m.y}-${m.m}`}>
@@ -385,36 +386,13 @@ export default async function DasborPage() {
                   </span>
                 ))}
               </span>
-              {months.map((m, i) => {
-                const v = monthlyNet[i];
-                const pct = hasTrend ? Number((v < 0n ? -v : v) * 100n / maxAbs) : 0;
-                const positive = v >= 0n;
-                return (
-                  <div key={`${m.y}-${m.m}`} className="flex min-w-0 flex-1 flex-col items-center">
-                    <div className="flex w-full flex-1 flex-col justify-end">
-                      {hasTrend && positive && (
-                        <div
-                          title={`${m.label}: ${Money.fromMinor(v).formatIdr()}`}
-                          className="w-full rounded-t-md bg-debit/80"
-                          style={{ height: `${Math.max(pct, 4)}%` }}
-                        />
-                      )}
-                    </div>
-                    <div className="h-px w-full bg-ink/25" />
-                    <div className="flex w-full flex-1 flex-col justify-start">
-                      {hasTrend && !positive && (
-                        <div
-                          title={`${m.label}: ${Money.fromMinor(v).formatIdr()}`}
-                          className="w-full rounded-b-md bg-credit/80"
-                          style={{ height: `${Math.max(pct, 4)}%` }}
-                        />
-                      )}
-                      {!hasTrend && <div className="mx-auto mt-1 size-1 rounded-full bg-rule" />}
-                    </div>
-                    <span className="mt-1.5 text-[11px] font-medium text-ink-soft">{m.label}</span>
-                  </div>
-                );
-              })}
+              {hasTrend ? (
+                <TrendChart months={months} valuesMinor={monthlyNet} />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <div className="mx-auto size-1 rounded-full bg-rule" />
+                </div>
+              )}
             </div>
             <p className="mt-2 text-[11px] text-ink-soft">
               {hasTrend
@@ -463,7 +441,7 @@ export default async function DasborPage() {
             ) : (
               <div className="mt-4 flex flex-1 items-center gap-3 rounded-xl bg-canvas/60 px-4 py-5 text-xs text-ink-soft">
                 <CheckCircle2 className="size-5 shrink-0 text-debit" />
-                <span>Semua beres — tidak ada draf, temuan, atau tagihan jatuh tempo.</span>
+                <span>Semua beres, tidak ada draf, temuan, atau tagihan jatuh tempo.</span>
               </div>
             )}
           </div>

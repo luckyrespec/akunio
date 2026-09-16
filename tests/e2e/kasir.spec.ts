@@ -25,7 +25,7 @@ test("kasir: tambah barang lalu checkout tunai sampai struk", async ({ page }) =
   await page.goto("/kasir");
   await page.waitForLoadState("networkidle", { timeout: 30000 });
   await page.waitForTimeout(2000);
-  await expect(page.getByTestId("kasir-back")).toHaveAttribute("href", "/dasbor");
+  await expect(page.getByTestId("kasir-back")).toHaveAttribute("href", "/dashboard");
   await page.getByTestId("kasir-search").fill("Indomie");
   const itemBtn = page.locator('[data-testid^="kasir-item-"]').first();
   await expect(itemBtn).toBeVisible({ timeout: 10000 });

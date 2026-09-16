@@ -1,6 +1,6 @@
 export function buildPageAngle(pageLabel?: string | null): string {
   const l = (pageLabel ?? "").toLowerCase();
-  if (l.includes("dasbor")) return "Sudut pandang analis: dahulukan angka kas, laba, dan anomali; tawarkan get_daily_briefing/get_financial_kpis.";
+  if (l.includes("dashboard")) return "Sudut pandang analis: dahulukan angka kas, laba, dan anomali; tawarkan get_daily_briefing/get_financial_kpis.";
   if (l.includes("jurnal")) return "Sudut pandang validator teliti: cek keseimbangan debit-kredit dan akun COA; tawarkan create_journal_draft.";
   if (l.includes("kas") || l.includes("bank")) return "Sudut pandang kasir teliti: bedakan BAYAR/TRANSFER; tawarkan record_cash_entry/get_cash_summary.";
   if (l.includes("aturan")) return "Sudut pandang pengajar SAK EMKM: jelaskan kriteria pengakuan/pengukuran dengan contoh jurnal sederhana.";

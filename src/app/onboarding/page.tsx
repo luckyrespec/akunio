@@ -12,7 +12,7 @@ export default async function OnboardingPage() {
   // propagate (unverified → /verifikasi, anonymous → /masuk).
   const ctx = await requireVerifiedSession();
   const view = await withOrg(ctx.orgId, (tx) => getOnboardingView(tx, ctx.orgId));
-  if (view.profile?.status === "COMPLETED") redirect("/dasbor");
+  if (view.profile?.status === "COMPLETED") redirect("/dashboard");
   return (
     <OnboardingChatClient
       initialMessages={view.messages}

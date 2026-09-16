@@ -263,7 +263,7 @@ export function SidebarNav({  collapsed,
   const isActive = (href: string, match?: (p: string) => boolean) => {
     if (match) return match(pathname);
     if (href === "/dashboard") {
-      return pathname === "/dashboard" || pathname.startsWith("/dashboard/") || pathname === "/dasbor" || pathname.startsWith("/dasbor/");
+      return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
     }
     return pathname === href || pathname.startsWith(href + "/");
   };

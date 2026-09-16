@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/command-palette";
 
 const LABELS: Record<string, string> = {
-  dasbor: "Dasbor",
+  dashboard: "Dashboard",
   jurnal: "Jurnal",
   ai: "Asisten Akunio",
   baru: "Tulis Jurnal",

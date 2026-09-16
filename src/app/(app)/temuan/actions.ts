@@ -150,7 +150,7 @@ export async function uploadFindingReceiptAction(findingId: string, formData: Fo
     try {
       revalidatePath(`/temuan/${findingId}`);
       revalidatePath("/temuan");
-      revalidatePath("/dasbor");
+      revalidatePath("/dashboard");
     } catch {}
 
     return { ok: true, data: result };

@@ -84,7 +84,7 @@ function boostByPage(list: NaraSuggestion[], pagePath?: string): NaraSuggestion[
   else if (p.includes("persediaan")) re = /stok|barang|persediaan/i;
   else if (p.includes("faktur")) re = /faktur|tagihan|invoice|piutang|utang/i;
   else if (p.includes("aset")) re = /aset|susut|depresiasi/i;
-  else if (p.includes("dasbor")) re = /briefing|laba|rugi|kas/i;
+  else if (p.includes("dashboard")) re = /briefing|laba|rugi|kas/i;
   if (!re) return list;
   const pattern = re;
   const hit = list.filter((s) => pattern.test(`${s.label} ${s.prompt}`));

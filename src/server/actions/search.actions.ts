@@ -20,7 +20,7 @@ export interface GlobalSearchResult {
 }
 
 const PAGES = [
-  { href: "/dasbor", label: "Dasbor" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/jurnal", label: "Jurnal Umum" },
   { href: "/asisten", label: "Asisten Akunio" },
   { href: "/aturan", label: "Aturan SAK EMKM (Buku Pedoman)" },

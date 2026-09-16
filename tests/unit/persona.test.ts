@@ -7,8 +7,8 @@ describe("persona Mentor UMKM", () => {
     expect(s).toMatch(/Namamu adalah Akunio/);
     expect(s).toMatch(/jangan pernah mengaku bernama Nara/);
   });
-  it("sudut dasbor = analis, aturan = pengajar SAK", () => {
-    expect(buildPageAngle("Dasbor")).toMatch(/analis/i);
+  it("sudut dashboard = analis, aturan = pengajar SAK", () => {
+    expect(buildPageAngle("Dashboard")).toMatch(/analis/i);
     expect(buildPageAngle("Aturan")).toMatch(/SAK/);
   });
   it("blok ingatan disisipkan bila ada", () => {

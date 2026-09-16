@@ -33,7 +33,7 @@ test("Akunio answers a question via streaming chat", async ({ page }) => {
 
 test("sidebar shows Akunio enabled and /jurnal/ai redirects", async ({ page }) => {
   await signup(page);
-  await page.goto("/dasbor");
+  await page.goto("/dashboard");
   await page.getByRole("link", { name: /Asisten Akunio/ }).click();
   await expect(page).toHaveURL(/\/asisten/);
   await expect(page.getByRole("heading", { name: /Mulai pencatatan atau konsultasi/ })).toBeVisible();

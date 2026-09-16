@@ -28,7 +28,7 @@ export async function dismissYearEndPromptAction(periodName: string): Promise<Ac
         .set({ settings: { ...cur, dismissedYearEnd: periodName } })
         .where(eq(organizations.id, ctx.orgId));
     });
-    revalidatePath("/dasbor");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (e) {
     if (isRedirectError(e)) throw e;

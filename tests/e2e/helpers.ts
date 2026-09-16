@@ -17,7 +17,7 @@ export async function signupAndVerify(
   await expect(page).toHaveURL(/\/onboarding/, { timeout: 30000 });
 }
 
-/** Walk the 7 onboarding steps via input + chips, confirm COA, land on /dasbor. */
+/** Walk the 7 onboarding steps via input + chips, confirm COA, land on /dashboard. */
 export async function walkOnboardingToDashboard(
   page: Page,
   opts?: { displayName?: string; businessName?: string },
@@ -57,7 +57,7 @@ export async function walkOnboardingToDashboard(
   await expect(page.getByTestId("coa-confirm")).toBeVisible();
   await page.getByTestId("coa-confirm").click();
   // Provisioning COA + 12 periode fiskal atomik di branch E2E dingin bisa lama.
-  await expect(page).toHaveURL(/\/dasbor/, { timeout: 90000 });
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 90000 });
 }
 
 /**

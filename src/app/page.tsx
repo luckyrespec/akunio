@@ -21,6 +21,6 @@ export const metadata: Metadata = {
 
 export default async function Home() {
   const ctx = await getActiveContext();
-  if (ctx) redirect("/dasbor");
+  if (ctx) redirect("/dashboard");
   return <LandingPage />;
 }

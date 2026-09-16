@@ -442,7 +442,7 @@ export function OnboardingChatClient({
         <PreparingOverlay
           businessName={initialBusinessName}
           coaCount={preview?.length ?? 0}
-          onDone={() => (window.location.href = "/dasbor")}
+          onDone={() => (window.location.href = "/dashboard")}
         />
       )}
     </div>

@@ -6,7 +6,7 @@ export interface PageContext {
 }
 
 const PATH_LABELS: Record<string, string> = {
-  "/dasbor": "Dasbor Keuangan",
+  "/dashboard": "Dashboard Keuangan",
   "/jurnal": "Jurnal Umum",
   "/jurnal/baru": "Input Jurnal Baru",
   "/jurnal/ai": "Jurnal AI Draft",

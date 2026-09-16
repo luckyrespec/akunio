@@ -120,8 +120,8 @@ export function NavbarV3({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
         <div className="hidden sm:flex items-center gap-3">
           {isLoggedIn ? (
             <Button asChild size="sm" className="bg-ink hover:bg-ink/85 text-paper">
-              <Link href="/dasbor" className="flex items-center gap-1.5">
-                <span>Buka Dasbor</span>
+              <Link href="/dashboard" className="flex items-center gap-1.5">
+                <span>Buka Dashboard</span>
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
@@ -189,7 +189,7 @@ export function NavbarV3({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
             <div className="mt-4 pt-4 border-t border-rule flex flex-col gap-2">
               {isLoggedIn ? (
                 <Button asChild className="w-full bg-ink text-paper">
-                  <Link href="/dasbor">Buka Dasbor</Link>
+                  <Link href="/dashboard">Buka Dashboard</Link>
                 </Button>
               ) : (
                 <>

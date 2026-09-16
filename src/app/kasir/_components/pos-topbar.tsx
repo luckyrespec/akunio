@@ -37,7 +37,7 @@ export function PosTopbar({ shiftLabel }: { shiftLabel: string }) {
       </div>
       <Link
         data-testid="kasir-back"
-        href="/dasbor"
+        href="/dashboard"
         className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-rule bg-paper px-3.5 text-xs font-semibold text-ink transition-colors hover:bg-canvas"
       >
         <ArrowLeft className="size-3.5" />

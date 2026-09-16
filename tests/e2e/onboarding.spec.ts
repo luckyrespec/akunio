@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { signupAndVerify, walkOnboardingToDashboard } from "./helpers";
 
-test("daftar → onboarding chat → COA → dasbor", async ({ page }) => {
+test("daftar → onboarding chat → COA → dashboard", async ({ page }) => {
   const email = `onboard-${Date.now()}@tes.id`;
   await signupAndVerify(page, "Budi E2E", email);
   await expect(page.getByText("Kenalan dengan Akunio")).toBeVisible();
@@ -11,7 +11,7 @@ test("daftar → onboarding chat → COA → dasbor", async ({ page }) => {
 test("rute app terkunci sebelum onboarding selesai", async ({ page }) => {
   const email = `locked-${Date.now()}@tes.id`;
   await signupAndVerify(page, "Kunci E2E", email);
-  await page.goto("/dasbor");
+  await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/onboarding/);
   await page.goto("/jurnal");
   await expect(page).toHaveURL(/\/onboarding/);

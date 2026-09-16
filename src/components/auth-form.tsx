@@ -98,7 +98,7 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
         // Tanpa sesi → /verifikasi (kasus require_email_verification).
         const { data: sess } = await authClient.getSession();
         // Use hard navigation to ensure session cookies are fully sent to Server Components.
-        // Completed users pass the onboarding gate straight to /dasbor.
+        // Completed users pass the onboarding gate straight to /dashboard.
         window.location.href = sess?.session ? "/onboarding" : verificationUrl(email);
         return;
       }
@@ -116,7 +116,7 @@ export function AuthForm({ mode }: { mode: "masuk" | "daftar" }) {
         return;
       }
       // Use hard navigation to ensure session cookies are fully sent to Server Components.
-      // Completed users pass the onboarding gate straight to /dasbor.
+      // Completed users pass the onboarding gate straight to /dashboard.
       window.location.href = "/onboarding";
     } catch (err: any) {
       setBusy(false);

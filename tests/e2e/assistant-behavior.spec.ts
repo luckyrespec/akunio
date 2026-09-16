@@ -8,7 +8,7 @@ async function signup(page: import("@playwright/test").Page) {
 
 test("quick access diam saat dibuka (tanpa auto-kirim briefing)", async ({ page }) => {
   await signup(page);
-  await page.goto("/dasbor");
+  await page.goto("/dashboard");
   await page.waitForLoadState("networkidle");
   const streamPosts: string[] = [];
   page.on("request", (r) => {
@@ -24,7 +24,7 @@ test("quick access diam saat dibuka (tanpa auto-kirim briefing)", async ({ page 
 
 test("suggest mengisi prompt tanpa mengirim", async ({ page }) => {
   await signup(page);
-  await page.goto("/dasbor");
+  await page.goto("/dashboard");
   await page.waitForLoadState("networkidle");
   let streamPosts = 0;
   page.on("request", (r) => {
@@ -51,7 +51,7 @@ test("history sinkron antara /asisten dan quick access", async ({ page }) => {  
   await expect(page.getByText(q).first()).toBeVisible({ timeout: 15000 });
   const threadTitle = (await page.getByTestId("assistant-thread-item").first().textContent())?.trim();
   expect(threadTitle).toBeTruthy();
-  await page.goto("/dasbor");
+  await page.goto("/dashboard");
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: /Buka Asisten Akunio/i }).click();
   await expect(page.getByTestId("assistant-prompt-input")).toBeVisible({ timeout: 15000 });
