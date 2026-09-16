@@ -33,6 +33,7 @@ export async function truncateAll(): Promise<void> {
                 inventory_settings, inventory_items,
                 pos_sale_items, pos_sales, pos_shifts, pos_sale_seq_counters,
                asset_depreciation_lines, asset_disposals, fixed_assets, ast_seq_counters,
+               intangible_amortization_lines, intangible_disposals, intangible_assets, itb_seq_counters,
                accounts, fiscal_periods, memberships, organizations,
               org_profiles, onboarding_messages CASCADE
   `);
