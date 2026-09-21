@@ -4,6 +4,85 @@ import { withOrg } from "@/server/db/repos/with-org";
 import { executeNaraTool } from "@/server/ai/nara-tools";
 import { friendlyToolLabel } from "@/components/ai-elements/tool-labels";
 import { addMessage, getThread } from "@/server/db/repos/chat.repo";
+import {
+  getFunctionCalls,
+  getFunctionResponses,
+  REQUEST_CONFIRMATION_FUNCTION_CALL_NAME,
+} from "@google/adk";
+import type { Content } from "@google/genai";
+import {
+  buildRoutedAdkAgent,
+  getAdkRunner,
+  hasAdkRunner,
+} from "@/server/ai/agents/adk-runner";
+import { organizations } from "@/server/db/schema/org";
+import { eq } from "drizzle-orm";
+import { parseAiPrefs } from "@/lib/ai-prefs";
+
+/** Teks konfirmasi Bahasa Indonesia per-tool (kontrak lama dipertahankan). */
+function buildConfirmationText(toolName: string, data: unknown): string {
+  let confirmationText = `${friendlyToolLabel(toolName)} selesai.`;
+  if (toolName === "post_journal") {
+    const jData = data as { number?: string; memo?: string };
+    confirmationText = `Jurnal transaksi ${jData?.number ?? ""} ("${jData?.memo ?? ""}") berhasil diposting ke buku besar dengan status POSTED.`;
+  } else if (toolName === "create_journal_draft") {
+    const dData = data as { id?: string; memo?: string };
+    confirmationText = `Draft jurnal untuk "${dData?.memo ?? ""}" berhasil dibuat. Silakan tinjau dan posting di menu Jurnal.`;
+  } else if (toolName === "create_invoice") {
+    const iData = data as { invoiceNumber?: string; customerName?: string; totalFormatted?: string };
+    confirmationText = `Faktur #${iData?.invoiceNumber ?? ""} untuk ${iData?.customerName ?? ""} senilai ${iData?.totalFormatted ?? ""} berhasil dibuat.`;
+  } else if (toolName === "update_invoice") {
+    const uData = data as { invoiceNumber?: string; dueDate?: string; status?: string; totalFormatted?: string };
+    confirmationText = `Faktur #${uData?.invoiceNumber ?? ""} berhasil dikoreksi${uData?.dueDate ? ` (jatuh tempo ${uData.dueDate})` : ""}${uData?.totalFormatted ? ` — total ${uData.totalFormatted}` : ""}.`;
+  } else if (toolName === "add_inventory_item") {
+    const iData = data as { code?: string; name?: string; photoWarning?: string };
+    confirmationText = `Barang ${iData?.name ?? ""} (${iData?.code ?? ""}) berhasil didaftarkan ke master persediaan.`;
+    if (iData?.photoWarning) {
+      confirmationText += ` Catatan foto: ${iData.photoWarning} — buka detail barang untuk upload versi ≤500 KB.`;
+    }
+  } else if (toolName === "batch_add_inventory_items") {
+    const bData = data as { insertedCount?: number };
+    confirmationText = `Berhasil mendaftarkan ${bData?.insertedCount ?? 0} barang ke katalog persediaan.`;
+  } else if (toolName === "record_invoice_payment") {
+    const pData = data as { invoiceNumber?: string; amountFormatted?: string };
+    confirmationText = `Pelunasan faktur #${pData?.invoiceNumber ?? ""} sebesar ${pData?.amountFormatted ?? ""} berhasil dicatat.`;
+  } else if (toolName === "post_invoice_to_journal") {
+    const pData = data as { invoiceNumber?: string; journalEntryId?: string };
+    confirmationText = `Faktur #${pData?.invoiceNumber ?? ""} berhasil diposting ke jurnal buku besar.`;
+  } else if (toolName === "auto_match_bank_reconciliation") {
+    const mData = data as { exactMatchesCount?: number; aiSuggestionsCount?: number };
+    confirmationText = `Auto-match rekonsiliasi selesai: ${mData?.exactMatchesCount ?? 0} transaksi otomatis cocok, ${mData?.aiSuggestionsCount ?? 0} saran AI dihasilkan.`;
+  } else if (toolName === "create_account") {
+    const aData = data as { code?: string; name?: string };
+    confirmationText = `Akun ${aData?.code ?? ""} - ${aData?.name ?? ""} berhasil ditambahkan ke bagan akun (COA).`;
+  } else if (toolName === "create_stock_opname") {
+    const oData = data as { number?: string; status?: string; journalNumber?: string | null };
+    confirmationText =
+      oData?.status === "COMPLETED"
+        ? `Stok opname ${oData?.number ?? ""} selesai${oData?.journalNumber ? ` — jurnal penyesuaian ${oData.journalNumber} terposting` : ""}. Persediaan bertambah.`
+        : `Draf opname ${oData?.number ?? ""} dibuat. Tinjau dan sahkan di menu Persediaan agar stok bertambah.`;
+  } else if (toolName === "create_contact" || toolName === "update_contact") {
+    const cData = data as { contact?: { name?: string; type?: string } };
+    confirmationText =
+      toolName === "create_contact"
+        ? `Kontak ${cData?.contact?.name ?? ""} (${cData?.contact?.type ?? ""}) berhasil didaftarkan.`
+        : `Kontak ${cData?.contact?.name ?? ""} berhasil diperbarui.`;
+  } else if (toolName === "reverse_journal") {
+    const rData = data as { reversalNumber?: string; targetNumber?: string };
+    confirmationText = `Jurnal pembalik ${rData?.reversalNumber ?? ""} untuk ${rData?.targetNumber ?? ""} berhasil dibuat.`;
+  } else if (toolName === "close_period" || toolName === "open_period") {
+    const pData = data as { name?: string; status?: string };
+    confirmationText = `Periode akuntansi ${pData?.name ?? ""} sekarang berstatus ${pData?.status ?? ""}.`;
+  }
+  return confirmationText;
+}
+
+function extractSuggestions(data: unknown): string[] {
+  const execData = data as { suggestions?: unknown } | undefined;
+  return Array.isArray(execData?.suggestions)
+    ? (execData.suggestions as unknown[]).filter((s): s is string => typeof s === "string").slice(0, 4)
+    : [];
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +95,7 @@ export async function POST(req: NextRequest) {
       args,
       approved,
       allowAllForSession,
+      invocationId,
     } = body as {
       threadId?: string;
       callId: string;
@@ -23,6 +103,8 @@ export async function POST(req: NextRequest) {
       args: Record<string, unknown>;
       approved: boolean;
       allowAllForSession?: boolean;
+      /** Id functionCall adk_request_confirmation (SSE) — syarat resume runner. */
+      invocationId?: string;
     };
 
     if (!threadId || !toolName) {
@@ -44,7 +126,140 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, status: "rejected" });
     }
 
-    // User approved the action
+    // Jalur ADK resume: teruskan persetujuan sebagai FunctionResponse
+    // adk_request_confirmation ke runner yang mem-pause invokasi tersebut.
+    // Syarat: invocationId dikirim client + sesi ADK masih ada di proses ini
+    // + event konfirmasi cocok. Gagal → fallback eksekusi langsung di bawah.
+    if (typeof invocationId === "string" && invocationId && hasAdkRunner(ctx.orgId, threadId)) {
+      try {
+        const [orgRow] = await withOrg(ctx.orgId, (tx) =>
+          tx.select().from(organizations).where(eq(organizations.id, ctx.orgId)),
+        );
+        const orgSettings = (orgRow?.settings ?? {}) as {
+          aiHitlPolicy?: "smart" | "strict" | "autonomous";
+        };
+        const prefs = parseAiPrefs(orgRow?.settings);
+        const agent = buildRoutedAdkAgent({
+          orgId: ctx.orgId,
+          actorEmail: ctx.userEmail,
+          route: "coordinator",
+          instruction:
+            "Lanjutkan percakapan akuntansi berbahasa Indonesia sebagai Akunio. " +
+            "Selesaikan tindakan yang baru disetujui pengguna, lalu ringkas hasilnya " +
+            "dalam satu-dua kalimat Bahasa Indonesia yang hangat.",
+          model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
+          gate: {
+            prefs,
+            hitlPolicy: orgSettings.aiHitlPolicy ?? "smart",
+            allowAllForSession: Boolean(allowAllForSession),
+          },
+        });
+        const runner = await getAdkRunner({
+          orgId: ctx.orgId,
+          userId: ctx.userEmail,
+          threadId,
+          agent,
+        });
+        const session = await runner.sessionService.getSession({
+          appName: ctx.orgId,
+          userId: ctx.userEmail,
+          sessionId: threadId,
+        });
+        const pendingFound = (session?.events ?? []).some((ev) =>
+          getFunctionCalls(ev).some(
+            (c) => c.id === invocationId && c.name === REQUEST_CONFIRMATION_FUNCTION_CALL_NAME,
+          ),
+        );
+        if (pendingFound) {
+          const resumeMsg: Content = {
+            role: "user",
+            parts: [
+              {
+                functionResponse: {
+                  id: invocationId,
+                  name: REQUEST_CONFIRMATION_FUNCTION_CALL_NAME,
+                  response: { confirmed: true },
+                },
+              },
+            ],
+          };
+          let resumeText = "";
+          let resumeData: unknown = null;
+          let sawToolResponse = false;
+          let resumeError: string | null = null;
+          for await (const event of runner.runAsync({
+            userId: ctx.userEmail,
+            sessionId: threadId,
+            newMessage: resumeMsg,
+          })) {
+            for (const part of event.content?.parts ?? []) {
+              if (typeof part.text === "string" && part.text && part.thought !== true) {
+                resumeText += part.text;
+              }
+            }
+            for (const fr of getFunctionResponses(event)) {
+              if (fr.name === REQUEST_CONFIRMATION_FUNCTION_CALL_NAME) continue;
+              sawToolResponse = true;
+              const payload = (fr.response ?? {}) as Record<string, unknown>;
+              if (payload.status === "SUCCESS") {
+                resumeData = ("data" in payload ? payload.data : null) ?? null;
+              } else if (payload.status === "REJECTED") {
+                resumeError = "REJECTED_BY_USER";
+              } else if (payload.status !== "AWAITING_CONFIRMATION") {
+                resumeError =
+                  typeof payload.message === "string" && payload.message
+                    ? payload.message
+                    : `Tool ${fr.name ?? toolName} gagal.`;
+              }
+            }
+          }
+          if (sawToolResponse && !resumeError) {
+            const confirmationText = resumeText.trim()
+              ? resumeText.trim()
+              : buildConfirmationText(toolName, resumeData);
+            const suggestions = extractSuggestions(resumeData);
+            const fullConfirmationText =
+              suggestions.length > 0
+                ? `${confirmationText} Ketuk salah satu saran di bawah untuk langkah berikutnya.`
+                : confirmationText;
+            const savedMsg = await withOrg(ctx.orgId, (tx) =>
+              addMessage(tx, threadId, "assistant", fullConfirmationText, {
+                toolInvocations: [
+                  { callId, toolName, status: "approved", args, result: resumeData },
+                ],
+              }),
+            );
+            return NextResponse.json({
+              ok: true,
+              status: "approved",
+              allowAllForSession: Boolean(allowAllForSession),
+              message: savedMsg,
+              data: resumeData,
+              suggestions,
+            });
+          }
+          if (sawToolResponse && resumeError && resumeError !== "REJECTED_BY_USER") {
+            return NextResponse.json({ ok: false, error: resumeError }, { status: 400 });
+          }
+          // Tanpa respons tool (atau ditolak) → jatuh ke fallback/kartu lama.
+          if (resumeError === "REJECTED_BY_USER") {
+            await withOrg(ctx.orgId, (tx) =>
+              addMessage(tx, threadId, "assistant", `Baik, ${friendlyToolLabel(toolName)} dibatalkan atas permintaan Anda. Tidak ada perubahan di pembukuan — silakan beri tahu jika ada hal lain yang perlu dibantu.`, {
+                toolInvocations: [{ callId, toolName, status: "rejected", args }],
+              }),
+            );
+            return NextResponse.json({ ok: true, status: "rejected" });
+          }
+        } else {
+          console.warn("resume ADK dilewati: event konfirmasi tak ditemukan, fallback langsung");
+        }
+      } catch (e) {
+        console.warn("resume ADK gagal, fallback eksekusi langsung", e instanceof Error ? e.message : e);
+      }
+    }
+
+    // Kompatibilitas kartu lama (tanpa invocationId) / fallback resume:
+    // eksekusi langsung seperti sebelum migrasi ADK.
     const execution = await executeNaraTool(ctx.orgId, ctx.userEmail, toolName, args);
     if (!execution.success) {
       await withOrg(ctx.orgId, (tx) =>
@@ -56,66 +271,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Success response synthesis
-    let confirmationText = `${friendlyToolLabel(toolName)} selesai.`;
-    if (toolName === "post_journal") {
-      const jData = execution.data as { number?: string; memo?: string };
-      confirmationText = `Jurnal transaksi ${jData?.number ?? ""} ("${jData?.memo ?? ""}") berhasil diposting ke buku besar dengan status POSTED.`;
-    } else if (toolName === "create_journal_draft") {
-      const dData = execution.data as { id?: string; memo?: string };
-      confirmationText = `Draft jurnal untuk "${dData?.memo ?? ""}" berhasil dibuat. Silakan tinjau dan posting di menu Jurnal.`;
-    } else if (toolName === "create_invoice") {
-      const iData = execution.data as { invoiceNumber?: string; customerName?: string; totalFormatted?: string };
-      confirmationText = `Faktur #${iData?.invoiceNumber ?? ""} untuk ${iData?.customerName ?? ""} senilai ${iData?.totalFormatted ?? ""} berhasil dibuat.`;
-    } else if (toolName === "update_invoice") {
-      const uData = execution.data as { invoiceNumber?: string; dueDate?: string; status?: string; totalFormatted?: string };
-      confirmationText = `Faktur #${uData?.invoiceNumber ?? ""} berhasil dikoreksi${uData?.dueDate ? ` (jatuh tempo ${uData.dueDate})` : ""}${uData?.totalFormatted ? ` — total ${uData.totalFormatted}` : ""}.`;
-    } else if (toolName === "add_inventory_item") {
-      const iData = execution.data as { code?: string; name?: string; photoWarning?: string };
-      confirmationText = `Barang ${iData?.name ?? ""} (${iData?.code ?? ""}) berhasil didaftarkan ke master persediaan.`;
-      if (iData?.photoWarning) {
-        confirmationText += ` Catatan foto: ${iData.photoWarning} — buka detail barang untuk upload versi ≤500 KB.`;
-      }
-    } else if (toolName === "batch_add_inventory_items") {
-      const bData = execution.data as { insertedCount?: number };
-      confirmationText = `Berhasil mendaftarkan ${bData?.insertedCount ?? 0} barang ke katalog persediaan.`;
-    } else if (toolName === "record_invoice_payment") {
-      const pData = execution.data as { invoiceNumber?: string; amountFormatted?: string };
-      confirmationText = `Pelunasan faktur #${pData?.invoiceNumber ?? ""} sebesar ${pData?.amountFormatted ?? ""} berhasil dicatat.`;
-    } else if (toolName === "post_invoice_to_journal") {
-      const pData = execution.data as { invoiceNumber?: string; journalEntryId?: string };
-      confirmationText = `Faktur #${pData?.invoiceNumber ?? ""} berhasil diposting ke jurnal buku besar.`;
-    } else if (toolName === "auto_match_bank_reconciliation") {
-      const mData = execution.data as { exactMatchesCount?: number; aiSuggestionsCount?: number };
-      confirmationText = `Auto-match rekonsiliasi selesai: ${mData?.exactMatchesCount ?? 0} transaksi otomatis cocok, ${mData?.aiSuggestionsCount ?? 0} saran AI dihasilkan.`;
-    } else if (toolName === "create_account") {
-      const aData = execution.data as { code?: string; name?: string };
-      confirmationText = `Akun ${aData?.code ?? ""} - ${aData?.name ?? ""} berhasil ditambahkan ke bagan akun (COA).`;
-    } else if (toolName === "create_stock_opname") {
-      const oData = execution.data as { number?: string; status?: string; journalNumber?: string | null };
-      confirmationText =
-        oData?.status === "COMPLETED"
-          ? `Stok opname ${oData?.number ?? ""} selesai${oData?.journalNumber ? ` — jurnal penyesuaian ${oData.journalNumber} terposting` : ""}. Persediaan bertambah.`
-          : `Draf opname ${oData?.number ?? ""} dibuat. Tinjau dan sahkan di menu Persediaan agar stok bertambah.`;
-    } else if (toolName === "create_contact" || toolName === "update_contact") {
-      const cData = execution.data as { contact?: { name?: string; type?: string } };
-      confirmationText =
-        toolName === "create_contact"
-          ? `Kontak ${cData?.contact?.name ?? ""} (${cData?.contact?.type ?? ""}) berhasil didaftarkan.`
-          : `Kontak ${cData?.contact?.name ?? ""} berhasil diperbarui.`;
-    } else if (toolName === "reverse_journal") {
-      const rData = execution.data as { reversalNumber?: string; targetNumber?: string };
-      confirmationText = `Jurnal pembalik ${rData?.reversalNumber ?? ""} untuk ${rData?.targetNumber ?? ""} berhasil dibuat.`;
-    } else if (toolName === "close_period" || toolName === "open_period") {
-      const pData = execution.data as { name?: string; status?: string };
-      confirmationText = `Periode akuntansi ${pData?.name ?? ""} sekarang berstatus ${pData?.status ?? ""}.`;
-    }
+    let confirmationText = buildConfirmationText(toolName, execution.data);
 
     // Saran tindak lanjut dari hasil tool (mis. "Posting ke Jurnal" setelah
     // faktur dibuat): ditempel ke teks tersimpan + diteruskan ke klien.
-    const execData = execution.data as { suggestions?: unknown } | undefined;
-    const suggestions = Array.isArray(execData?.suggestions)
-      ? (execData.suggestions as unknown[]).filter((s): s is string => typeof s === "string").slice(0, 4)
-      : [];
+    const suggestions = extractSuggestions(execution.data);
     if (suggestions.length > 0) {
       confirmationText += " Ketuk salah satu saran di bawah untuk langkah berikutnya.";
     }

@@ -77,9 +77,15 @@ export function buildFunctionTool(
         allowAllForSession: gate.allowAllForSession,
       });
       if (needsApproval) {
-        const confirmation = toolContext?.toolConfirmation;
+        if (!toolContext) {
+          throw new Error(
+            `ToolContext tak tersedia untuk approval '${toolName}'. ` +
+              `Tool mutating wajib dijalankan lewat ADK runner agar requestConfirmation tercatat.`,
+          );
+        }
+        const confirmation = toolContext.toolConfirmation;
         if (!confirmation) {
-          toolContext?.requestConfirmation({
+          toolContext.requestConfirmation({
             hint: `Tool ${toolName} memerlukan persetujuan: ${summarizeArgs(argRecord)}`,
             payload: argRecord,
           });

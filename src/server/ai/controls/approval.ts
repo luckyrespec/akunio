@@ -15,6 +15,26 @@ export function maxMinorFromArgs(toolName: string, args: Record<string, unknown>
       }
       return total;
     }
+    // ported from stream route (legacy estimator)
+    if (toolName === "record_cash_entry" && typeof args.amountText === "string") {
+      return Money.parseIdr(args.amountText).minor;
+    }
+    // ported from stream route (legacy estimator)
+    if (toolName === "create_invoice" && Array.isArray(args.items)) {
+      let total = 0n;
+      for (const it of args.items as Array<Record<string, unknown>>) {
+        const qty = Number(it.quantity ?? 0);
+        const price = Number(it.unitPrice ?? 0);
+        if (Number.isFinite(qty) && Number.isFinite(price)) {
+          total += BigInt(Math.round(qty * price)) * 100n;
+        }
+      }
+      return total;
+    }
+    // ported from stream route (legacy estimator)
+    if (toolName === "record_invoice_payment" && Number.isFinite(Number(args.amount))) {
+      return BigInt(Math.round(Number(args.amount))) * 100n;
+    }
     return null;
   } catch {
     return null;

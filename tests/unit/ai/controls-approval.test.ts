@@ -26,4 +26,20 @@ describe("approval threshold", () => {
   it("safe tool tidak minta approval", () => {
     expect(shouldRequireApproval("get_report", { type: "neraca" }, DEFAULT_AI_PREFS, { hitlPolicy: "smart", allowAllForSession: false })).toBe(false);
   });
+
+  it("estimator port: record_cash_entry dari amountText", () => {
+    expect(maxMinorFromArgs("record_cash_entry", { amountText: "50000" })).toBe(5000000n);
+  });
+
+  it("estimator port: create_invoice dari items qty×unitPrice (legacy)", () => {
+    // ported from stream route (legacy estimator)
+    expect(
+      maxMinorFromArgs("create_invoice", { items: [{ quantity: 2, unitPrice: 50000 }] }),
+    ).toBe(10000000n);
+  });
+
+  it("estimator port: record_invoice_payment dari amount (legacy)", () => {
+    // ported from stream route (legacy estimator)
+    expect(maxMinorFromArgs("record_invoice_payment", { amount: 75000 })).toBe(7500000n);
+  });
 });

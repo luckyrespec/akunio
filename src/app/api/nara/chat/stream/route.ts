@@ -7,18 +7,14 @@ import {
   listMessages,
   checkAssistantQuota,
 } from "@/server/db/repos/chat.repo";
-import { GoogleGenAI } from "@google/genai";
 import {
-  ALL_NARA_TOOLS,
-  SAFE_TOOLS,
-  MUTATING_TOOLS,
-  executeNaraTool,
-} from "@/server/ai/nara-tools";
+  getFunctionResponses,
+  REQUEST_CONFIRMATION_FUNCTION_CALL_NAME,
+} from "@google/adk";
+import type { Content } from "@google/genai";
 import {
-  STORE_INTERACTIONS,
   clearThreadInteractionId,
   isStaleInteractionError,
-  saveThreadInteractionId,
 } from "@/server/ai/interaction-memory";
 import { getDocument } from "@/server/storage/storage";
 import { hybridSearch } from "@/server/db/repos/rag-search";
@@ -39,6 +35,13 @@ import { reportMetaMap } from "@/server/db/repos/accounts.repo";
 import { aggregateFromLines, signed } from "@/core/reports/aggregates";
 import { incomeStatement } from "@/core/reports/statements";
 import { Money } from "@/core/money/money";
+import {
+  buildRoutedAdkAgent,
+  clearAdkRunner,
+  getAdkRunner,
+  routeAdkIntent,
+} from "@/server/ai/agents/adk-runner";
+import { getOrCreateAdkSession, syncTurnToThread } from "@/server/ai/session-bridge";
 
 interface AttachmentMeta {
   id: string;
@@ -46,43 +49,6 @@ interface AttachmentMeta {
   mime: string;
   fileName: string;
   sizeBytes: number;
-}
-
-/** Estimasi nominal aksi (minor) untuk batas persetujuan. null = tak terukur. */
-function maxMinorFromArgs(toolName: string, args: Record<string, unknown>): bigint | null {
-  try {
-    if (toolName === "post_journal" || toolName === "create_journal_draft") {
-      const lines = Array.isArray(args.lines) ? (args.lines as Array<Record<string, unknown>>) : [];
-      let total = 0n;
-      for (const l of lines) {
-        const raw = l.debit ?? l.debitText;
-        if (typeof raw === "string" && raw.trim() !== "" && raw.trim() !== "0") {
-          total += Money.parseIdr(raw).minor;
-        }
-      }
-      return total;
-    }
-    if (toolName === "record_cash_entry" && typeof args.amountText === "string") {
-      return Money.parseIdr(args.amountText).minor;
-    }
-    if (toolName === "create_invoice" && Array.isArray(args.items)) {
-      let total = 0n;
-      for (const it of args.items as Array<Record<string, unknown>>) {
-        const qty = Number(it.quantity ?? 0);
-        const price = Number(it.unitPrice ?? 0);
-        if (Number.isFinite(qty) && Number.isFinite(price)) {
-          total += BigInt(Math.round(qty * price)) * 100n;
-        }
-      }
-      return total;
-    }
-    if (toolName === "record_invoice_payment" && Number.isFinite(Number(args.amount))) {
-      return BigInt(Math.round(Number(args.amount))) * 100n;
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 async function getLiveNumbers(orgId: string): Promise<string> {
@@ -151,14 +117,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Gemini server-side memory: lanjutkan interaksi sebelumnya di thread yang sama.
-    // combinasikan dengan riwayat lokal di bawah sebagai cadangan anti-lupa.
-    let previousInteractionId: string | null = null;
-    try {
-      const tRow = await withOrg(ctx.orgId, (tx) => getThread(tx, ctx.orgId, threadId!));
-      previousInteractionId = (tRow as { geminiInteractionId?: string | null } | null)?.geminiInteractionId ?? null;
-    } catch {}
-
     // Save user message to database
     await withOrg(ctx.orgId, (tx) =>
       addMessage(tx, threadId!, "user", trimmedMsg || "Lampiran dikirim", {
@@ -206,12 +164,11 @@ export async function POST(req: NextRequest) {
       businessType = prof?.businessType ?? null;
     } catch {}
 
-    // Setup Gemini Client
+    // ADK runner memanggil model Gemini langsung — kunci tetap wajib.
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "API Key Gemini belum dikonfigurasi." }, { status: 500 });
     }
-    const ai = new GoogleGenAI({ apiKey });
 
     // Gather contextual data
     let ragContext = "";
@@ -345,7 +302,9 @@ ${prefs.followupEnabled ? "" : "- Saran tindak lanjut MATI: jangan tawarkan lang
       ? `\nKonteks Layar Saat Ini:\n- Halaman aktif: ${pageContext.pathname} (${pageContext.title || "Tanpa Judul"})${pageContext.summary ? `\n- Data/Ringkasan layar: ${pageContext.summary}` : ""}\n(Gunakan konteks ini bila pengguna menanyakan transaksi/data yang tampak di layar mereka saat ini.)\n`
       : "";
 
-    const fullPrompt = `${systemInstruction}
+    // Instruksi ADK: seluruh konteks (angka, COA, RAG, riwayat) seperti prompt
+    // lama; pesan user dikirim sebagai turn message agar sesi ADK utuh.
+    const adkInstruction = `${systemInstruction}
 
 Konteks Angka Terkini:
 ${liveNumbers}
@@ -359,39 +318,33 @@ ${ragContext}
 Riwayat Percakapan:
 ${lastMessages}
 
-Pesan Pengguna:
-${trimmedMsg}
-
 ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen. Ekstrak data transaksi, barang persediaan, atau angka dari gambar/PDF/CSV/Excel terlampir bila relevan.)` : ""}`;
 
-    // Prepare multimodal content parts
-    const contentParts: Array<{ type: string; text?: string; data?: string; mime_type?: string }> = [
-      { type: "text", text: fullPrompt },
+    // Pesan turn ADK (multimodal: teks/CSV inline, biner sebagai inlineData).
+    const msgParts: NonNullable<Content["parts"]> = [
+      { text: trimmedMsg || "Lampiran dikirim" },
     ];
-
     for (const att of attachments) {
       try {
         const buf = await getDocument(att.storageKey);
         if (att.mime === "text/csv" || att.mime === "text/plain") {
-          // Send plain text content directly for high-fidelity extraction
-          contentParts.push({
-            type: "text",
+          msgParts.push({
             text: `\n--- ISI FILE TERLAMPIR (${att.fileName}) ---\n${buf.toString("utf-8")}\n--- AKHIR ISI FILE ---`,
           });
         } else {
-          const type = att.mime === "application/pdf" ? "document" : "image";
-          contentParts.push({
-            type,
-            data: buf.toString("base64"),
-            mime_type: att.mime,
+          msgParts.push({
+            inlineData: { mimeType: att.mime, data: buf.toString("base64") },
           });
         }
       } catch (err) {
         console.warn(`Gagal memuat attachment ${att.storageKey}`, err);
       }
     }
+    const newMessage: Content = { role: "user", parts: msgParts };
 
     const selectedModel = modelPreset === "deep" ? "gemini-3.7-flash" : "gemini-3.5-flash-lite";
+    // Jembatan session: validasi thread + kunci sesi ADK (sessionId = threadId).
+    await getOrCreateAdkSession(ctx.orgId, threadId!);
 
     // Create ReadableStream for SSE
     const stream = new ReadableStream({
@@ -407,171 +360,88 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
         let fullReasoning = "";
         const toolInvocations: Array<{
           callId?: string;
+          invocationId?: string;
           toolName: string;
           status: string;
           args: unknown;
           result?: unknown;
         }> = [];
-
-        interface PendingCall {
-          index: number;
-          callId: string;
-          toolName: string;
-          argumentsJson: string;
-        }
-        const pendingCalls = new Map<number, PendingCall>();
+        // Argumen per functionCall agar tool_call SSE rinci (ADK tak mengulang
+        // args di functionResponse).
+        const callArgs = new Map<string, unknown>();
 
         try {
-          // Server-side memory per thread: store:true + previous_interaction_id.
-          // Jika id basi/kedaluwarsa, ulangi sekali tanpa chaining.
-          let interactionStream: AsyncIterable<{
-            event_type: string;
-            index?: number;
-            delta?: { type: string; text?: string; content?: { text?: string }; arguments?: string };
-            step?: { type: string; name?: string; arguments?: unknown; call_id?: string; id?: string };
-            interaction?: { id?: string };
-          }>;
-          let latestInteractionId: string | null = null;
-          const baseMemory = previousInteractionId
-            ? { store: STORE_INTERACTIONS, previous_interaction_id: previousInteractionId }
-            : { store: STORE_INTERACTIONS };
-          try {
-            interactionStream = (await ai.interactions.create({
-              model: selectedModel,
-              input: [{ type: "user_input", content: contentParts as never }] as never,
-              stream: true,
-              ...baseMemory,
-              tools: ALL_NARA_TOOLS,
-              generation_config: modelPreset === "deep" ? { thinking_summaries: "auto" } : undefined,
-            })) as unknown as typeof interactionStream;
-          } catch (e) {
-            if (previousInteractionId && isStaleInteractionError(e)) {
-              console.warn("previous_interaction_id basi, ulangi tanpa chaining", e);
-              await clearThreadInteractionId(ctx.orgId, threadId!);
-              previousInteractionId = null;
-              interactionStream = (await ai.interactions.create({
-                model: selectedModel,
-                input: [{ type: "user_input", content: contentParts as never }] as never,
-                stream: true,
-                store: STORE_INTERACTIONS,
-                tools: ALL_NARA_TOOLS,
-                generation_config: modelPreset === "deep" ? { thinking_summaries: "auto" } : undefined,
-              })) as unknown as typeof interactionStream;
-            } else {
-              throw e;
-            }
-          }
+          const route = routeAdkIntent(trimmedMsg);
+          const agent = buildRoutedAdkAgent({
+            orgId: ctx.orgId,
+            actorEmail: ctx.userEmail,
+            route,
+            instruction: adkInstruction,
+            model: selectedModel,
+            gate: { prefs, hitlPolicy, allowAllForSession },
+          });
+          let runner = await getAdkRunner({
+            orgId: ctx.orgId,
+            userId: ctx.userEmail,
+            threadId: threadId!,
+            agent,
+          });
 
-          for await (const event of interactionStream as AsyncIterable<{
-            event_type: string;
-            index?: number;
-            delta?: { type: string; text?: string; content?: { text?: string }; arguments?: string };
-            step?: { type: string; name?: string; arguments?: unknown; call_id?: string; id?: string };
-            interaction?: { id?: string };
-          }>) {
-            const idx = event.index ?? 0;
-
-            if (
-              (event.event_type === "interaction.created" || event.event_type === "interaction.completed") &&
-              event.interaction?.id
-            ) {
-              latestInteractionId = event.interaction.id;
-            }
-
-            if (event.event_type === "step.start" && event.step?.type === "function_call") {
-              const call = event.step;
-              const toolName = call.name ?? "";
-              const callId = call.id ?? call.call_id ?? `call_${Date.now()}`;
-              let initialJson = "";
-              if (typeof call.arguments === "string") {
-                initialJson = call.arguments;
-              } else if (call.arguments && Object.keys(call.arguments as object).length > 0) {
-                initialJson = JSON.stringify(call.arguments);
-              }
-              pendingCalls.set(idx, {
-                index: idx,
-                callId,
-                toolName,
-                argumentsJson: initialJson,
-              });
-            } else if (event.event_type === "step.delta" && event.delta) {
-              if (event.delta.type === "arguments_delta" && event.delta.arguments) {
-                const current = pendingCalls.get(idx);
-                if (current) {
-                  current.argumentsJson += event.delta.arguments;
-                }
-              } else if (event.delta.type === "thought_summary" && event.delta.content?.text) {
-                fullReasoning += event.delta.content.text;
-                send({ type: "reasoning", delta: event.delta.content.text });
-              } else if (event.delta.type === "text" && event.delta.text) {
-                fullText += event.delta.text;
-                send({ type: "text", delta: event.delta.text });
-              }
-            } else if (event.event_type === "step.stop") {
-              if (pendingCalls.has(idx)) {
-                const pending = pendingCalls.get(idx)!;
-                pendingCalls.delete(idx);
-
-                let args: Record<string, unknown> = {};
-                try {
-                  args = pending.argumentsJson ? JSON.parse(pending.argumentsJson) : {};
-                } catch (parseErr) {
-                  console.warn("Gagal parse argumentsJson tool call", pending.argumentsJson, parseErr);
-                  args = {};
-                }
-
-                const toolName = pending.toolName;
-                const callId = pending.callId;
-
-                const isSafe = SAFE_TOOLS.has(toolName);
-                const isMutating = MUTATING_TOOLS.has(toolName);
-                // Batas nominal: aksi di atas ambang selalu minta persetujuan,
-                // bahkan dalam mode autonomous / selalu-izinkan. Tak terukur = minta izin.
-                let overThreshold = false;
-                if (prefs.approvalThresholdMinor) {
-                  try {
-                    const limit = BigInt(prefs.approvalThresholdMinor);
-                    const amount = maxMinorFromArgs(toolName, args);
-                    overThreshold = amount === null || amount > limit;
-                  } catch {}
-                }
-                const shouldAutoExecute =
-                  !overThreshold &&
-                  (isSafe || hitlPolicy === "autonomous" || (isMutating && allowAllForSession));
-
-                if (shouldAutoExecute) {
-                  send({ type: "tool_call", tool: toolName, status: "executing", args });
-                  const exec = await executeNaraTool(ctx.orgId, ctx.userEmail, toolName, args);
-                  send({ type: "tool_result", tool: toolName, result: exec.data ?? exec.error });
-                  toolInvocations.push({
-                    callId,
-                    toolName,
-                    status: exec.success ? "auto" : "failed",
-                    args,
-                    result: exec.data ?? exec.error,
-                  });
-
-                  if (exec.success && exec.data && typeof exec.data === "object") {
-                    const dataObj = exec.data as Record<string, unknown>;
-                    if (prefs.followupEnabled && Array.isArray(dataObj.suggestions) && dataObj.suggestions.length > 0) {
-                      send({ type: "suggestions", suggestions: dataObj.suggestions });
-                    }
-                    if (dataObj.batchId && Array.isArray(dataObj.items)) {
-                      send({ type: "queue_update", batchId: dataObj.batchId, items: dataObj.items });
+          // Sesi ADK basi/kedaluwarsa → ulangi sekali tanpa chaining (sesi
+          // segar + thread interaction id dibersihkan), pola lama dipertahankan.
+          let staleRetried = false;
+          for (;;) {
+            try {
+              for await (const event of runner.runAsync({
+                userId: ctx.userEmail,
+                sessionId: threadId!,
+                newMessage,
+              })) {
+                const parts = event.content?.parts ?? [];
+                for (const part of parts) {
+                  if (typeof part.text === "string" && part.text) {
+                    if (part.thought === true) {
+                      fullReasoning += part.text;
+                      send({ type: "reasoning", delta: part.text });
+                    } else {
+                      fullText += part.text;
+                      send({ type: "text", delta: part.text });
                     }
                   }
-                } else {
+                  const fc = part.functionCall;
+                  if (!fc?.name) continue;
+                  if (typeof fc.id === "string" && fc.args !== undefined) {
+                    callArgs.set(fc.id, fc.args);
+                  }
+                  if (fc.name !== REQUEST_CONFIRMATION_FUNCTION_CALL_NAME) continue;
+                  // Event adk_request_confirmation → SSE tool_approval_request
+                  // (kontrak lama untuk NaraHitlApprovalCard).
+                  const cArgs = (fc.args ?? {}) as Record<string, unknown>;
+                  const pinned = (cArgs.originalFunctionCall ?? {}) as {
+                    id?: unknown;
+                    name?: unknown;
+                    args?: unknown;
+                  };
+                  const toolName =
+                    typeof pinned.name === "string" ? pinned.name : "";
+                  const callId =
+                    typeof pinned.id === "string" ? pinned.id : `call_${Date.now()}`;
+                  const rawArgs =
+                    pinned.args !== null && typeof pinned.args === "object"
+                      ? (pinned.args as Record<string, unknown>)
+                      : {};
+
                   // Must request HITL approval from user with COMPLETE args.
                   // Opname: perkaya dengan nama/kode barang agar kartu persetujuan
                   // selalu rinci (bukan JSON mentah / itemId saja).
-                  let approvalArgs: Record<string, unknown> = args;
-                  if (toolName === "create_stock_opname" && Array.isArray(args.items)) {
+                  let approvalArgs: Record<string, unknown> = rawArgs;
+                  if (toolName === "create_stock_opname" && Array.isArray(rawArgs.items)) {
                     try {
                       const allItems = await withOrg(ctx.orgId, (tx) => listInventoryItems(tx, ctx.orgId));
                       const byId = new Map(allItems.map((it) => [it.id, it]));
                       approvalArgs = {
-                        ...args,
-                        itemsDetail: (args.items as Array<Record<string, unknown>>).map((it) => {
+                        ...rawArgs,
+                        itemsDetail: (rawArgs.items as Array<Record<string, unknown>>).map((it) => {
                           const found = byId.get(String(it.itemId ?? ""));
                           return {
                             code: found?.code ?? "?",
@@ -589,9 +459,9 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                   }
                   // Posting jurnal: tandai status periode tanggal transaksi agar
                   // kartu persetujuan bisa memperingatkan bila periode tak OPEN.
-                  if (toolName === "post_journal" && typeof args.dateISO === "string") {
+                  if (toolName === "post_journal" && typeof rawArgs.dateISO === "string") {
                     try {
-                      const dateISO: string = args.dateISO;
+                      const dateISO: string = rawArgs.dateISO;
                       const period = await withOrg(ctx.orgId, (tx) =>
                         findPeriodByDate(tx, ctx.orgId, dateISO.slice(0, 10)),
                       );
@@ -607,12 +477,14 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                   send({
                     type: "tool_approval_request",
                     callId,
+                    invocationId: typeof fc.id === "string" ? fc.id : undefined,
                     toolName,
                     args: approvalArgs,
                     explanation: `Akunio membutuhkan konfirmasi Anda untuk menjalankan '${toolName}'.`,
                   });
                   toolInvocations.push({
                     callId,
+                    invocationId: typeof fc.id === "string" ? fc.id : undefined,
                     toolName,
                     status: "pending_approval",
                     args: approvalArgs,
@@ -626,7 +498,7 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                       pendingMsg = `Berikut draf faktur yang telah saya siapkan:`;
                     } else if (toolName === "create_stock_opname") {
                       pendingMsg =
-                        args.postImmediately !== false
+                        rawArgs.postImmediately !== false
                           ? `Berikut rincian opname yang akan langsung disahkan (stok bertambah):`
                           : `Berikut draf opname untuk ditinjau:`;
                     }
@@ -634,66 +506,69 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
                     send({ type: "text", delta: pendingMsg });
                   }
                 }
+
+                for (const fr of getFunctionResponses(event)) {
+                  if (fr.name === REQUEST_CONFIRMATION_FUNCTION_CALL_NAME) continue;
+                  const payload =
+                    fr.response !== null && typeof fr.response === "object"
+                      ? (fr.response as Record<string, unknown>)
+                      : {};
+                  // AWAITING sudah diwakili kartu tool_approval_request di atas.
+                  if (payload.status === "AWAITING_CONFIRMATION") continue;
+                  const toolName = fr.name ?? "";
+                  const callId =
+                    typeof fr.id === "string" ? fr.id : `call_${Date.now()}`;
+                  const ok = payload.status === "SUCCESS";
+                  const result =
+                    "data" in payload ? payload.data : (payload.message ?? null);
+                  const args = callArgs.get(callId) ?? {};
+                  send({ type: "tool_call", tool: toolName, status: "executing", args });
+                  send({ type: "tool_result", tool: toolName, result });
+                  toolInvocations.push({
+                    callId,
+                    toolName,
+                    status: ok ? "auto" : "failed",
+                    args,
+                    result,
+                  });
+
+                  if (ok && result !== null && typeof result === "object") {
+                    const dataObj = result as Record<string, unknown>;
+                    if (prefs.followupEnabled && Array.isArray(dataObj.suggestions) && dataObj.suggestions.length > 0) {
+                      send({ type: "suggestions", suggestions: dataObj.suggestions });
+                    }
+                    if (dataObj.batchId && Array.isArray(dataObj.items)) {
+                      send({ type: "queue_update", batchId: dataObj.batchId, items: dataObj.items });
+                    }
+                  }
+                }
               }
+              break;
+            } catch (e) {
+              if (!staleRetried && isStaleInteractionError(e)) {
+                console.warn("sesi ADK basi, ulangi tanpa chaining", e);
+                staleRetried = true;
+                await clearThreadInteractionId(ctx.orgId, threadId!);
+                clearAdkRunner(ctx.orgId, threadId!);
+                runner = await getAdkRunner({
+                  orgId: ctx.orgId,
+                  userId: ctx.userEmail,
+                  threadId: threadId!,
+                  agent,
+                });
+                continue;
+              }
+              throw e;
             }
           }
 
-          // If auto-executed tools ran and no full answer was streamed yet,
-          // invoke Gemini synthesis turn to generate a rich, natural explanation of the tool output!
+          // Sintesis akhir kini dihasilkan agen ADK dalam turn yang sama (hasil
+          // tool sudah masuk konteks sebelum teks final). Bila model diam,
+          // pakai kalimat deterministik seperti fallback lama.
           const executedTools = toolInvocations.filter((t) => t.status === "auto");
-          if (executedTools.length > 0) {
-            try {
-              const toolContext = executedTools
-                .map((t) => `Hasil Tool [${t.toolName}]:\n${JSON.stringify(t.result, null, 2)}`)
-                .join("\n\n");
-
-              const synthPrompt = `Anda adalah Akunio, Asisten Akuntansi AI Cerdas.
-Pengguna bertanya: "${trimmedMsg}"
-Hasil eksekusi data di sistem:
-${toolContext}
-
-Konteks Saldo Terkini:
-${liveNumbers}
-
-Tugas:
-1. Berikan penjelasan yang hangat, ramah, dan mengalir santai dalam Bahasa Indonesia berdasarkan hasil data di atas.
-2. Hindari memberi tanda bintang tunggal (*kata*) pada kata biasa. Tuliskan secara wajar atau gunakan **teks tebal** hanya untuk judul poin utama.
-3. Data terstruktur (angka laporan, mutasi, daftar) disajikan sebagai tabel markdown ringkas (maks 4 kolom, nominal Rp), bukan poin berderet. Satu kalimat bacaan sesudahnya, tanpa daftar saran.
-4. Langsung sampaikan informasi intinya secara jelas dan solutif.`;
-
-              const synthStream = await ai.interactions.create({
-                model: selectedModel,
-                input: [{ type: "user_input", content: [{ type: "text", text: synthPrompt }] } as never],
-                stream: true,
-                store: STORE_INTERACTIONS,
-                ...(latestInteractionId || previousInteractionId
-                  ? { previous_interaction_id: latestInteractionId ?? previousInteractionId! }
-                  : {}),
-              });
-
-              for await (const sEvent of synthStream as AsyncIterable<{
-                event_type: string;
-                delta?: { type: string; text?: string };
-                interaction?: { id?: string };
-              }>) {
-                if (sEvent.event_type === "interaction.created" && sEvent.interaction?.id) {
-                  latestInteractionId = sEvent.interaction.id;
-                }
-                if (sEvent.event_type === "step.delta" && sEvent.delta?.type === "text" && sEvent.delta.text) {
-                  fullText += sEvent.delta.text;
-                  send({ type: "text", delta: sEvent.delta.text });
-                }
-                if (sEvent.event_type === "interaction.completed" && sEvent.interaction?.id) {
-                  latestInteractionId = sEvent.interaction.id;
-                }
-              }
-            } catch (sErr) {
-              console.warn("Gagal sintesis teks respons tool", sErr);
-              if (!fullText) {
-                fullText = executedTools.map((t) => `Tindakan ${t.toolName} selesai diproses.`).join("\n");
-                send({ type: "text", delta: fullText });
-              }
-            }
+          if (executedTools.length > 0 && !fullText) {
+            fullText = executedTools.map((t) => `Tindakan ${t.toolName} selesai diproses.`).join("\n");
+            send({ type: "text", delta: fullText });
           }
 
           if (!fullText) {
@@ -701,21 +576,27 @@ Tugas:
             send({ type: "text", delta: fullText });
           }
 
-          // Persist assistant message to database + simpan memory Gemini per thread
-          const assistantMsg = await withOrg(ctx.orgId, (tx) =>
-            addMessage(tx, threadId!, "assistant", fullText || "(Menunggu tindakan)", {
-              reasoning: fullReasoning || undefined,
-              toolInvocations: toolInvocations.length > 0 ? toolInvocations : null,
-              citations: citations.length > 0 ? citations : null,
-            }),
-          );
-          if (latestInteractionId) {
-            await saveThreadInteractionId(ctx.orgId, threadId!, latestInteractionId);
-          }
+          // Persist assistant message to database via session bridge.
+          await syncTurnToThread(ctx.orgId, threadId!, {
+            role: "assistant",
+            content: fullText || "(Menunggu tindakan)",
+            toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
+            citations: citations.length > 0 ? citations : undefined,
+          });
+          let assistantId = `asst-${Date.now()}`;
+          try {
+            const after = await withOrg(ctx.orgId, (tx) => listMessages(tx, threadId!));
+            for (let i = after.length - 1; i >= 0; i -= 1) {
+              if (after[i].role === "assistant") {
+                assistantId = after[i].id;
+                break;
+              }
+            }
+          } catch {}
 
           send({
             type: "done",
-            messageId: assistantMsg.id,
+            messageId: assistantId,
             citations,
             memoryUsed: memoryCount,
           });
