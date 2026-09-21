@@ -42,6 +42,7 @@ import {
   routeAdkIntent,
 } from "@/server/ai/agents/adk-runner";
 import { getOrCreateAdkSession, syncTurnToThread } from "@/server/ai/session-bridge";
+import { buildConfirmationText } from "@/server/ai/confirmation-text";
 
 interface AttachmentMeta {
   id: string;
@@ -564,10 +565,10 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
 
           // Sintesis akhir kini dihasilkan agen ADK dalam turn yang sama (hasil
           // tool sudah masuk konteks sebelum teks final). Bila model diam,
-          // pakai kalimat deterministik seperti fallback lama.
+          // pakai teks konfirmasi per-tool seperti confirm route.
           const executedTools = toolInvocations.filter((t) => t.status === "auto");
           if (executedTools.length > 0 && !fullText) {
-            fullText = executedTools.map((t) => `Tindakan ${t.toolName} selesai diproses.`).join("\n");
+            fullText = executedTools.map((t) => buildConfirmationText(t.toolName, t.result)).join("\n");
             send({ type: "text", delta: fullText });
           }
 
@@ -582,6 +583,7 @@ ${attachments.length > 0 ? `(Pengguna melampirkan ${attachments.length} dokumen.
             content: fullText || "(Menunggu tindakan)",
             toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
             citations: citations.length > 0 ? citations : undefined,
+            reasoning: fullReasoning || undefined,
           });
           let assistantId = `asst-${Date.now()}`;
           try {

@@ -22,4 +22,17 @@ describe("session bridge", () => {
     const msgs = await withOrg(oid, (tx) => listMessages(tx, t.id));
     expect(msgs.length).toBe(2);
   });
+  it("roundtrip reasoning tersimpan dan terbaca kembali", async () => {
+    const { orgId: oid } = await makeOrg("PT Bridge3");
+    const { createThread } = await import("@/server/db/repos/chat.repo");
+    const t = await withOrg(oid, (tx) => createThread(tx, oid, "uji reasoning", "fast"));
+    await syncTurnToThread(oid, t.id, {
+      role: "assistant",
+      content: "hai",
+      reasoning: "menimbang akun kas 1110",
+    });
+    const msgs = await withOrg(oid, (tx) => listMessages(tx, t.id));
+    expect(msgs.length).toBe(1);
+    expect(msgs[0].reasoning).toBe("menimbang akun kas 1110");
+  });
 });

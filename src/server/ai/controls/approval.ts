@@ -55,6 +55,7 @@ export function shouldRequireApproval(
     } catch { return true; }
   }
   if (SAFE_TOOLS.has(toolName)) return false;
+  // Fail-closed yang disengaja: tool tak dikenal minta approval sebelum cek autonomous.
   if (!MUTATING_TOOLS.has(toolName)) return true;
   if (opts.hitlPolicy === "autonomous") return false;
   return !opts.allowAllForSession;

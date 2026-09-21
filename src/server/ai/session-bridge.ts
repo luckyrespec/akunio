@@ -6,6 +6,7 @@ export interface AdkTurn {
   content: string;
   toolInvocations?: unknown;
   citations?: unknown;
+  reasoning?: string;
 }
 
 // ADK session memakai InMemory key `${orgId}:${threadId}` — tanpa
@@ -27,14 +28,16 @@ export async function syncTurnToThread(
   turn: AdkTurn,
 ): Promise<void> {
   await withOrg(orgId, (tx) => {
-    if (turn.toolInvocations !== undefined) {
+    if (
+      turn.toolInvocations !== undefined ||
+      turn.citations !== undefined ||
+      turn.reasoning !== undefined
+    ) {
       return addMessage(tx, threadId, turn.role, turn.content, {
         toolInvocations: turn.toolInvocations,
         citations: turn.citations,
+        reasoning: turn.reasoning,
       });
-    }
-    if (turn.citations !== undefined) {
-      return addMessage(tx, threadId, turn.role, turn.content, turn.citations);
     }
     return addMessage(tx, threadId, turn.role, turn.content);
   });

@@ -7,6 +7,12 @@ import { ANALYST_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDINATOR_INSTRUCTION } f
 /**
  * Helper fase-1 migrasi chat Nara ke ADK Runner (dipakai stream + confirm route).
  *
+ * Keputusan chaining: thread stream memakai sesi ADK (sessionId = threadId),
+ * keluar dari skema chaining `gemini_interaction_id` Interactions API —
+ * tidak ada previous_interaction_id yang diteruskan/di-self-heal di sini.
+ * Jalur non-stream (`nara.ts`, `advisor.ts`) tetap self-heal via stale-retry
+ * (clear + ulangi sekali tanpa chaining).
+ *
  * - Tools dibangun per-request dan org-scoped via buildFunctionTool untuk
  *   union BOOKKEEPING + ANALYST (handler existing sudah withOrg di dalamnya).
  * - Sub-agent awal dipilih via routeIntent; instruksinya digabung dengan
