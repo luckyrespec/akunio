@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireContext } from "@/server/auth/guard";
 import { withOrg } from "@/server/db/repos/with-org";
+import { appendControlAudit } from "@/server/ai/controls/audit";
 import { executeNaraTool } from "@/server/ai/nara-tools";
 import { friendlyToolLabel } from "@/components/ai-elements/tool-labels";
 import { buildConfirmationText } from "@/server/ai/confirmation-text";
@@ -19,6 +20,29 @@ import {
 import { organizations } from "@/server/db/schema/org";
 import { eq } from "drizzle-orm";
 import { parseAiPrefs } from "@/lib/ai-prefs";
+
+/** Audit keputusan approval manusia — fail-silent agar tak menggagalkan respons. */
+async function auditApprovalDecision(
+  orgId: string,
+  action: "ADK_APPROVAL_GRANTED" | "ADK_APPROVAL_REJECTED" | "ADK_APPROVAL_FAILED",
+  callId: string,
+  toolName: string,
+  threadId: string,
+): Promise<void> {
+  try {
+    await withOrg(orgId, (tx) =>
+      appendControlAudit(tx, {
+        orgId,
+        action,
+        subjectType: "nara_tool",
+        subjectId: callId,
+        data: { toolName, threadId },
+      }),
+    );
+  } catch (e) {
+    console.warn("audit approval gagal (fail-silent)", e instanceof Error ? e.message : e);
+  }
+}
 
 /** Teks konfirmasi Bahasa Indonesia per-tool → confirmation-text.ts (dipakai confirm + stream fallback). */
 function extractSuggestions(data: unknown): string[] {
@@ -67,6 +91,7 @@ export async function POST(req: NextRequest) {
           toolInvocations: [{ callId, toolName, status: "rejected", args }],
         }),
       );
+      await auditApprovalDecision(ctx.orgId, "ADK_APPROVAL_REJECTED", callId, toolName, threadId);
       return NextResponse.json({ ok: true, status: "rejected" });
     }
 
@@ -173,6 +198,7 @@ export async function POST(req: NextRequest) {
                 ],
               }),
             );
+            await auditApprovalDecision(ctx.orgId, "ADK_APPROVAL_GRANTED", callId, toolName, threadId);
             return NextResponse.json({
               ok: true,
               status: "approved",
@@ -183,6 +209,7 @@ export async function POST(req: NextRequest) {
             });
           }
           if (sawToolResponse && resumeError && resumeError !== "REJECTED_BY_USER") {
+            await auditApprovalDecision(ctx.orgId, "ADK_APPROVAL_FAILED", callId, toolName, threadId);
             return NextResponse.json({ ok: false, error: resumeError }, { status: 400 });
           }
           // Tanpa respons tool (atau ditolak) → jatuh ke fallback/kartu lama.
@@ -192,6 +219,7 @@ export async function POST(req: NextRequest) {
                 toolInvocations: [{ callId, toolName, status: "rejected", args }],
               }),
             );
+            await auditApprovalDecision(ctx.orgId, "ADK_APPROVAL_REJECTED", callId, toolName, threadId);
             return NextResponse.json({ ok: true, status: "rejected" });
           }
         } else {
@@ -211,6 +239,7 @@ export async function POST(req: NextRequest) {
           toolInvocations: [{ callId, toolName, status: "failed", args, error: execution.error }],
         }),
       );
+      await auditApprovalDecision(ctx.orgId, "ADK_APPROVAL_FAILED", callId, toolName, threadId);
       return NextResponse.json({ ok: false, error: execution.error }, { status: 400 });
     }
 
@@ -237,6 +266,7 @@ export async function POST(req: NextRequest) {
         ],
       }),
     );
+    await auditApprovalDecision(ctx.orgId, "ADK_APPROVAL_GRANTED", callId, toolName, threadId);
 
     return NextResponse.json({
       ok: true,

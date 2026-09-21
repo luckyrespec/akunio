@@ -1,7 +1,7 @@
-import { InMemoryRunner, LlmAgent, Runner } from "@google/adk";
+import { InMemoryRunner, LlmAgent, Runner, type BaseAgent, type RoutedAgent } from "@google/adk";
 import { buildFunctionTool, type AdkToolGate } from "./adk-tools";
 import { accountantCoordinator, analystAgent, bookkeepingAgent } from "./definitions";
-import { routeIntent, type AccountantRoute } from "./router";
+import { buildAccountantRouter, routeIntent, type AccountantRoute } from "./router";
 import { ANALYST_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDINATOR_INSTRUCTION } from "./split";
 
 /**
@@ -17,6 +17,9 @@ import { ANALYST_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDINATOR_INSTRUCTION } f
  *   union BOOKKEEPING + ANALYST (handler existing sudah withOrg di dalamnya).
  * - Sub-agent awal dipilih via routeIntent; instruksinya digabung dengan
  *   konteks penuh route (persona + COA + RAG + riwayat) agar perilaku stabil.
+ * - Root agent adalah RoutedAgent `accountant_router` (router → coordinator);
+ *   slot coordinator memegang agen routed tersebut sehingga perilaku identik,
+ *   slot spesialis dibangun per-request agar kontrak routing + failover live.
  * - Session ADK: sessionId = threadId chat. Session service di-cache per
  *   (orgId, threadId) di memori proses agar FunctionResponse resume di
  *   confirm route menemukan sesi yang ter-pause. Restart server = sesi
@@ -38,24 +41,41 @@ export interface RoutedAdkAgentInput {
   gate: AdkToolGate;
 }
 
-/** Bangun LlmAgent per-request: instruksi routed + FunctionTools org-scoped. */
-export function buildRoutedAdkAgent(input: RoutedAdkAgentInput): LlmAgent {
+/** Bangun satu LlmAgent per-request per-route: instruksi + FunctionTools org-scoped. */
+function buildSubAgent(route: AccountantRoute, input: RoutedAdkAgentInput): LlmAgent {
   const tools = adkToolNames().map((name) =>
     buildFunctionTool(input.orgId, input.actorEmail, name, () => input.gate),
   );
   const base =
-    input.route === "bookkeeping"
+    route === "bookkeeping"
       ? bookkeepingAgent
-      : input.route === "analyst"
+      : route === "analyst"
         ? analystAgent
         : accountantCoordinator;
   const baseInstruction =
     typeof base.instruction === "string" ? base.instruction : COORDINATOR_INSTRUCTION;
   return new LlmAgent({
-    name: `nara_${input.route}`,
+    name: `nara_${route}`,
     model: input.model,
     instruction: `${baseInstruction}\n\n${input.instruction}`,
     tools,
+  });
+}
+
+/**
+ * Root agent per-request: RoutedAgent `accountant_router`.
+ *
+ * Slot `coordinator` diisi agen routed hari ini (`nara_<route>`: instruksi
+ * base+konteks + union tools, konstruksi identik sebelum wiring) sehingga
+ * perilaku sama persis — router selalu memilih coordinator, pre-route
+ * deterministik tetap lewat `routeIntent` di route. Slot bookkeeping/analyst
+ * dibangun per-request agar kontrak routing + failover framework live.
+ */
+export function buildRoutedAdkAgent(input: RoutedAdkAgentInput): RoutedAgent {
+  return buildAccountantRouter({
+    bookkeeping: buildSubAgent("bookkeeping", input),
+    analyst: buildSubAgent("analyst", input),
+    coordinator: buildSubAgent(input.route, input),
   });
 }
 
@@ -77,7 +97,7 @@ export async function getAdkRunner(input: {
   orgId: string;
   userId: string;
   threadId: string;
-  agent: LlmAgent;
+  agent: BaseAgent;
 }): Promise<Runner> {
   const key = adkSessionKey(input.orgId, input.threadId);
   const cached = sessionServices.get(key);
