@@ -9,6 +9,7 @@ import { inventoryToolDefs, inventoryHandlers } from "./tools/inventory.tools";
 import { contactsToolDefs, contactsHandlers } from "./tools/contacts.tools";
 import { subsidiaryToolDefs, subsidiaryHandlers } from "./tools/subsidiary.tools";
 import { cashBankToolDefs, cashBankHandlers } from "./tools/cash-bank.tools";
+import { accountingValidateToolDefs, accountingValidateHandlers } from "./tools/accounting-validate.tools";
 import type { ToolDefinition, ToolHandler } from "./tools/types";
 
 export interface NaraToolEntry {
@@ -57,6 +58,11 @@ export const SAFE_TOOLS = new Set<string>([
   "get_invoice_detail",
   "list_stock_opnames",
   "list_fixed_assets",
+  "calculate_tax",
+  "validate_journal_entry",
+  "check_period",
+  "detect_duplicate_invoice",
+  "calculate_variance",
 ]);
 
 export const MUTATING_TOOLS = new Set<string>([
@@ -98,6 +104,7 @@ export const TOOL_REGISTRY: Record<string, NaraToolEntry> = (() => {
     ...toEntries(contactsToolDefs, contactsHandlers),
     ...toEntries(subsidiaryToolDefs, subsidiaryHandlers),
     ...toEntries(cashBankToolDefs, cashBankHandlers),
+    ...toEntries(accountingValidateToolDefs, accountingValidateHandlers),
   ];
   const seen = new Set<string>();
   for (const [name] of pairs) {
