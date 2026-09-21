@@ -1,8 +1,8 @@
 import { InMemoryRunner, LlmAgent, Runner, type BaseAgent, type RoutedAgent } from "@google/adk";
 import { buildFunctionTool, type AdkToolGate } from "./adk-tools";
-import { accountantCoordinator, analystAgent, bookkeepingAgent } from "./definitions";
+import { accountantCoordinator, analystAgent, bookkeepingAgent, invoiceAgent } from "./definitions";
 import { buildAccountantRouter, routeIntent, type AccountantRoute } from "./router";
-import { ANALYST_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDINATOR_INSTRUCTION } from "./split";
+import { ANALYST_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDINATOR_INSTRUCTION, INVOICE_TOOL_NAMES } from "./split";
 
 /**
  * Helper fase-1 migrasi chat Nara ke ADK Runner (dipakai stream + confirm route).
@@ -14,7 +14,7 @@ import { ANALYST_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDINATOR_INSTRUCTION } f
  * (clear + ulangi sekali tanpa chaining).
  *
  * - Tools dibangun per-request dan org-scoped via buildFunctionTool untuk
- *   union BOOKKEEPING + ANALYST (handler existing sudah withOrg di dalamnya).
+ *   union BOOKKEEPING + ANALYST + INVOICE (handler existing sudah withOrg di dalamnya).
  * - Sub-agent awal dipilih via routeIntent; instruksinya digabung dengan
  *   konteks penuh route (persona + COA + RAG + riwayat) agar perilaku stabil.
  * - Root agent adalah RoutedAgent `accountant_router` (router → coordinator);
@@ -28,7 +28,7 @@ import { ANALYST_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDINATOR_INSTRUCTION } f
 
 /** Union nama tool yang dipasang ke agen per-request (dedupe). */
 export function adkToolNames(): string[] {
-  return [...new Set([...BOOKKEEPING_TOOL_NAMES, ...ANALYST_TOOL_NAMES])];
+  return [...new Set([...BOOKKEEPING_TOOL_NAMES, ...ANALYST_TOOL_NAMES, ...INVOICE_TOOL_NAMES])];
 }
 
 export interface RoutedAdkAgentInput {
@@ -43,7 +43,10 @@ export interface RoutedAdkAgentInput {
 
 /** Bangun satu LlmAgent per-request per-route: instruksi + FunctionTools org-scoped. */
 function buildSubAgent(route: AccountantRoute, input: RoutedAdkAgentInput): LlmAgent {
-  const tools = adkToolNames().map((name) =>
+  // Slot invoice BILL-only: hanya tool intake read-only (INVOICE_TOOL_NAMES).
+  // Slot lain memakai union penuh agar perilaku existing tak berubah.
+  const names = route === "invoice" ? INVOICE_TOOL_NAMES : adkToolNames();
+  const tools = names.map((name) =>
     buildFunctionTool(input.orgId, input.actorEmail, name, () => input.gate),
   );
   const base =
@@ -51,7 +54,9 @@ function buildSubAgent(route: AccountantRoute, input: RoutedAdkAgentInput): LlmA
       ? bookkeepingAgent
       : route === "analyst"
         ? analystAgent
-        : accountantCoordinator;
+        : route === "invoice"
+          ? invoiceAgent
+          : accountantCoordinator;
   const baseInstruction =
     typeof base.instruction === "string" ? base.instruction : COORDINATOR_INSTRUCTION;
   return new LlmAgent({
@@ -75,6 +80,7 @@ export function buildRoutedAdkAgent(input: RoutedAdkAgentInput): RoutedAgent {
   return buildAccountantRouter({
     bookkeeping: buildSubAgent("bookkeeping", input),
     analyst: buildSubAgent("analyst", input),
+    invoice: buildSubAgent("invoice", input),
     coordinator: buildSubAgent(input.route, input),
   });
 }

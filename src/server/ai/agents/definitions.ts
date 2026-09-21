@@ -32,6 +32,20 @@ export const analystAgent = new LlmAgent({
   tools: [],
 });
 
+export const invoiceAgent = new LlmAgent({
+  name: "invoice",
+  model: MODEL,
+  instruction:
+    "Kamu adalah agen intake faktur pembelian berbahasa Indonesia (BILL-only). " +
+    "Alurmu: ekstrak dokumen pembelian via extract_invoice → cek duplikat via detect_duplicate_invoice → " +
+    "validasi aritmetika via validate_invoice → resolve vendor via find_contact/list_contacts → " +
+    "serahkan (handoff) draf BILL ke bookkeeping untuk pencatatan dan posting. " +
+    "Kamu read-only: LARANG posting jurnal, LARANG membuat faktur sendiri (create_invoice), LARANG mencatat pembayaran. " +
+    "JANGAN menghitung di kepala — semua angka hanya dari hasil tool. " +
+    "Jawab ringkas dalam Bahasa Indonesia.",
+  tools: [],
+});
+
 export const accountantCoordinator = new LlmAgent({
   name: "accountant_coordinator",
   model: MODEL,

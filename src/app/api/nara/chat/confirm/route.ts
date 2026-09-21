@@ -20,6 +20,7 @@ import {
 import { organizations } from "@/server/db/schema/org";
 import { eq } from "drizzle-orm";
 import { parseAiPrefs } from "@/lib/ai-prefs";
+import { INVOICE_TOOL_NAMES } from "@/server/ai/agents/split";
 
 /** Audit keputusan approval manusia — fail-silent agar tak menggagalkan respons. */
 async function auditApprovalDecision(
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
         const agent = buildRoutedAdkAgent({
           orgId: ctx.orgId,
           actorEmail: ctx.userEmail,
-          route: "coordinator",
+          route: INVOICE_TOOL_NAMES.includes(toolName) ? "invoice" : "coordinator",
           instruction:
             "Lanjutkan percakapan akuntansi berbahasa Indonesia sebagai Akunio. " +
             "Selesaikan tindakan yang baru disetujui pengguna, lalu ringkas hasilnya " +

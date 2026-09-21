@@ -2,13 +2,16 @@ import { describe, it, expect } from "vitest";
 import { LlmAgent, isRoutedAgent } from "@google/adk";
 import { routeIntent, buildAccountantRouter } from "@/server/ai/agents/router";
 import { buildRoutedAdkAgent } from "@/server/ai/agents/adk-runner";
-import { bookkeepingAgent, analystAgent, accountantCoordinator } from "@/server/ai/agents/definitions";
+import { bookkeepingAgent, analystAgent, accountantCoordinator, invoiceAgent } from "@/server/ai/agents/definitions";
 import { DEFAULT_AI_PREFS } from "@/lib/ai-prefs";
 
 describe("routeIntent", () => {
-  it("catat/posting/draft/faktur/kas → bookkeeping", () => {
+  it("catat/bayar/kas → bookkeeping", () => {
     expect(routeIntent("catat bayar sewa 5jt")).toBe("bookkeeping");
-    expect(routeIntent("buatkan faktur untuk PT ABC")).toBe("bookkeeping");
+  });
+  it("faktur/invoice/upload/struk/nota → invoice", () => {
+    expect(routeIntent("buatkan faktur untuk PT ABC")).toBe("invoice");
+    expect(routeIntent("upload invoice PT ABC")).toBe("invoice");
   });
   it("laba/rugi/laporan/kenapa turun → analyst", () => {
     expect(routeIntent("kenapa laba bulan ini turun?")).toBe("analyst");
@@ -26,6 +29,7 @@ describe("buildAccountantRouter", () => {
     const router = buildAccountantRouter({
       bookkeeping: bookkeepingAgent,
       analyst: analystAgent,
+      invoice: invoiceAgent,
       coordinator: accountantCoordinator,
     });
     expect(router.name).toBe("accountant_router");

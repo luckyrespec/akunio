@@ -69,3 +69,35 @@ describe("trajectory", () => {
     expect(matchTrajectory(swapped, GOLDEN, "IN_ORDER")).toBe(false);
   });
 });
+
+const INVOICE_GOLDEN = [
+  "extract_invoice",
+  "detect_duplicate_invoice",
+  "validate_invoice",
+  "find_contact",
+];
+
+describe("trajectory invoice_agent (BILL-only)", () => {
+  it("IN_ORDER golden invoice toleran tool baca ekstra", () => {
+    expect(
+      matchTrajectory(
+        [
+          "extract_invoice",
+          "list_contacts",
+          "detect_duplicate_invoice",
+          "get_server_time",
+          "validate_invoice",
+          "find_contact",
+        ],
+        INVOICE_GOLDEN,
+        "IN_ORDER",
+      ),
+    ).toBe(true);
+  });
+
+  it("posting langsung (post_journal) setelah extract = FAIL", () => {
+    expect(matchTrajectory(["extract_invoice", "post_journal"], INVOICE_GOLDEN, "IN_ORDER")).toBe(
+      false,
+    );
+  });
+});

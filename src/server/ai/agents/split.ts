@@ -46,7 +46,20 @@ export const ANALYST_TOOL_NAMES: string[] = [
 export const COORDINATOR_INSTRUCTION: string =
   "Kamu adalah koordinator akuntansi berbahasa Indonesia. " +
   "Pahami intent pengguna lalu delegasikan: tugas pencatatan (jurnal, faktur, kas) ke bookkeeping, " +
-  "tugas laporan dan analisis (neraca, laba rugi, varians, tren, piutang/utang) ke analyst. " +
+  "tugas laporan dan analisis (neraca, laba rugi, varians, tren, piutang/utang) ke analyst, " +
+  "tugas dokumen pembelian / tagihan vendor (unggah faktur, struk, nota, kwitansi) ke invoice. " +
   "Review hasil tool sebelum menjawab dan jawab ringkas dalam Bahasa Indonesia. " +
   "JANGAN menghitung di kepala — semua angka hanya dari hasil tool. " +
   "JANGAN posting langsung — setiap mutasi wajib lewat tool dan menunggu approval manusia.";
+
+/** Toolset invoice_agent (BILL-only, read-only): ekstraksi + validasi intake
+ *  faktur pembelian, dedup nomor, resolve vendor, dan jam server.
+ *  KONTRAK: nol tool MUTATING — reviewer memverifikasi via MUTATING_TOOLS. */
+export const INVOICE_TOOL_NAMES: string[] = [
+  "extract_invoice",
+  "validate_invoice",
+  "detect_duplicate_invoice",
+  "find_contact",
+  "list_contacts",
+  "get_server_time",
+];
