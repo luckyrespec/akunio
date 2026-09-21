@@ -26,6 +26,24 @@ describe("invoice extract (mock + parse)", () => {
     expect(parsed.lines[0].unitPriceMinor).toBe(5000000000n);
   });
 
+  it("parse menolak unitPrice 3-desimal (1000.005 → throw, fail-closed)", () => {
+    expect(() =>
+      parseExtractedInvoice({
+        ...RAW_100JT,
+        lines: [{ description: "Kopi susu 1kg", quantity: 2, unitPrice: 1000.005 }],
+      }),
+    ).toThrow(/NILAI_DESIMAL_TIDAK_VALID.*unitPrice/);
+  });
+
+  it("parse menolak quantity negatif", () => {
+    expect(() =>
+      parseExtractedInvoice({
+        ...RAW_100JT,
+        lines: [{ description: "Kopi susu 1kg", quantity: -1, unitPrice: 50000000 }],
+      }),
+    ).toThrow(/QUANTITY_TIDAK_VALID.*quantity/);
+  });
+
   it("mock deterministik tanpa API key: PT ABC, 1 baris, 100jt/11jt/111jt", async () => {
     const prevKey = process.env.GEMINI_API_KEY;
     const prevMock = process.env.AI_MOCK;

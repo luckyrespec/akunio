@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
+import { parseDecimalToMinor } from "@/core/money/money";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
@@ -40,20 +41,45 @@ export interface ExtractedInvoiceData {
   totalMinor: bigint;
 }
 
+function toMinorOrThrow(value: number, field: string): bigint {
+  const minor = parseDecimalToMinor(String(value));
+  if (minor === null) {
+    throw new Error(
+      `NILAI_DESIMAL_TIDAK_VALID: kolom "${field}" bernilai "${String(value)}" tidak valid — wajib angka Rupiah positif dengan maksimal 2 digit desimal.`,
+    );
+  }
+  return minor;
+}
+
+/** Pajak nol eksplisit (0/0.00) sah untuk faktur non-PPN — jangan lewatkan
+ *  angka nol lewat parseDecimalToMinor (helper itu menolak nol).
+ *  Preseden: parseTaxMinor di tools/invoice-intake.tools.ts. */
+function toTaxMinorOrThrow(value: number): bigint {
+  if (value === 0) return 0n;
+  return toMinorOrThrow(value, "tax");
+}
+
 export function parseExtractedInvoice(raw: unknown): ExtractedInvoiceData {
   const parsed = InvoiceExtractSchema.parse(raw);
   return {
     vendor: parsed.vendor,
     invoiceNumber: parsed.invoiceNumber,
     dateISO: parsed.dateISO,
-    lines: parsed.lines.map((l) => ({
-      description: l.description,
-      quantity: l.quantity,
-      unitPriceMinor: BigInt(Math.round(l.unitPrice * 100)),
-    })),
-    subtotalMinor: BigInt(Math.round(parsed.subtotal * 100)),
-    taxMinor: BigInt(Math.round(parsed.tax * 100)),
-    totalMinor: BigInt(Math.round(parsed.total * 100)),
+    lines: parsed.lines.map((l, i) => {
+      if (!Number.isFinite(l.quantity) || l.quantity < 0) {
+        throw new Error(
+          `QUANTITY_TIDAK_VALID: kolom "quantity" pada baris ke-${i + 1} bernilai "${String(l.quantity)}" tidak valid — wajib angka terhingga dan tidak negatif.`,
+        );
+      }
+      return {
+        description: l.description,
+        quantity: l.quantity,
+        unitPriceMinor: toMinorOrThrow(l.unitPrice, `lines[${i}].unitPrice`),
+      };
+    }),
+    subtotalMinor: toMinorOrThrow(parsed.subtotal, "subtotal"),
+    taxMinor: toTaxMinorOrThrow(parsed.tax),
+    totalMinor: toMinorOrThrow(parsed.total, "total"),
   };
 }
 
