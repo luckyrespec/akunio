@@ -14,7 +14,7 @@ import { ANALYST_TOOL_NAMES, BANKREC_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDIN
  * (clear + ulangi sekali tanpa chaining).
  *
  * - Tools dibangun per-request dan org-scoped via buildFunctionTool untuk
- *   union BOOKKEEPING + ANALYST + INVOICE (handler existing sudah withOrg di dalamnya).
+ *   union BOOKKEEPING + ANALYST + INVOICE + BANKREC (handler existing sudah withOrg di dalamnya).
  * - Sub-agent awal dipilih via routeIntent; instruksinya digabung dengan
  *   konteks penuh route (persona + COA + RAG + riwayat) agar perilaku stabil.
  * - Root agent adalah RoutedAgent `accountant_router` (router → coordinator);
@@ -28,7 +28,7 @@ import { ANALYST_TOOL_NAMES, BANKREC_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDIN
 
 /** Union nama tool yang dipasang ke agen per-request (dedupe). */
 export function adkToolNames(): string[] {
-  return [...new Set([...BOOKKEEPING_TOOL_NAMES, ...ANALYST_TOOL_NAMES, ...INVOICE_TOOL_NAMES])];
+  return [...new Set([...BOOKKEEPING_TOOL_NAMES, ...ANALYST_TOOL_NAMES, ...INVOICE_TOOL_NAMES, ...BANKREC_TOOL_NAMES])];
 }
 
 export interface RoutedAdkAgentInput {

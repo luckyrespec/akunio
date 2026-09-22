@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { BOOKKEEPING_TOOL_NAMES, ANALYST_TOOL_NAMES } from "@/server/ai/agents/split";
+import { BOOKKEEPING_TOOL_NAMES, ANALYST_TOOL_NAMES, BANKREC_TOOL_NAMES } from "@/server/ai/agents/split";
+import { adkToolNames } from "@/server/ai/agents/adk-runner";
 import { MUTATING_TOOLS, TOOL_REGISTRY } from "@/server/ai/nara-tools";
 
 describe("agent split", () => {
@@ -12,6 +13,15 @@ describe("agent split", () => {
     for (const n of ["post_journal", "create_journal_draft", "reverse_journal", "create_invoice", "record_cash_entry"]) {
       expect(BOOKKEEPING_TOOL_NAMES).toContain(n);
     }
+  });
+
+  it("union adkToolNames memuat BANKREC (coordinator-route bisa pakai tool bankrec)", () => {
+    const union = adkToolNames();
+    for (const n of BANKREC_TOOL_NAMES) {
+      expect(union).toContain(n);
+    }
+    expect(union).toContain("get_bank_reconciliation_status");
+    expect(union).toContain("find_unmatched");
   });
 
   it("semua nama ada di registry", () => {
