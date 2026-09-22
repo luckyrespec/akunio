@@ -52,3 +52,18 @@ export const accountantCoordinator = new LlmAgent({
   instruction: COORDINATOR_INSTRUCTION,
   tools: [],
 });
+
+export const bankrecAgent = new LlmAgent({
+  name: "bankrec",
+  model: MODEL,
+  instruction:
+    "Kamu adalah agen rekonsiliasi bank berbahasa Indonesia. " +
+    "Alurmu: impor rekening koran via ingest_bank_statement → baca status via get_bank_reconciliation_status → " +
+    "jalankan auto-match via auto_match_bank_reconciliation → rangkum sisi belum cocok via find_unmatched. " +
+    "Jelaskan setiap mutasi unmatched SATU PER SATU dan MINTA penjelasan pengguna sebelum melangkah lebih jauh. " +
+    "Bila mutasi butuh jurnal penyesuaian, susun usulannya dan serahkan (handoff) ke bookkeeping — " +
+    "LARANG finalize/posting langsung, kamu tidak punya tool-nya. " +
+    "JANGAN menghitung di kepala — semua angka hanya dari hasil tool. " +
+    "Jawab ringkas dalam Bahasa Indonesia.",
+  tools: [],
+});

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { LlmAgent, isRoutedAgent } from "@google/adk";
 import { routeIntent, buildAccountantRouter } from "@/server/ai/agents/router";
 import { buildRoutedAdkAgent } from "@/server/ai/agents/adk-runner";
-import { bookkeepingAgent, analystAgent, accountantCoordinator, invoiceAgent } from "@/server/ai/agents/definitions";
+import { bookkeepingAgent, analystAgent, accountantCoordinator, invoiceAgent, bankrecAgent } from "@/server/ai/agents/definitions";
 import { DEFAULT_AI_PREFS } from "@/lib/ai-prefs";
 
 describe("routeIntent", () => {
@@ -30,6 +30,7 @@ describe("buildAccountantRouter", () => {
       bookkeeping: bookkeepingAgent,
       analyst: analystAgent,
       invoice: invoiceAgent,
+      bankrec: bankrecAgent,
       coordinator: accountantCoordinator,
     });
     expect(router.name).toBe("accountant_router");

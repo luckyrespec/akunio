@@ -101,3 +101,34 @@ describe("trajectory invoice_agent (BILL-only)", () => {
     );
   });
 });
+
+const BANKREC_GOLDEN = [
+  "ingest_bank_statement",
+  "get_bank_reconciliation_status",
+  "auto_match_bank_reconciliation",
+  "find_unmatched",
+];
+
+describe("trajectory bankrec_agent (ingest+match+suggest)", () => {
+  // Golden terpenuhi berurutan + agen bankrec haram posting langsung.
+  function matchBankrec(actual: string[]): boolean {
+    return matchTrajectory(actual, BANKREC_GOLDEN, "IN_ORDER") && !actual.includes("post_journal");
+  }
+
+  it("IN_ORDER golden bankrec toleran tool baca tambahan", () => {
+    expect(
+      matchBankrec([
+        "ingest_bank_statement",
+        "get_bank_transactions",
+        "get_bank_reconciliation_status",
+        "get_book_transactions",
+        "auto_match_bank_reconciliation",
+        "find_unmatched",
+      ]),
+    ).toBe(true);
+  });
+
+  it("post_journal setelah find_unmatched = FAIL", () => {
+    expect(matchBankrec([...BANKREC_GOLDEN, "post_journal"])).toBe(false);
+  });
+});

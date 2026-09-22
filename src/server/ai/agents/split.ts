@@ -47,7 +47,8 @@ export const COORDINATOR_INSTRUCTION: string =
   "Kamu adalah koordinator akuntansi berbahasa Indonesia. " +
   "Pahami intent pengguna lalu delegasikan: tugas pencatatan (jurnal, faktur, kas) ke bookkeeping, " +
   "tugas laporan dan analisis (neraca, laba rugi, varians, tren, piutang/utang) ke analyst, " +
-  "tugas dokumen pembelian / tagihan vendor (unggah faktur, struk, nota, kwitansi) ke invoice. " +
+  "tugas dokumen pembelian / tagihan vendor (unggah faktur, struk, nota, kwitansi) ke invoice, " +
+  "tugas rekonsiliasi bank (rekening koran, mutasi bank, selisih bank, cocokkan bank) ke bankrec. " +
   "Review hasil tool sebelum menjawab dan jawab ringkas dalam Bahasa Indonesia. " +
   "JANGAN menghitung di kepala — semua angka hanya dari hasil tool. " +
   "JANGAN posting langsung — setiap mutasi wajib lewat tool dan menunggu approval manusia.";
@@ -61,5 +62,19 @@ export const INVOICE_TOOL_NAMES: string[] = [
   "detect_duplicate_invoice",
   "find_contact",
   "list_contacts",
+  "get_server_time",
+];
+
+/** Toolset bankrec_agent: ingest rekening koran → match → jelaskan unmatched.
+ *  KONTRAK: tanpa tool jurnal/posting/finalize — usulan jurnal lewat handoff
+ *  bookkeeping, finalisasi tetap aksi manusia. get_bank_reconciliation_status
+ *  overlap read-only dengan ANALYST. */
+export const BANKREC_TOOL_NAMES: string[] = [
+  "ingest_bank_statement",
+  "get_bank_transactions",
+  "get_book_transactions",
+  "find_unmatched",
+  "auto_match_bank_reconciliation",
+  "get_bank_reconciliation_status",
   "get_server_time",
 ];

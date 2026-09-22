@@ -1,8 +1,8 @@
 import { InMemoryRunner, LlmAgent, Runner, type BaseAgent, type RoutedAgent } from "@google/adk";
 import { buildFunctionTool, type AdkToolGate } from "./adk-tools";
-import { accountantCoordinator, analystAgent, bookkeepingAgent, invoiceAgent } from "./definitions";
+import { accountantCoordinator, analystAgent, bankrecAgent, bookkeepingAgent, invoiceAgent } from "./definitions";
 import { buildAccountantRouter, routeIntent, type AccountantRoute } from "./router";
-import { ANALYST_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDINATOR_INSTRUCTION, INVOICE_TOOL_NAMES } from "./split";
+import { ANALYST_TOOL_NAMES, BANKREC_TOOL_NAMES, BOOKKEEPING_TOOL_NAMES, COORDINATOR_INSTRUCTION, INVOICE_TOOL_NAMES } from "./split";
 
 /**
  * Helper fase-1 migrasi chat Nara ke ADK Runner (dipakai stream + confirm route).
@@ -44,8 +44,14 @@ export interface RoutedAdkAgentInput {
 /** Bangun satu LlmAgent per-request per-route: instruksi + FunctionTools org-scoped. */
 function buildSubAgent(route: AccountantRoute, input: RoutedAdkAgentInput): LlmAgent {
   // Slot invoice BILL-only: hanya tool intake read-only (INVOICE_TOOL_NAMES).
+  // Slot bankrec: hanya tool ingest+match (BANKREC_TOOL_NAMES).
   // Slot lain memakai union penuh agar perilaku existing tak berubah.
-  const names = route === "invoice" ? INVOICE_TOOL_NAMES : adkToolNames();
+  const names =
+    route === "invoice"
+      ? INVOICE_TOOL_NAMES
+      : route === "bankrec"
+        ? BANKREC_TOOL_NAMES
+        : adkToolNames();
   const tools = names.map((name) =>
     buildFunctionTool(input.orgId, input.actorEmail, name, () => input.gate),
   );
@@ -56,7 +62,9 @@ function buildSubAgent(route: AccountantRoute, input: RoutedAdkAgentInput): LlmA
         ? analystAgent
         : route === "invoice"
           ? invoiceAgent
-          : accountantCoordinator;
+          : route === "bankrec"
+            ? bankrecAgent
+            : accountantCoordinator;
   const baseInstruction =
     typeof base.instruction === "string" ? base.instruction : COORDINATOR_INSTRUCTION;
   return new LlmAgent({
@@ -81,6 +89,7 @@ export function buildRoutedAdkAgent(input: RoutedAdkAgentInput): RoutedAgent {
     bookkeeping: buildSubAgent("bookkeeping", input),
     analyst: buildSubAgent("analyst", input),
     invoice: buildSubAgent("invoice", input),
+    bankrec: buildSubAgent("bankrec", input),
     coordinator: buildSubAgent(input.route, input),
   });
 }
