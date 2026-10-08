@@ -1,26 +1,30 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getActiveContext } from "@/server/auth/session";
-import { LandingPage } from "@/components/landing/landing-page";
+import { LandingPageV4 } from "@/components/landing/v4/landing-page-v4";
 
 // Auth-gated: must render dynamically (session lives in cookies).
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Akunio | Pembukuan Double-Entry untuk UKM",
+  title: "Akunio — Tidak Perlu Jago Akuntansi, Biarkan AI yang Mencatat",
   description:
-    "Foto nota atau ketik pengeluaran — Akunio menyusun draf jurnal yang seimbang. Debit selalu sama dengan kredit, laporan standar siap kapan pun dibutuhkan.",
+    "Akunio mengubah foto nota dan chat santai menjadi jurnal berpasangan seimbang (Debit = Kredit) serta laporan keuangan siap pakai untuk UKM. Fokus kembangkan usaha Anda.",
+  metadataBase: new URL("https://aiapp.today"),
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "Akunio: Pembukuan Beres Sebelum Sempat Menumpuk",
+    title: "Akunio — Tidak Perlu Jago Akuntansi, Biarkan AI yang Mencatat",
     description:
-      "Foto nota jadi draf jurnal seimbang. Jurnal terkunci anti-utak-atik, laporan standar siap untuk bank dan pajak.",
-    type: "website",
+      "Akunio mengubah foto nota dan chat santai menjadi jurnal berpasangan seimbang (Debit = Kredit) serta laporan keuangan siap pakai untuk UKM. Fokus kembangkan usaha Anda.",
+    url: "/",
     locale: "id_ID",
+    type: "website",
   },
+  robots: { index: true, follow: true },
 };
 
 export default async function Home() {
   const ctx = await getActiveContext();
   if (ctx) redirect("/dashboard");
-  return <LandingPage />;
+  return <LandingPageV4 />;
 }
