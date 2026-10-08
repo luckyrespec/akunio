@@ -2,11 +2,15 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useState } from "react";
 import type { CSSProperties } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { FileText } from "lucide-react";
-import { AnimatedNumber } from "@/components/motion";
+import { motion, AnimatePresence } from "motion/react";
+import { FileText, Plus, Play, Coins } from "lucide-react";
+import { Reveal, AnimatedNumber } from "@/components/motion";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
 import { DataTable } from "@/components/ui/data-table/data-table";
 import type { DataTableFeatures } from "@/components/ui/data-table/data-table-features";
 import {
@@ -16,6 +20,7 @@ import {
   FilterSection,
   FilterSegGroup,
   FilterTriggerButton,
+  TableSwap,
   type FilterChip,
 } from "@/components/ui/filter-drawer";
 import { Money } from "@/core/money/money";
@@ -23,6 +28,12 @@ import type {
   IntangibleCardRow,
   IntangibleCategory,
 } from "@/server/db/repos/intangible-assets.repo";
+import { RunAmortizationDialog } from "./run-amortization-dialog";
+
+interface PeriodOption {
+  name: string;
+  status: string;
+}
 
 type StatusFilter = "SEMUA" | "ACTIVE" | "FULLY_AMORTIZED" | "DISPOSED";
 
@@ -31,6 +42,15 @@ const STATUS_OPTIONS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
   { value: "ACTIVE", label: "Aktif" },
   { value: "FULLY_AMORTIZED", label: "Tuntas" },
   { value: "DISPOSED", label: "Dilepas" },
+];
+
+const CATEGORIES: ReadonlyArray<IntangibleCategory> = [
+  "LISENSI_SOFTWARE",
+  "HAK_CIPTA",
+  "PATEN",
+  "MEREK_DAGANG",
+  "GOODWILL",
+  "LAINNYA",
 ];
 
 const CATEGORY_LABEL: Record<IntangibleCategory, string> = {
@@ -129,12 +149,20 @@ const columns: ColumnDef<DataTableFeatures, IntangibleCardRow>[] = [
 ];
 
 /**
- * Daftar aset takberwujud: cari instan + drawer status, tabel DataTable + total.
+ * Daftar aset takberwujud — cermin halaman aset tetap: tajuk + panel armada
+ * (total + komposisi kategori) + toolbar cari/filter + tabel DataTable.
  */
-export function IntangibleListClient({ rows }: { rows: IntangibleCardRow[] }) {
-  const [q, setQ] = React.useState("");
-  const [st, setSt] = React.useState<StatusFilter>("SEMUA");
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
+export function IntangibleListClient({
+  rows,
+  openPeriods,
+}: {
+  rows: IntangibleCardRow[];
+  openPeriods: PeriodOption[];
+}) {
+  const [q, setQ] = useState("");
+  const [st, setSt] = useState<StatusFilter>("SEMUA");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [runAmorDialogOpen, setRunAmorDialogOpen] = useState(false);
 
   const filtered = React.useMemo(() => {
     const ql = q.trim().toLowerCase();
@@ -146,9 +174,19 @@ export function IntangibleListClient({ rows }: { rows: IntangibleCardRow[] }) {
   }, [rows, q, st]);
 
   const isFiltering = q.trim() !== "" || st !== "SEMUA";
-  const totalCost = filtered.reduce((a, r) => a + r.acquisitionCostMinor, 0n);
-  const totalAccum = filtered.reduce((a, r) => a + r.accumulatedMinor, 0n);
-  const totalBook = filtered.reduce((a, r) => a + r.bookValueMinor, 0n);
+  const totalCost = rows.reduce((a, r) => a + r.acquisitionCostMinor, 0n);
+  const activeRows = rows.filter((r) => r.status === "ACTIVE");
+
+  const composition = CATEGORIES.map((cat) => {
+    const cost = rows
+      .filter((r) => r.category === cat)
+      .reduce((sum, r) => sum + r.acquisitionCostMinor, 0n);
+    return { cat, cost };
+  }).filter((c) => c.cost > 0n);
+
+  const totalSisa = filtered.reduce((a, r) => a + r.bookValueMinor, 0n);
+  const totalAll = filtered.reduce((a, r) => a + r.acquisitionCostMinor, 0n);
+  const totalAcc = filtered.reduce((a, r) => a + r.accumulatedMinor, 0n);
   const filterCount = (q.trim() ? 1 : 0) + (st !== "SEMUA" ? 1 : 0);
 
   function clearAll() {
@@ -167,36 +205,122 @@ export function IntangibleListClient({ rows }: { rows: IntangibleCardRow[] }) {
     });
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs text-ink-soft" role="status">
-        {isFiltering ? `${filtered.length} dari ${rows.length} aset` : `${rows.length} aset`} · total perolehan{" "}
-        <AnimatedNumber minor={totalCost} className="font-display text-lg font-semibold tracking-tight text-ink tnum" />
-        {" "}· total nilai buku{" "}
-        <AnimatedNumber minor={totalBook} className="font-display text-lg font-semibold tracking-tight text-ink tnum" />
-      </p>
+    <div className="space-y-6">
+      {/* Top Header */}
+      <PageHeader
+        title="Daftar Aset Takberwujud"
+        eyebrow="Pencatatan lisensi dan merek, amortisasi otomatis, dan pelaporan nilai buku (SAK EMKM Bab 12)."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setRunAmorDialogOpen(true)}
+              className="border-terra/40 text-terra hover:bg-terra/10 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98] text-xs h-9 rounded-xl"
+            >
+              <Play className="size-4 mr-1.5" />
+              Jalankan Amortisasi
+            </Button>
 
+            <Link href="/aset-takberwujud/baru">
+              <Button className="bg-terra text-white hover:bg-terra/90 transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.98] text-xs h-9 rounded-xl shadow-2xs">
+                <Plus data-icon="inline-start" />
+                Tambah Aset
+              </Button>
+            </Link>
+          </div>
+        }
+      />
+
+      {/* Panel armada — nilai perolehan + komposisi kategori */}
+      <Reveal>
+        <div className="matte-card grid gap-6 rounded-2xl border border-rule bg-paper p-5 sm:p-6 lg:grid-cols-[1fr_1.2fr] lg:gap-10">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink-soft">
+              <Coins className="size-3.5" />
+              Total Nilai Perolehan
+            </p>
+            <p className="tnum mt-2 font-display text-3xl font-semibold tracking-tight text-ink md:text-4xl">
+              <AnimatedNumber minor={totalCost} />
+            </p>
+            <p className="mt-2 text-xs text-ink-soft">
+              {rows.length} unit terdaftar · {activeRows.length} aktif diamortisasi
+            </p>
+            <Link
+              href="/aset-takberwujud/baru"
+              className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-terra hover:underline"
+            >
+              <Plus className="size-3" />
+              Daftarkan aset baru
+            </Link>
+          </div>
+
+          <div className="min-w-0 lg:border-l lg:border-rule/70 lg:pl-10">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+              Komposisi per Kategori
+            </p>
+            {composition.length > 0 ? (
+              <ul className="mt-3 space-y-2.5">
+                {composition.map((c) => {
+                  const pct = totalCost > 0n ? Number((c.cost * 100n) / totalCost) : 0;
+                  return (
+                    <li key={c.cat}>
+                      <div className="flex items-baseline justify-between gap-3 text-xs">
+                        <span className="font-medium text-ink">{CATEGORY_LABEL[c.cat]}</span>
+                        <span className="tnum shrink-0 font-semibold text-ink">
+                          {Money.formatIdr(c.cost)}
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink/10">
+                        <div className="h-full rounded-full bg-ink/70" style={{ width: `${Math.max(pct, 2)}%` }} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="mt-3 text-xs text-ink-soft">
+                Belum ada aset — daftarkan aset pertama untuk melihat komposisinya.
+              </p>
+            )}
+          </div>
+        </div>
+      </Reveal>
+
+      {/* Toolbar: cari + Filter (drawer) */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <FilterSearchInput value={q} onChange={setQ} placeholder="Cari kode atau nama aset…" />
+          <FilterSearchInput
+            value={q}
+            onChange={setQ}
+            placeholder="Cari kode atau nama aset…"
+          />
           <FilterTriggerButton count={filterCount} onClick={() => setDrawerOpen(true)} />
         </div>
         <FilterChips chips={chips} onClearAll={clearAll} />
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="overflow-hidden rounded-xl border border-rule bg-paper shadow-2xs">
-          <div className="px-4 py-12 text-center text-xs text-ink-soft">
-            {isFiltering ? (
-              "Tidak ada aset yang cocok dengan filter."
-            ) : (
-              <>
-                <FileText className="mx-auto mb-2 size-8 text-ink-soft/40" />
-                <p>Belum ada aset takberwujud. Klik “Tambah Aset Takberwujud” untuk mendaftarkan lisensi atau merek.</p>
-              </>
-            )}
+      {/* Table */}
+      <Reveal delay={0.08}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.div
+          key={isFiltering ? "filtered" : "all"}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+        >
+      <TableSwap
+        isEmpty={filtered.length === 0}
+        empty={(
+          <div className="overflow-hidden rounded-xl border border-rule bg-paper shadow-xs">
+            <div className="px-4 py-8 text-center text-xs text-ink-soft">
+              {isFiltering
+                ? "Tidak ada aset yang cocok dengan filter."
+                : 'Belum ada aset takberwujud terdaftar. Klik "+ Tambah Aset" untuk mendaftarkan lisensi atau merek.'}
+            </div>
           </div>
-        </div>
-      ) : (
+        )}
+      >
         <DataTable
           columns={columns}
           data={filtered}
@@ -212,16 +336,19 @@ export function IntangibleListClient({ rows }: { rows: IntangibleCardRow[] }) {
               <td colSpan={4} className="px-4 py-3.5 text-right text-[11px] uppercase tracking-wider text-ink-soft">
                 Total
               </td>
-              <td className="px-4 py-3.5 text-right font-mono tnum">{Money.formatIdr(totalCost)}</td>
-              <td className="px-4 py-3.5 text-right font-mono tnum">{Money.formatIdr(totalAccum)}</td>
+              <td className="px-4 py-3.5 text-right font-mono tnum">{Money.formatIdr(totalAll)}</td>
+              <td className="px-4 py-3.5 text-right font-mono tnum">{Money.formatIdr(totalAcc)}</td>
               <td className="px-4 py-3.5 text-right font-mono text-base font-bold text-ink tnum">
-                {Money.formatIdr(totalBook)}
+                {Money.formatIdr(totalSisa)}
               </td>
               <td />
             </tr>
           }
         />
-      )}
+      </TableSwap>
+        </motion.div>
+      </AnimatePresence>
+      </Reveal>
 
       <FilterDrawer
         open={drawerOpen}
@@ -241,6 +368,13 @@ export function IntangibleListClient({ rows }: { rows: IntangibleCardRow[] }) {
           />
         </FilterSection>
       </FilterDrawer>
+
+      {/* Dialogs */}
+      <RunAmortizationDialog
+        open={runAmorDialogOpen}
+        onOpenChange={setRunAmorDialogOpen}
+        openPeriods={openPeriods}
+      />
     </div>
   );
 }

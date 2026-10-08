@@ -53,6 +53,13 @@ interface DataTableProps<TData extends RowData> {
   /** Caption aksesibilitas (sr-only bila perlu). */
   caption?: string;
   getRowId?: (row: TData, index: number) => string;
+  /** Props tambahan per baris <tr> desktop. `className` digabung dengan
+   *  gaya baris bawaan; `data-testid` dibuka eksplisit karena itu kontrak
+   *  e2e repo ini (bukan bagian HTMLAttributes). */
+  getRowProps?: (
+    row: TData,
+    index: number,
+  ) => React.HTMLAttributes<HTMLTableRowElement> & { "data-testid"?: string };
   /** Baris <tr> ekstra yang disematkan di awal <tbody> (mis. saldo awal).
    *  Opsional; pemanggil yang menyusun markup-nya. */
   topRows?: React.ReactNode;
@@ -97,12 +104,19 @@ export function DataTable<TData extends RowData>({
   emptyText = "Belum ada data.",
   caption,
   getRowId,
+  getRowProps,
   topRows,
   footer,
   renderMobileCard,
 }: DataTableProps<TData>) {
+  // `pagination === false` = tampilkan semua baris (pageSize Infinity didukung
+  // TanStack: slicing dilewati, pageCount 1). Jangan pakai angka besar magis.
   const pageSize =
-    typeof pagination === "object" ? (pagination.defaultPageSize ?? 10) : 10;
+    pagination === false
+      ? Infinity
+      : typeof pagination === "object"
+        ? (pagination.defaultPageSize ?? 10)
+        : 10;
 
   const table = useTable({
     features: dataTableFeatures,
@@ -211,9 +225,16 @@ export function DataTable<TData extends RowData>({
           </TableHeader>
           <TableBody>
             {topRows}
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="hover:bg-canvas/40 transition-colors">
+            {pageRows.length ? (
+              pageRows.map((row, i) => {
+                const { className: rowClassName, ...restRowProps } =
+                  getRowProps?.(row.original, i) ?? {};
+                return (
+                <TableRow
+                  key={row.id}
+                  className={cn("hover:bg-canvas/40 transition-colors", rowClassName)}
+                  {...restRowProps}
+                >
                   {row.getAllCells().map((cell) => (
                     <TableCell
                       key={cell.id}
@@ -226,8 +247,9 @@ export function DataTable<TData extends RowData>({
                     </TableCell>
                   ))}
                 </TableRow>
-              ))
-            ) : (
+                );
+              })
+              ) : (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={columns.length} className="px-4 py-12 text-center">
                   <SearchX aria-hidden className="mx-auto mb-3 size-8 text-ink-soft/40" />

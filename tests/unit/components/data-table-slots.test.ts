@@ -29,6 +29,21 @@ describe("DataTable slot opsional", () => {
     expect(el.props.topRows).toBe(topRows);
     expect(el.props.footer).toBe(footer);
     expect(el.props.renderMobileCard).toBe(renderMobileCard);
+    const getRowProps = () => ({ "data-testid": "kas-bank-row" }) as const;
+    const withRowProps = React.createElement(DataTable<Row>, {
+      columns,
+      data: rows,
+      sorting: false,
+      pagination: false,
+      getRowId: (r) => r.id,
+      getRowProps,
+    });
+    expect(withRowProps.props.sorting).toBe(false);
+    expect(withRowProps.props.pagination).toBe(false);
+    expect(withRowProps.props.getRowId?.(rows[0]!, 0)).toBe("1");
+    expect(withRowProps.props.getRowProps?.(rows[0]!, 0)).toEqual({
+      "data-testid": "kas-bank-row",
+    });
     // Default lama utuh: search/pagination/sorting tetap opsional.
     const plain = React.createElement(DataTable<Row>, { columns, data: rows });
     expect(plain.props.topRows).toBeUndefined();

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { requireContext } from "@/server/auth/guard";
 import { intangibleAssets } from "@/server/db/schema/intangible";
+import { appendAudit } from "@/server/db/repos/audit.repo";
 import { isRedirectError } from "./redirect-guard";
 import { withOrg } from "@/server/db/repos/with-org";
 import {
@@ -13,6 +14,8 @@ import {
   type IntangibleCategory,
 } from "@/server/db/repos/intangible-assets.repo";
 import { postJournalEntry } from "@/server/db/repos/journals.repo";
+import { listAccounts } from "@/server/db/repos/accounts.repo";
+import { validateAssetMapping } from "@/core/assets/account-mapping";
 import { buildAcquisitionJournal } from "@/core/assets/acquisition";
 import {
   recommendIntangibleWithSak,
@@ -60,6 +63,15 @@ export async function createIntangibleWithAcquisitionAction(payload: {
     if (!Number.isInteger(payload.usefulLifeMonths) || payload.usefulLifeMonths <= 0) {
       return { ok: false, error: "Masa manfaat harus lebih besar dari 0 bulan." };
     }
+
+    // Fail-closed: peran akun salah tidak boleh lolos walau klien dibypass.
+    const accRows = await withOrg(ctx.orgId, (tx) => listAccounts(tx, ctx.orgId));
+    const roleErrors = validateAssetMapping(accRows, {
+      assetId: payload.assetAccountId,
+      accumId: payload.accumulatedAccountId,
+      expenseId: payload.amortizationExpenseAccountId,
+    });
+    if (roleErrors.length > 0) return { ok: false, error: roleErrors.join(" ") };
 
     const result = await withOrg(ctx.orgId, async (tx) => {
       const asset = await createIntangible(tx, {
@@ -169,6 +181,41 @@ export async function disposeIntangibleAction(payload: {
     );
     revalidatePath("/aset-takberwujud");
     return { ok: true, data: { journalEntryId: data.journalEntryId } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function postBulkAmortizationAction(
+  periodName: string,
+): Promise<IntangibleActionResult> {
+  try {
+    const ctx = await requireContext(["OWNER", "ACCOUNTANT"]);
+    const result = await withOrg(ctx.orgId, async (tx) => {
+      const r = await postMonthlyAmortization(tx, {
+        orgId: ctx.orgId,
+        periodName,
+        postedBy: ctx.userEmail,
+      });
+
+      if (r.journalEntryId) {
+        await appendAudit(tx, {
+          orgId: ctx.orgId,
+          actor: ctx.userEmail,
+          action: "JOURNAL_POST",
+          subjectType: "amortization_run",
+          subjectId: r.journalEntryId,
+          data: { periodName, postedCount: r.postedCount },
+        });
+      }
+
+      return r;
+    });
+
+    revalidatePath("/aset-takberwujud");
+    revalidatePath("/jurnal");
+    revalidatePath("/tutup-buku");
+    return { ok: true, data: result };
   } catch (err) {
     return fail(err);
   }
