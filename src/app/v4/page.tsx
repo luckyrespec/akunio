@@ -780,6 +780,15 @@ export default function LandingV4Page() {
               <p className="text-xs text-ink-soft">
                 Platform Akuntansi Cerdas Berstandar SAK EMKM untuk UKM Indonesia.
               </p>
+              <p className="mt-1 text-xs text-ink-soft">
+                oleh <span className="font-semibold text-ink">Samara Digital Technology</span> ·{" "}
+                <a
+                  href="mailto:luckyanggara@aiapp.today"
+                  className="font-medium text-terra hover:underline"
+                >
+                  luckyanggara@aiapp.today
+                </a>
+              </p>
             </div>
           </div>
 
@@ -793,7 +802,7 @@ export default function LandingV4Page() {
         </div>
 
         <div className="mx-auto flex w-full max-w-6xl flex-col justify-between gap-2 border-t border-rule/50 px-4 py-6 text-xs text-ink-soft sm:flex-row sm:px-6 lg:px-8">
-          <p>© 2026 Akunio. Hak Cipta Dilindungi Undang-Undang.</p>
+          <p>© 2026 Samara Digital Technology. Hak Cipta Dilindungi Undang-Undang.</p>
           <p>Mendukung standar akuntansi SAK EMKM IAI.</p>
         </div>
       </footer>
