@@ -259,13 +259,13 @@ export function LandingPageV4() {
       {
         "@type": "Organization",
         name: "Samara Digital Technology",
-        url: "https://aiapp.today",
+        url: "https://www.aiapp.today",
         email: "luckyanggara@aiapp.today",
       },
       {
         "@type": "WebSite",
         name: "Akunio",
-        url: "https://aiapp.today",
+        url: "https://www.aiapp.today",
       },
       {
         "@type": "FAQPage",
